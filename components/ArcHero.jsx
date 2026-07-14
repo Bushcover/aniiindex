@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import CharacterChips from "@/components/CharacterChips";
 
 export default function ArcHero({ arc }) {
   return (
@@ -31,24 +32,7 @@ export default function ArcHero({ arc }) {
 
         <p className="hero-desc">{arc.description}</p>
 
-        <div className="chars">
-          {arc.characters.map((char) => (
-            <div key={char.id ?? char.name} className="char-chip">
-              <div
-                className="char-avatar"
-                style={
-                  char.image
-                    ? { backgroundImage: `url(${char.image})`, backgroundSize: "cover", backgroundPosition: "center" }
-                    : { background: char.color }
-                }
-              >
-                {!char.image && char.initials}
-              </div>
-              {char.name}
-              {char.count != null && <span className="char-count">{char.count}</span>}
-            </div>
-          ))}
-        </div>
+        <CharacterChips characters={arc.characters} />
 
         <div className="hero-stats">
           {arc.stats.map((stat, i) => (

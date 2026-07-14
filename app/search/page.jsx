@@ -1,6 +1,6 @@
 import Link from "next/link";
 import ContentCard from "@/components/ContentCard";
-import Sparkline from "@/components/Sparkline";
+import ArcList from "@/components/ArcList";
 import SearchNav from "@/components/SearchNav";
 import { searchSeries } from "@/lib/anilist";
 import styles from "./search.module.css";
@@ -333,7 +333,9 @@ export default async function SearchPage({ searchParams }) {
                   </div>
                 </div>
                 <div className={styles.seriesActions}>
-                  <button className={`${styles.seriesBtn} ${styles.seriesBtnPrimary}`}>Browse arcs</button>
+                  <Link href={`/series/${series.id}`} className={`${styles.seriesBtn} ${styles.seriesBtnPrimary}`}>
+                    Browse arcs
+                  </Link>
                   <button className={`${styles.seriesBtn} ${styles.seriesBtnGhost}`}>Characters</button>
                 </div>
               </div>
@@ -346,29 +348,7 @@ export default async function SearchPage({ searchParams }) {
                   Each bar shows community response intensity across story beats
                 </div>
 
-                <div className={styles.arcList}>
-                  {ARCS.map((arc) => (
-                    <div key={arc.slug}>
-                      <Link href={`/arc/${arc.slug}`} className={styles.arcRow}>
-                        <div className={styles.arcNum}>{arc.num}</div>
-                        <div className={styles.arcRowName}>{arc.name}</div>
-                        <Sparkline bars={arc.spark} />
-                        <div className={styles.arcRowCount}>{arc.count.toLocaleString("en-US")}</div>
-                        {arc.peak && (
-                          <div className={styles.arcRowPeak}>
-                            <div className={styles.arcPeakDot}></div>
-                          </div>
-                        )}
-                        <div className={styles.arcRowArrow}>›</div>
-                      </Link>
-                      {arc.dividerAfter && <div className={styles.arcDivider}></div>}
-                    </div>
-                  ))}
-
-                  <div className={styles.showMore}>
-                    <span>{MORE_ARCS_LABEL}</span>
-                  </div>
-                </div>
+                <ArcList arcs={ARCS} moreLabel={MORE_ARCS_LABEL} />
 
                 <div className={styles.alsoFound}>
                   <div className={styles.colTitle} style={{ marginBottom: 12 }}>

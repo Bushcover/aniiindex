@@ -396,6 +396,83 @@ without needing to touch it again per page. Click-tested the logo from
 all four pages (home, arc, search, submit) and confirmed every one now
 navigates to `/`.
 
+## Session 8
+
+Added a series page at `app/series/[slug]/page.jsx` — the URL's `[slug]`
+is the AniList numeric series id (e.g. `/series/113415` for Jujutsu
+Kaisen), not an aniindex-specific slug like the arc page's. This is the
+first page that resolves genuinely different real data per URL, rather
+than always rendering the same hardcoded example (verified with both
+Jujutsu Kaisen and Attack on Titan — see below).
+
+- **`lib/anilist.js`** gained `getSeriesWithRelations(anilistId)` —
+  fetches `title`, `description` (HTML-stripped), `coverImage.large`,
+  `bannerImage`, `seasonYear`, `format`, `status`, `genres`,
+  `averageScore`, `popularity`, and `episodes`. It overlaps with Session
+  7's `getSeriesById`, but is kept separate on purpose: the series page
+  needs `averageScore`/`popularity` that the arc page doesn't, and the
+  two pages' fallback behavior is different enough (arc page falls back
+  to hardcoded arc data; series page has no sensible fallback and shows
+  an error state) that merging them would blur both call sites'
+  contracts. Same `next: { revalidate: 3600 }` caching as every other
+  function in this file.
+- **Two components extracted for reuse, per the task's "reuse the same
+  pattern" instructions**, rather than copy-pasting JSX across pages:
+  - **`components/CharacterChips.jsx`** — pulled out of `ArcHero.jsx`
+    verbatim (same photo/colored-initials-fallback/optional-count logic
+    from Session 7). `ArcHero` now just calls
+    `<CharacterChips characters={arc.characters} />`. This is genuinely
+    "the same character chip component from the arc page," not a
+    lookalike.
+  - **`components/ArcList.jsx`** — pulled out of the search page's arc
+    list block (the `.arcList`/`.arcRow`/`Sparkline`/divider/"show more"
+    markup), importing `search.module.css` directly for its classes —
+    the same "component imports a page-specific CSS Module" pattern
+    already used by `HeroSearch` (Session 4) and `SearchNav` (Session 6
+    follow-up). `app/search/page.jsx` was refactored to use it too
+    (`<ArcList arcs={ARCS} moreLabel={MORE_ARCS_LABEL} />`), so both
+    pages render arc rows from one implementation.
+- **The series page itself** (`app/series/[slug]/page.jsx`) parses
+  `params.slug` as a number and calls `getSeriesWithRelations` and
+  `getSeriesCharacters` via `Promise.allSettled` (same independent-
+  fallback pattern as the arc page). Layout:
+  - A hero banner using `series.bannerImage` as a background image
+    (with a dark gradient overlay for legibility) — no mockup existed
+    for this page, so the banner/poster/title/meta/genre-pills/score/
+    description layout was designed fresh, reusing the app's existing
+    color/typography tokens for visual consistency with the other pages.
+  - An "Arcs" section using `ArcList` — **still the exact same 8
+    hardcoded placeholder arcs used on the search page** (same TODO-style
+    comment: AniList has no arc-level data, and this isn't derived from
+    the real series above). Per the app's established convention of
+    hardcoding page-level consts rather than sharing a data module, the
+    array is duplicated in this page file rather than imported from the
+    search page — only the `ArcList` *component* (the rendering pattern)
+    is shared, not the placeholder data itself.
+  - A "Characters" section using `CharacterChips` with the real top-10
+    AniList cast for whatever series id is in the URL.
+  - If `getSeriesWithRelations` fails or returns nothing, the whole page
+    replaces its content with a clean error message ("Couldn't load this
+    series...") — there's no sensible hardcoded series to fall back to
+    here, unlike the arc page.
+- **`app/search/page.jsx`'s "Browse arcs" button** is now a `next/link`
+  to `/series/${series.id}` (previously a plain, non-functional
+  `<button>`) using the real AniList id of whatever series matched the
+  search. Needed `text-decoration: none` added to `.seriesBtn` in
+  `search.module.css` for the same reason as every other button-turned-
+  link fix this project has needed.
+- Verified end-to-end, including cross-series correctness: loaded
+  `/series/113415` directly (real Jujutsu Kaisen title/genres/score/
+  description, all 8 placeholder arcs, 10 real characters); then, from
+  `/search?q=Attack%20on%20Titan`, clicked "Browse arcs" and confirmed it
+  navigated to `/series/16498` and rendered *Attack on Titan's own* real
+  title/genres/score/description/cast — not the Jujutsu Kaisen example —
+  proving the id is genuinely threaded through, not hardcoded end to end.
+- Same sandbox-only caveat as Sessions 6–7: cover/banner images render
+  as empty boxes in this session's screenshots because this environment's
+  network policy blocks AniList's image CDN (`s4.anilist.co`); the URLs
+  themselves are real and will load normally in a real browser.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -417,11 +494,13 @@ app/
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
   submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above)
   submit/submit.module.css Styles unique to the submit page
+  series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
+  series/[slug]/series.module.css  Styles unique to the series page
 lib/
-  anilist.js             searchSeries / getSeriesById / getSeriesCharacters — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7 notes above)
+  anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
-  ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips, stat row
+  ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
   ContentTabs.jsx      Sticky tab bar (All / Edits & Video / Fan Art / Discussion / OST & Music)
   IntensityChart.jsx   Bar chart of "community response by story beat" with peak-moment markers
   BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
@@ -431,6 +510,8 @@ components/
   Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
   HeroSearch.jsx       Client component: home page's hero search input + quick-search chips
   SearchNav.jsx        Client component: search page's nav — logo link, functional search input/icon/clear
+  CharacterChips.jsx   Character chip list (photo or colored-initials fallback, optional mention count) — used by ArcHero and the series page
+  ArcList.jsx          Arc-row list with sparklines (imports search.module.css) — used by the search page and the series page
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 
@@ -496,12 +577,32 @@ contents differ meaningfully between the arc, search, and home pages
   an ancestor element, which is how the search page tints these red for
   Chainsaw Man without the component needing a `color` prop; the home
   page doesn't set these, so its bars use the default purple.
-- **HeroSearch** — the only client component (`"use client"`) in the
-  project. Renders the home page's hero search input and its "Try:"
-  quick-search chips, and owns the input's value as local state so a
-  chip click can visibly populate the field before navigating. Enter in
-  the input, or clicking a chip, calls `router.push('/search?q=...')`
-  via `next/navigation`'s `useRouter`.
+- **HeroSearch** — a client component (`"use client"`). Renders the home
+  page's hero search input and its "Try:" quick-search chips, and owns
+  the input's value as local state so a chip click can visibly populate
+  the field before navigating. Enter in the input, or clicking a chip,
+  calls `router.push('/search?q=...')` via `next/navigation`'s
+  `useRouter`.
+- **SearchNav** — another client component; the search page's entire nav
+  (logo, search input, icon, clear button). Seeds its input from a
+  `query` prop and is remounted (`key={query}`) whenever that prop
+  changes, so it stays in sync across client-side navigations. Enter or
+  clicking the search icon navigates to `/search?q=...`; the clear (×)
+  button clears the field and navigates to `/`.
+- **CharacterChips** — renders a list of character chips (`.chars`/
+  `.char-chip` from `globals.css`). Each chip shows a real photo
+  (`char.image`, as a `background-image`) when present, falling back to
+  a colored-initials circle (`char.color` + `char.initials`) otherwise;
+  the small mention-count badge (`char.count`) only renders when the
+  value is present. Extracted from `ArcHero` in Session 8 so the arc
+  page and the series page render character chips identically.
+- **ArcList** — renders a list of arc rows with sparklines
+  (`.arcList`/`.arcRow`/etc., imported from `search.module.css`). Takes
+  `arcs` (each with `slug`, `num`, `name`, `count`, `peak`, `spark`, and
+  optional `dividerAfter`) and an optional `moreLabel` for a trailing
+  "+N more" row. Each row is a `next/link` to `/arc/${arc.slug}`.
+  Extracted from the search page in Session 8; also used by the series
+  page.
 
 ## Hardcoded data (in `app/page.jsx`)
 
@@ -628,6 +729,18 @@ database/API:
 - `CONTENT_TYPE_OPTIONS` — the 6 content-type pills; "Edit / AMV" is
   preselected to match the mockup. These are just labels, not IDs tied to
   any real taxonomy yet.
+
+## Hardcoded data (in `app/series/[slug]/page.jsx`)
+
+- `ARCS` and `MORE_ARCS_LABEL` — the exact same 8 placeholder arcs (plus
+  "+ 3 more arcs" label) as the search page's `ARCS`/`MORE_ARCS_LABEL`,
+  duplicated rather than imported (see the Session 8 note above on why).
+  Same caveat as everywhere else this data appears: not derived from
+  whichever real series the page is showing.
+- Everything else on this page — hero title, description, genres, score,
+  format/year/episodes/status, and all 10 character chips — is real
+  AniList data keyed off the `[slug]` (an AniList numeric id), the first
+  page in the project where that's true.
 
 ## Explicitly not done
 

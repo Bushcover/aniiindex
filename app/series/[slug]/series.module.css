@@ -1,0 +1,147 @@
+/* ── Series hero ── */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--surface);
+  background-size: cover;
+  background-position: center 30%;
+}
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(12, 12, 18, 0.55) 0%, var(--bg) 96%);
+}
+.heroInner {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 28px 40px;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.poster {
+  width: 160px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--r);
+  flex-shrink: 0;
+  background: var(--surface-3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.info {
+  flex: 1;
+  min-width: 0;
+}
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(24px, 4vw, 38px);
+  letter-spacing: -1px;
+  line-height: 1.1;
+  color: var(--t1);
+  margin-bottom: 10px;
+}
+.metaLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--t2);
+  margin-bottom: 12px;
+}
+.dot {
+  color: var(--t3);
+}
+.genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.genreTag {
+  padding: 3px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 11px;
+  color: var(--t2);
+}
+.scoreRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+.scoreVal {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--t1);
+}
+.scoreLabel {
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+.description {
+  font-size: 13px;
+  color: var(--t2);
+  max-width: 640px;
+  line-height: 1.7;
+}
+
+/* ── Sections ── */
+.section {
+  padding: 40px 0;
+}
+.section + .section {
+  border-top: 1px solid var(--border);
+}
+.sectionHead {
+  margin-bottom: 18px;
+}
+.sectionTitle {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--t1);
+  margin-bottom: 4px;
+}
+.sectionSub {
+  font-size: 12px;
+  color: var(--t3);
+}
+
+/* ── Error / empty state ── */
+.stateMessage {
+  padding: 96px 28px;
+  text-align: center;
+}
+.stateMessageTitle {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--t1);
+  margin-bottom: 8px;
+}
+.stateMessageSub {
+  font-size: 13px;
+  color: var(--t3);
+  max-width: 420px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
