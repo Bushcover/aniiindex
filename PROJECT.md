@@ -128,6 +128,79 @@ placeholder that just redirected `/` to the arc page). Added:
   programmatically that the row still overflows/scrolls
   (`scrollWidth > clientWidth`) while no scrollbar is drawn.
 
+## Session 5
+
+Converted the submission-flow mockup into `app/submit/page.jsx` — a
+3-step client-side wizard (Link → Placement → Review), the first fully
+interactive page in the project (previously only `HeroSearch` needed
+client state; this entire page does).
+
+- **`"use client"` page.** Unlike the other three pages (server
+  components composing mostly-static data), `app/submit/page.jsx` is one
+  client component holding all wizard state: `step` (1–3), the step 1
+  URL input, the selected story beat index, the character list, the
+  selected content type, and the two quality-checkbox booleans.
+- **Simplified nav**, per the task: just the logo (a real `next/link` to
+  `/`, unlike the plain-`<div>` logo on every other page) and a Cancel
+  button that calls `router.back()` via `next/navigation`'s `useRouter`.
+  The mockup's own `nav { gap: 12px; ... }` rule is a bare-tag selector
+  that would otherwise leak into every page's `<nav>` through the shared
+  `globals.css` — since a CSS Module can't scope a bare tag selector
+  (Next.js's CSS Modules loader rejects "impure" selectors with no local
+  class), the gap override lives on a `.navCompact` class applied
+  alongside the shared `nav` tag styling instead.
+- **The mockup itself is a single static frame** showing step 1
+  collapsed/done, step 2 active, and step 3 grayed out — it isn't three
+  separate screens. `app/submit/page.jsx` reconstructs the actual
+  3-state wizard the step indicator implies (labeled "Link" /
+  "Placement" / "Review"), including inventing the step 1 *active* form
+  (a URL input + Next button) since the mockup only shows step 1 already
+  *completed*. Per the step indicator's own naming, the quality
+  checkboxes and final action button were moved from step 2 (where the
+  static mockup has them) to step 3 "Review," alongside a live preview —
+  this matches the task instructions and the indicator's own semantics
+  better than the mockup's single-frame layout.
+- **Step 3 renders a real, live `<ContentCard>`**, not a static stub —
+  `title`/`creator`/`platform`/`thumbnailUrl` come from the hardcoded
+  "resolved" link data, while `contentType`, `characterTags`, and
+  `beatLabel` are read straight from step 2's state, so the preview
+  updates immediately if you go back and change the beat, remove a
+  character, or pick a different content type. The resolved link reuses
+  the exact same title/creator/platform/gradient already hardcoded for
+  the "Gojo sealed" TikTok item in `app/arc/[slug]/page.jsx`'s `BEATS`
+  data (Session 1) — this flow is simulating submitting that exact
+  existing card.
+- **The beat selector is a real interactive chart**, not just styled
+  bars: clicking any of the 10 bars (or its label) sets the selected
+  index, which drives the bar's `selected`/`nearby`/`dim` styling, the
+  highlighted label, and the "beat-selected-row" name + item count below
+  the chart. The mockup only shows one example selection (index 4, "The
+  Sealing," with the two bars *after* it — indices 5 and 6 — marked
+  `nearby`); that pattern was generalized to "the up-to-two bars
+  immediately following whichever bar is selected" so the same rule
+  produces sensible results for any bar the user clicks. Per-beat item
+  counts beyond "The Sealing" (891, matching the arc page's real number)
+  and "Yuji breaks" (1,102, ditto) are invented placeholder numbers for
+  the other 8 beats.
+- Small, clearly-scoped interactivity was wired up beyond what the task
+  named explicitly, since it was trivial local state with no backend
+  implications: removing a character chip (`×`), picking a content type
+  pill, and toggling either quality checkbox. Left as inert static
+  markup (matching the pattern used elsewhere in the app for
+  not-yet-built destinations): the "+ Add character" button (no
+  character-picker exists), the Series/Arc "Change" links (no field-edit
+  UI exists), and the "Skip this…" / "How placement works →" links.
+  Going back to step 1 or step 2 via the "← Back" buttons or a
+  completed-step's "Change" button is fully wired and preserves all
+  state (screenshot-verified — going back doesn't reset the URL input,
+  selected beat, characters, or content type).
+- Verified end-to-end: step 1 → 2 → 3 forward navigation, clicking a
+  different beat bar updates the selection and the preview, removing a
+  character and changing the content type both propagate into the step 3
+  `ContentCard` preview, the "Coming soon — backend not connected yet"
+  button is genuinely `disabled`, and "← Back" from step 3 → step 2 → step
+  1 preserves all prior input.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -147,6 +220,8 @@ app/
   arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
   search/page.jsx        The search results page. Holds all hardcoded data consts (SERIES, ARCS, CHARACTERS, TOP_CONTENT, etc.)
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
+  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above)
+  submit/submit.module.css Styles unique to the submit page
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips, stat row
@@ -320,6 +395,31 @@ page file, standing in for what will eventually come from a database/API:
   switch to a real `background-image: url(...)` or an `<img>` once actual
   thumbnail images exist.
 
+## Hardcoded data (in `app/submit/page.jsx`)
+
+- `RESOLVED_LINK` — stands in for what a real link-resolver service would
+  return for the pasted URL (title, creator, platform, thumbnail). It's
+  the same TikTok item as the Shibuya arc page's "The Sealing" beat
+  (Session 1), used regardless of what the user actually types into the
+  step 1 URL field — the "auto-detection" is entirely fake.
+- `SERIES_DETECTED` / `ARC_DETECTED` — the step 2 "auto-detected" series
+  and arc, always Jujutsu Kaisen / Shibuya Incident Arc regardless of the
+  resolved link. A real version needs actual title/caption parsing (or
+  manual series/arc pickers behind the still-inert "Change" links).
+  `note` is the small "Detected from…" explainer text under each field.
+- `BEATS` — the 10-bar beat selector's chart data (label, bar height,
+  placeholder item count). Same caveat as `INTENSITY_BEATS` on the arc
+  page: heights are hand-picked, not derived from real engagement data;
+  `count` is invented per-beat except "The Sealing" and "Yuji breaks"
+  (see the Session 5 note above).
+- `INITIAL_CHARACTERS` — the one pre-detected character chip (Gojo
+  Satoru). A real version needs actual character detection from the
+  video/caption, plus a working character picker behind "+ Add
+  character" (currently inert).
+- `CONTENT_TYPE_OPTIONS` — the 6 content-type pills; "Edit / AMV" is
+  preselected to match the mockup. These are just labels, not IDs tied to
+  any real taxonomy yet.
+
 ## Explicitly not done
 
 - No routing/data logic keyed off the `[slug]` param — every slug renders
@@ -339,3 +439,11 @@ page file, standing in for what will eventually come from a database/API:
   static, non-functional markup beyond the navigation described above.
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
+- No real link resolution, series/arc/character/beat detection, or
+  submission on `/submit` — every field in the wizard is either hardcoded
+  ("detected" values, the resolved link) or purely local `useState` (beat
+  selection, character removal, content type, checkboxes). The final
+  step's button is intentionally disabled ("Coming soon — backend not
+  connected yet"); nothing on this page can actually add content to the
+  index yet. The Series/Arc "Change" links, "+ Add character", "Skip
+  this beat", and "How placement works" links are all inert.
