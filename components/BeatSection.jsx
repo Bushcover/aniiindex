@@ -1,10 +1,4 @@
-const PLATFORM_META = {
-  yt: { className: "plt-yt", icon: "▶", label: "YouTube" },
-  tt: { className: "plt-tt", icon: "♪", label: "TikTok" },
-  x: { className: "plt-x", icon: "𝕏", label: "Twitter" },
-  ig: { className: "plt-ig", icon: "◈", label: "Instagram" },
-  rd: { className: "plt-rd", icon: "⬆", label: "Reddit" },
-};
+import ContentCard from "@/components/ContentCard";
 
 export default function BeatSection({ beat }) {
   return (
@@ -15,32 +9,9 @@ export default function BeatSection({ beat }) {
         {beat.peakLabel && <div className="peak-pill">✦ {beat.peakLabel}</div>}
       </div>
       <div className="cards">
-        {beat.items.map((item, i) => {
-          const platform = PLATFORM_META[item.platform];
-          return (
-            <a key={i} className="card" href={item.href || "#"} target="_blank" rel="noreferrer">
-              <div className="thumb" style={{ background: item.thumbGradient }}>
-                <div className={`plt ${platform.className}`}>
-                  {platform.icon} {platform.label}
-                </div>
-              </div>
-              <div className="cbody">
-                <div className="ctitle">{item.title}</div>
-                <div className="ccreator">{item.creator}</div>
-                <div className="tags">
-                  {item.tags.map((tag) => (
-                    <span
-                      key={tag.label}
-                      className={`tag ${tag.type === "char" ? "tag-char" : "tag-gen"}`}
-                    >
-                      {tag.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </a>
-          );
-        })}
+        {beat.items.map((item, i) => (
+          <ContentCard key={i} beatLabel={beat.title} {...item} />
+        ))}
       </div>
     </div>
   );

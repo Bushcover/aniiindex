@@ -1,9 +1,27 @@
-# aniindex — Session 1
+# aniindex
 
-A fan content index for anime series. This session converts the arc-page
-mockup (a single static HTML file) into a Next.js (App Router) app. No
-API or database is connected yet — everything on the page is hardcoded
-sample data for the "Shibuya Incident Arc" (Jujutsu Kaisen).
+A fan content index for anime series. No API or database is connected
+yet — everything on the arc page is hardcoded sample data for the
+"Shibuya Incident Arc" (Jujutsu Kaisen).
+
+## Session 1
+
+Converted the arc-page mockup (a single static HTML file) into a Next.js
+(App Router) app.
+
+## Session 2
+
+Extracted the content card markup out of `BeatSection` into its own
+reusable `components/ContentCard.jsx`, with an explicit, self-contained
+prop API (`title`, `creator`, `platform`, `thumbnailUrl`, `contentType`,
+`characterTags`, `sourceUrl`, `beatLabel`) instead of the ad-hoc
+`tags: [{label, type}]` shape it used before. `BeatSection` now just
+spreads each hardcoded item straight into `ContentCard`. The `BEATS`
+data in `app/arc/[slug]/page.jsx` was updated to match the new field
+names (`thumbGradient` → `thumbnailUrl`, `tags` → `contentType` +
+`characterTags`, `href` → `sourceUrl`); no visual output changed — the
+rendered page was screenshot-compared against Session 1 and is pixel-
+identical.
 
 ## Stack
 
@@ -26,7 +44,8 @@ components/
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips, stat row
   ContentTabs.jsx      Sticky tab bar (All / Edits & Video / Fan Art / Discussion / OST & Music)
   IntensityChart.jsx   Bar chart of "community response by story beat" with peak-moment markers
-  BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of content cards
+  BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
+  ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags)
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 
@@ -52,12 +71,22 @@ rather than split into extra component files.
   (`"normal" | "high" | "peak"`) that controls bar color and whether the
   small accent dot + highlighted label appear above peak bars.
 - **BeatSection** — renders one story-beat's content: the beat title, item
-  count, an optional "peak moment" pill, and a responsive grid of content
-  cards. Each card shows a gradient thumbnail, a platform badge (YouTube/
-  TikTok/Twitter/Instagram/Reddit — icon + label + platform-specific
-  badge color), title, creator/engagement line, and generic + character
-  tags. The platform icon/label/class lookup lives in a small
-  `PLATFORM_META` map at the top of this file.
+  count, an optional "peak moment" pill, and a responsive grid of
+  `ContentCard`s. It passes each hardcoded item's fields straight through
+  as props (`<ContentCard beatLabel={beat.title} {...item} />`) — it has
+  no markup or platform logic of its own.
+- **ContentCard** — a single fan-content link card. Always an `<a>` that
+  opens `sourceUrl` in a new tab (`target="_blank" rel="noreferrer"`).
+  Renders a thumbnail (`background: thumbnailUrl`), a platform badge, the
+  title, the creator/engagement line, and tag pills for `contentType`
+  (generic tags, e.g. "Edit", "Lore") followed by `characterTags`
+  (character tags, styled with the accent color). `beatLabel` isn't shown
+  visually — it's folded into the card's `aria-label` for context. The
+  `platform` prop (`"yt" | "tt" | "x" | "ig" | "rd"`) is looked up in a
+  `PLATFORM_META` map at the top of the file, which supplies the badge's
+  icon, display label, and CSS class — YouTube red, TikTok black, X
+  near-black, Instagram pink-red, and Reddit orange, all defined as
+  existing `.plt-*` classes in `globals.css`.
 
 ## Hardcoded data (in `app/arc/[slug]/page.jsx`)
 
@@ -85,10 +114,16 @@ page file, standing in for what will eventually come from a database/API:
   and derive `tier` from thresholds on that metric instead of being
   hand-assigned.
 - `BEATS` — the three story-beat sections and their content cards
-  (platform, thumbnail, title, creator, tags, and the target `href`,
-  currently `"#"` for every card). This is the actual fan-content index
-  data and will come from the content database — one row per submitted
-  item, with real thumbnails, real outbound links, and moderation state.
+  (`platform`, `thumbnailUrl`, `title`, `creator`, `contentType`,
+  `characterTags`, `sourceUrl` — currently `"#"` for every card). This is
+  the actual fan-content index data and will come from the content
+  database — one row per submitted item, with real thumbnails, real
+  outbound links, and moderation state. Note: `thumbnailUrl` currently
+  holds a CSS `linear-gradient(...)` string (there are no real images
+  yet) — `ContentCard` applies it directly as the thumbnail's
+  `background`, which works for a gradient string today but will need to
+  switch to a real `background-image: url(...)` or an `<img>` once actual
+  thumbnail images exist.
 
 ## Explicitly not done in this session
 
