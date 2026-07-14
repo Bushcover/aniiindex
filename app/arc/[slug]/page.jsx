@@ -4,6 +4,12 @@ import ArcHero from "@/components/ArcHero";
 import ContentTabs from "@/components/ContentTabs";
 import IntensityChart from "@/components/IntensityChart";
 import BeatSection from "@/components/BeatSection";
+import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
+
+// AniList numeric id for the series this arc belongs to (Jujutsu Kaisen).
+// Every slug currently renders this same hardcoded arc (see PROJECT.md), so
+// this id is hardcoded too — it isn't derived from `params.slug` yet.
+const ANILIST_SERIES_ID = 113415;
 
 const ARC_NAV = [
   { slug: "cursed-child-arc", name: "Cursed Child Arc", count: 341 },
@@ -181,7 +187,26 @@ const BEATS = [
   },
 ];
 
-export default function ArcPage({ params }) {
+export default async function ArcPage({ params }) {
+  const [seriesResult, charactersResult] = await Promise.allSettled([
+    getSeriesById(ANILIST_SERIES_ID),
+    getSeriesCharacters(ANILIST_SERIES_ID),
+  ]);
+
+  const series = seriesResult.status === "fulfilled" ? seriesResult.value : null;
+  const realCharacters = charactersResult.status === "fulfilled" ? charactersResult.value : null;
+
+  const seriesName = series ? series.title.english || series.title.romaji : ARC.breadcrumb[0];
+  const description = series?.description || ARC.description;
+  const characters = realCharacters?.length ? realCharacters : ARC.characters;
+
+  const arc = {
+    ...ARC,
+    breadcrumb: [seriesName, ARC.breadcrumb[1]],
+    description,
+    characters,
+  };
+
   return (
     <>
       <nav>
@@ -203,7 +228,7 @@ export default function ArcPage({ params }) {
 
       <ArcNav arcs={ARC_NAV} />
 
-      <ArcHero arc={ARC} />
+      <ArcHero arc={arc} />
 
       <ContentTabs tabs={TABS} />
 

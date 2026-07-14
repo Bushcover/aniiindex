@@ -33,12 +33,19 @@ export default function ArcHero({ arc }) {
 
         <div className="chars">
           {arc.characters.map((char) => (
-            <div key={char.name} className="char-chip">
-              <div className="char-avatar" style={{ background: char.color }}>
-                {char.initials}
+            <div key={char.id ?? char.name} className="char-chip">
+              <div
+                className="char-avatar"
+                style={
+                  char.image
+                    ? { backgroundImage: `url(${char.image})`, backgroundSize: "cover", backgroundPosition: "center" }
+                    : { background: char.color }
+                }
+              >
+                {!char.image && char.initials}
               </div>
               {char.name}
-              <span className="char-count">{char.count}</span>
+              {char.count != null && <span className="char-count">{char.count}</span>}
             </div>
           ))}
         </div>

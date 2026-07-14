@@ -312,6 +312,76 @@ component, **`components/SearchNav.jsx`**:
   for an ongoing series); clicking the search icon after typing "Naruto"
   does the same; clicking × or the logo both return to `/`.
 
+## Session 7
+
+Wired the arc page's series-level and character-level data to AniList,
+following the same pattern Session 6 established for the search page.
+
+- **`lib/anilist.js`** gained two new functions, plus a shared
+  `postToAniList(query, variables)` helper (`searchSeries` was refactored
+  onto it too, no behavior change):
+  - `getSeriesById(anilistId)` — fetches `title` (romaji/english),
+    `description`, `genres`, `coverImage.large`, `bannerImage`,
+    `seasonYear`, `format`, `episodes`, and `status` for one series.
+    AniList's `description` field contains basic HTML (`<br>`, `<i>`,
+    etc.); this function strips those tags before returning, so callers
+    get plain text ready to render directly.
+  - `getSeriesCharacters(anilistId, { perPage = 10 })` — fetches the top
+    `perPage` characters (sorted main-role-first, then by favourites),
+    returning `{ id, name, image }` per character (`image` is the large
+    portrait URL, or `null` if AniList has none).
+  - Both share `searchSeries`'s caching (`next: { revalidate: 3600 }`)
+    and error contract (throw on request/GraphQL failure, so callers can
+    catch and fall back).
+- **`app/arc/[slug]/page.jsx` is now an async Server Component.** It
+  hardcodes `ANILIST_SERIES_ID = 113415` (Jujutsu Kaisen's real AniList
+  id) and calls both new functions via `Promise.allSettled` — using
+  `allSettled` rather than `Promise.all` specifically so a failure in one
+  call (say, characters) doesn't wipe out a successful result from the
+  other (series). Each result independently falls back to the existing
+  hardcoded `ARC` data if its fetch rejected or returned nothing:
+  - The breadcrumb's series name (previously the hardcoded string
+    `"Jujutsu Kaisen"`) is now `series.title.english || series.title.romaji`.
+  - The hero description (previously an arc-specific blurb about the
+    Shibuya Curtain) is now the real AniList series synopsis. This is an
+    intentional, task-directed swap — the paragraph now describes the
+    whole series rather than this specific arc's plot, since "series
+    description" was explicitly what the task asked to wire up. Worth
+    reconciling once Session 8's real series/arc page exists (arc-level
+    blurbs will need their own field, separate from the series synopsis).
+  - The character chips are now the real top-10 AniList cast for the
+    series (not the same 6 characters as before — AniList's top-10 by
+    role/favourites for Jujutsu Kaisen includes some named minor
+    characters, e.g. background students, that never appear in the
+    Shibuya arc specifically).
+  - The arc name ("Shibuya Incident Arc"), episode range, season/date
+    line, badges, intensity chart, beat sections, and content cards are
+    all untouched — still fully hardcoded, per the task.
+- **`components/ArcHero.jsx`** — character chips now render a real photo
+  (`background-image`, via `char.image`) when one is available, falling
+  back to the existing colored-initials circle (`char.color` +
+  `char.initials`) when it isn't. The small mention-count badge next to
+  each chip (`char.count`) is now optional and only renders when present
+  — real AniList characters don't have an aniindex-specific "mentions in
+  this arc" number, so that badge is simply omitted for them rather than
+  showing a fabricated count.
+- **Fallback verified concretely, not just by code review**: temporarily
+  pointing `ANILIST_SERIES_ID` at a nonexistent id (AniList returns a
+  GraphQL "Not Found" error for it) and re-requesting the page confirmed
+  it still renders `200 OK` with the original hardcoded description and
+  all 6 original hardcoded characters — the page never breaks.
+- Same environment caveat as Session 6: AniList's image CDN
+  (`s4.anilist.co`) is blocked by this sandbox's outbound network policy,
+  so character portraits render as empty circles in this session's own
+  screenshots even though the underlying `background-image` URLs are
+  real and correct (confirmed by reading the computed style in a headless
+  browser) — this will display normally in a real browser/deployment.
+- One data quirk worth noting: AniList's `title.english` for this series
+  is literally `"JUJUTSU KAISEN"` (all-caps) rather than title-cased —
+  the breadcrumb shows it as AniList returns it, same
+  `english || romaji` preference already used on the search page (which
+  shows the same quirk for "ONE PIECE").
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -334,7 +404,7 @@ app/
   submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above)
   submit/submit.module.css Styles unique to the submit page
 lib/
-  anilist.js             searchSeries(query) — calls the AniList GraphQL API, cached via Next's fetch cache (see Session 6 notes above)
+  anilist.js             searchSeries / getSeriesById / getSeriesCharacters — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7 notes above)
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips, stat row
@@ -363,9 +433,13 @@ contents differ meaningfully between the arc, search, and home pages
   whichever entry has `active: true`.
 - **ArcHero** — renders the breadcrumb trail, `<h1>` arc title, the meta
   row (episode range, season part, date range, intensity/spoiler badges),
-  the description paragraph, the row of character chips (avatar initials,
-  color, name, mention count), and the four-stat row (fan items, saves,
-  this week, contributors).
+  the description paragraph, the row of character chips, and the
+  four-stat row (fan items, saves, this week, contributors). Each
+  character chip renders a real photo (`char.image`, as a
+  `background-image`) when present, falling back to the colored-initials
+  circle (`char.color` + `char.initials`) otherwise; the small
+  mention-count badge (`char.count`) only renders when the value is
+  present, since real AniList characters (Session 7) don't have one.
 - **ContentTabs** — renders the sticky tab bar. Takes a `tabs` array;
   whichever tab has `active: true` gets the accent underline.
 - **IntensityChart** — renders the bar chart of ten story beats. Each beat
@@ -474,20 +548,27 @@ search query:
 
 ## Hardcoded data (in `app/arc/[slug]/page.jsx`)
 
-All of the following are plain `const` objects/arrays at the top of the
-page file, standing in for what will eventually come from a database/API:
+As of Session 7, `ANILIST_SERIES_ID` (113415, Jujutsu Kaisen) drives real
+`getSeriesById`/`getSeriesCharacters` calls that override `ARC`'s
+`breadcrumb[0]` (series name), `description`, and `characters` when
+AniList succeeds — see the Session 7 notes above. `ARC.characters` is
+still the fallback used when AniList fails or `params.slug` isn't
+plugged in yet. Everything else below is a plain `const` at the top of
+the page file, standing in for what will eventually come from a
+database/API:
 
 - `ARC_NAV` — the list of arcs shown in the horizontal strip, with fan-item
   counts and which one is "active". Will come from a per-series "arcs"
   table/endpoint, keyed by the same `slug` the route already receives via
-  `params.slug` (not yet used — the page always renders the Shibuya arc
-  regardless of the URL's `[slug]`).
-- `ARC` — series/arc metadata: breadcrumb (series → season), episode
-  range, date range, badges, description, character list (with avatar
-  color/initials and per-character mention counts), and the four top-line
-  stats. Will come from an arc detail endpoint plus a characters
-  relation, likely combining aniindex's own DB with series metadata from
-  the AniList API (referenced in the footer note).
+  `params.slug` (not yet used — the page always renders the Shibuya arc,
+  and the same hardcoded AniList series id, regardless of the URL's
+  `[slug]`).
+- `ARC` — arc-specific metadata that's still fully hardcoded: name,
+  episode range, season/date line, badges, and the four top-line stats.
+  (`breadcrumb[0]`, `description`, and `characters` are overridden by
+  real AniList data when available — see above.) A real version needs an
+  arc detail endpoint (for the arc-specific fields) that also stores
+  which AniList series id each arc belongs to.
 - `TABS` — tab labels and per-tab item counts. Counts will need to be
   computed from the real content index; only "All" is meaningful right
   now since the other tabs don't yet filter anything (no filtering logic
