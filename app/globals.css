@@ -30,7 +30,7 @@ nav {
   background: rgba(12,12,18,0.94); backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
 }
-.logo { font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--t1); letter-spacing: -0.5px; flex-shrink: 0; }
+.logo { font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--t1); letter-spacing: -0.5px; flex-shrink: 0; text-decoration: none; }
 .logo span { color: var(--accent); }
 .search-bar {
   flex: 1; max-width: 380px;

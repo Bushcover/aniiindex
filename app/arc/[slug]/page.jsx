@@ -210,9 +210,9 @@ export default async function ArcPage({ params }) {
   return (
     <>
       <nav>
-        <div className="logo">
+        <Link href="/" className="logo">
           ani<span>index</span>
-        </div>
+        </Link>
         <div className="search-bar">
           <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" />

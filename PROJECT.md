@@ -382,6 +382,20 @@ following the same pattern Session 6 established for the search page.
   `english || romaji` preference already used on the search page (which
   shows the same quirk for "ONE PIECE").
 
+### Session 7 follow-up: fix logo navigation on the home and arc pages
+
+Since there's no shared `Nav` component (each page inlines its own —
+see the file layout notes above), the logo-as-`Link` fix from Session 6
+(search page) and Session 5 (submit page) had never been applied to the
+home page or the arc page — both still had a plain, non-clickable
+`<div className="logo">`. Fixed by wrapping the logo in a `next/link` to
+`/` on both, and added `text-decoration: none` to the shared `.logo` rule
+in `globals.css` itself (rather than another one-off page-scoped
+modifier class) so it's underline-free wherever it's used as a link,
+without needing to touch it again per page. Click-tested the logo from
+all four pages (home, arc, search, submit) and confirmed every one now
+navigates to `/`.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)

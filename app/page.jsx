@@ -214,9 +214,9 @@ export default function HomePage() {
   return (
     <>
       <nav>
-        <div className="logo">
+        <Link href="/" className="logo">
           ani<span>index</span>
-        </div>
+        </Link>
         <div className={styles.navLinks}>
           {NAV_LINKS.map((link) => (
             <div
