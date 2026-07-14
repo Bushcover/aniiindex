@@ -284,6 +284,34 @@ hardcoded (see below); this is the first crack in that.
   nonsense query renders the "No results" state; visiting `/search` with
   no query renders the "Search for a series" prompt.
 
+### Session 6 follow-up: fix search page navigation
+
+The search page's nav was still the plain, non-interactive markup from
+before AniList was wired in — the logo was a `<div>`, and the search
+input/icon/clear-button had no handlers at all (typing did nothing;
+Enter did nothing). Fixed by extracting the whole nav into a new client
+component, **`components/SearchNav.jsx`**:
+
+- The logo is now a `next/link` to `/` (`text-decoration: none` added
+  via a small `.logoLink` modifier class in `search.module.css`, the same
+  pattern already used on the submit page).
+- The input is a controlled field seeded from the `query` prop. Pressing
+  Enter or clicking the (now-clickable; `pointer-events: none` was
+  removed from `.searchIcon`) search icon calls
+  `router.push('/search?q=' + encodeURIComponent(value))`. The clear (×)
+  button clears the field and calls `router.push('/')`.
+- `app/search/page.jsx` renders `<SearchNav key={query} query={query} />`
+  — the `key` forces the component to remount (and thus re-seed its
+  input state from the new `query` prop) whenever the URL's `?q=`
+  changes via client-side navigation, so searching again from an
+  already-loaded results page correctly updates the input to match.
+- Verified end-to-end: loading `/search?q=Attack%20on%20Titan` pre-fills
+  the input with "Attack on Titan"; typing "One Piece" and pressing Enter
+  navigates to `/search?q=One%20Piece` and renders One Piece's real
+  AniList data (including "—" for episodes, since AniList reports `null`
+  for an ongoing series); clicking the search icon after typing "Naruto"
+  does the same; clicking × or the logo both return to `/`.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -318,6 +346,7 @@ components/
   Sparkline.jsx        A small intensity sparkline (5 bars on the search page, 9 on the home page)
   Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
   HeroSearch.jsx       Client component: home page's hero search input + quick-search chips
+  SearchNav.jsx        Client component: search page's nav — logo link, functional search input/icon/clear
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 

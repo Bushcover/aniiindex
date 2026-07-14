@@ -1,6 +1,7 @@
 import Link from "next/link";
 import ContentCard from "@/components/ContentCard";
 import Sparkline from "@/components/Sparkline";
+import SearchNav from "@/components/SearchNav";
 import { searchSeries } from "@/lib/anilist";
 import styles from "./search.module.css";
 
@@ -224,33 +225,7 @@ export default async function SearchPage({ searchParams }) {
 
   return (
     <>
-      <nav>
-        <div className="logo">
-          ani<span>index</span>
-        </div>
-        <div className={styles.searchWrap}>
-          <svg
-            className={styles.searchIcon}
-            width="14"
-            height="14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input className={styles.searchBarInput} type="text" defaultValue={query} />
-          <span className={styles.searchClear}>×</span>
-        </div>
-        <div className="nav-right">
-          <button className="btn btn-ghost">Sign in</button>
-          <Link href="/submit" className="btn btn-primary">
-            Submit content
-          </Link>
-        </div>
-      </nav>
+      <SearchNav key={query} query={query} />
 
       <div className={styles.resultsHeader}>
         <div>
