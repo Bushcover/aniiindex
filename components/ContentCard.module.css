@@ -1,0 +1,94 @@
+/* Compact horizontal variant (used in the search page's right column).
+   The default/tall variant uses the shared .card/.thumb/.cbody/... classes
+   in app/globals.css instead — this module only covers compact mode so the
+   two visual styles can't leak into each other. */
+
+.compactCard {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-decoration: none;
+}
+.compactCard:hover {
+  border-color: var(--border-mid);
+}
+
+.compactThumb {
+  width: 80px;
+  height: 52px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.compactPlt {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+}
+.compactPltYt {
+  background: rgba(180, 0, 0, 0.85);
+}
+.compactPltTt {
+  background: rgba(0, 0, 0, 0.85);
+}
+.compactPltX {
+  background: rgba(10, 15, 20, 0.9);
+}
+.compactPltIg {
+  background: rgba(190, 45, 100, 0.82);
+}
+.compactPltRd {
+  background: rgba(200, 55, 0, 0.82);
+}
+
+.compactInfo {
+  flex: 1;
+  min-width: 0;
+}
+.compactTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--t1);
+  line-height: 1.4;
+  margin-bottom: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.compactMeta {
+  font-size: 10px;
+  color: var(--t3);
+}
+.compactTags {
+  display: flex;
+  gap: 3px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+.compactTag {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+.compactTagGen {
+  background: var(--surface-3);
+  color: var(--t2);
+}
+.compactTagChar {
+  background: var(--accent-soft);
+  color: var(--accent);
+}

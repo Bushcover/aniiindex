@@ -44,15 +44,34 @@ hardcoded "Chainsaw Man" search). Added:
   `.nav-right`, `.btn`/`.btn-ghost`/`.btn-primary`, `.container`) are
   reused straight from `globals.css`.
 
-Per the task instructions, the "top content this week" cards reuse the
+Per the task instructions, the "top content this week" cards reused the
 existing `components/ContentCard.jsx` as-is rather than recreating the
-mockup's compact horizontal `.content-card` row style. This is a known,
-intentional visual trade-off: `ContentCard` renders as the taller,
-16:9-thumbnail vertical card from the arc page, which makes the right
-column noticeably taller than the left column on the search page (visible
-as empty space at the bottom of the arc list). Worth reconciling later —
-either give `ContentCard` a compact display variant, or accept the
-height mismatch.
+mockup's compact horizontal `.content-card` row style. This was a known,
+intentional visual trade-off at the time — `ContentCard` rendered as the
+taller, 16:9-thumbnail vertical card, making the right column noticeably
+taller than the left. **Resolved in Session 4** (see below) by giving
+`ContentCard` a `compact` display mode.
+
+## Session 4
+
+Gave `ContentCard` a `compact` boolean prop instead of only having the
+one tall vertical layout:
+
+- `compact` is `false` by default — unchanged behavior, still the tall
+  16:9-thumbnail card using `globals.css`'s `.card`/`.thumb`/`.cbody`
+  classes, used as-is by `BeatSection` on the arc page.
+- `compact={true}` renders a horizontal row instead — 80×52px thumbnail
+  on the left, title/creator/tags on the right — matching the search
+  mockup's original `.content-card` style. These styles live in a new
+  colocated `components/ContentCard.module.css`, entirely separate class
+  names from the default mode's `globals.css` classes, so the two modes
+  can't bleed into each other.
+- `app/search/page.jsx` now passes `compact` on its `ContentCard`s. This
+  fixes the Session 3 column-height mismatch — the "top content" list is
+  no longer taller than the arc list next to it.
+- Both modes were screenshot-verified after the change: the arc page's
+  cards are visually unchanged, and the search page's cards now match
+  the mockup's compact row style.
 
 The Chainsaw Man red accent (series panel border/gradient bleed, and the
 red sparkline tint) is not hardcoded into the CSS — it's passed down as
@@ -87,6 +106,7 @@ components/
   IntensityChart.jsx   Bar chart of "community response by story beat" with peak-moment markers
   BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
   ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags)
+  ContentCard.module.css  Colocated styles for ContentCard's compact (horizontal) display mode
   Sparkline.jsx        A tiny 5-bar intensity sparkline, used per-arc-row on the search page
   Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
@@ -127,9 +147,16 @@ rather than split into extra component files.
   visually — it's folded into the card's `aria-label` for context. The
   `platform` prop (`"yt" | "tt" | "x" | "ig" | "rd"`) is looked up in a
   `PLATFORM_META` map at the top of the file, which supplies the badge's
-  icon, display label, and CSS class — YouTube red, TikTok black, X
-  near-black, Instagram pink-red, and Reddit orange, all defined as
-  existing `.plt-*` classes in `globals.css`.
+  icon and display label, plus two CSS classes per platform — one for
+  each visual mode below.
+  - `compact` (boolean, default `false`) picks between two entirely
+    separate markup/style branches: the default tall 16:9-thumbnail
+    vertical card (uses the shared `.card`/`.thumb`/`.cbody`/`.tag-*`
+    classes in `globals.css`, unchanged since Session 1/2) or, when
+    `compact` is true, a horizontal row with an 80×52px thumbnail on the
+    left and text on the right (uses `compact*` classes in the colocated
+    `ContentCard.module.css`, added in Session 4). The two variants don't
+    share classes, so styling one can't accidentally affect the other.
 - **Sparkline** — renders one arc row's 5-bar intensity sparkline. Takes a
   `bars` array of `{ heightPct, tier }` (same `"normal" | "high" | "peak"`
   vocabulary as `IntensityChart`'s beats). Bar colors default to the same
@@ -221,6 +248,3 @@ page file, standing in for what will eventually come from a database/API:
   chips, and "also found" rows are all static, non-functional markup.
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
-- The search page's "top content" column is visibly taller than its arc
-  list column (see the Session 3 note above on reusing `ContentCard`
-  as-is) — not fixed yet.

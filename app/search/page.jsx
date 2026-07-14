@@ -371,7 +371,7 @@ export default function SearchPage() {
 
             <div className={styles.topContent}>
               {TOP_CONTENT.map((item, i) => (
-                <ContentCard key={i} {...item} />
+                <ContentCard key={i} compact {...item} />
               ))}
             </div>
           </div>
