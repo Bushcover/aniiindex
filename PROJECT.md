@@ -201,6 +201,21 @@ client state; this entire page does).
   button is genuinely `disabled`, and "← Back" from step 3 → step 2 → step
   1 preserves all prior input.
 
+### Session 5 follow-up: wire up "Submit content"
+
+Session 5 built the `/submit` page but left every other page's "Submit
+content" button as inert static markup (matching the pre-existing
+pattern for not-yet-built destinations). Once `/submit` existed, that
+was a bug, not a placeholder: fixed by turning the "Submit content"
+button on the home page (`app/page.jsx`) and search page
+(`app/search/page.jsx`) into `next/link`s to `/submit`, and the arc
+page's footer "Submit content" text link (`app/arc/[slug]/page.jsx`) the
+same way (previously `href="#"`). Also added `text-decoration: none` to
+the shared `.btn` rule in `globals.css`, since it's now applied to an
+`<a>`/`Link` as well as `<button>`s and anchors default to underlined
+text. Click-tested from all three pages to confirm each lands on
+`/submit`.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)

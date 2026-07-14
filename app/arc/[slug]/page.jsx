@@ -1,3 +1,4 @@
+import Link from "next/link";
 import ArcNav from "@/components/ArcNav";
 import ArcHero from "@/components/ArcHero";
 import ContentTabs from "@/components/ContentTabs";
@@ -218,7 +219,7 @@ export default function ArcPage({ params }) {
         <div className="index-note">
           aniindex is a fan content index — nothing is hosted here. All items link to their original source
           and creator. Series data via <a href="#">AniList API</a>. &nbsp;·&nbsp;{" "}
-          <a href="#">Submit content</a> &nbsp;·&nbsp; <a href="#">Report an item</a>
+          <Link href="/submit">Submit content</Link> &nbsp;·&nbsp; <a href="#">Report an item</a>
         </div>
       </div>
     </>

@@ -229,7 +229,9 @@ export default function HomePage() {
         </div>
         <div className="nav-right">
           <button className="btn btn-ghost">Sign in</button>
-          <button className="btn btn-primary">Submit content</button>
+          <Link href="/submit" className="btn btn-primary">
+            Submit content
+          </Link>
         </div>
       </nav>
 

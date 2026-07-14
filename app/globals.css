@@ -40,7 +40,7 @@ nav {
   color: var(--t3); font-size: 13px; font-family: var(--body);
 }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.btn { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: none; font-family: var(--body); }
+.btn { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: none; font-family: var(--body); text-decoration: none; }
 .btn-ghost { background: transparent; color: var(--t2); }
 .btn-primary { background: var(--accent); color: #fff; }
 
