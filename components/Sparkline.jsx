@@ -1,8 +1,8 @@
 import styles from "./Sparkline.module.css";
 
-export default function Sparkline({ bars }) {
+export default function Sparkline({ bars, width = "34px", height = "20px", gap = "1.5px" }) {
   return (
-    <div className={styles.sparkline}>
+    <div className={styles.sparkline} style={{ width, height, gap }}>
       {bars.map((bar, i) => (
         <div
           key={i}

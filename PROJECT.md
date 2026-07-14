@@ -49,10 +49,18 @@ existing `components/ContentCard.jsx` as-is rather than recreating the
 mockup's compact horizontal `.content-card` row style. This was a known,
 intentional visual trade-off at the time — `ContentCard` rendered as the
 taller, 16:9-thumbnail vertical card, making the right column noticeably
-taller than the left. **Resolved in Session 4** (see below) by giving
-`ContentCard` a `compact` display mode.
+taller than the left. **Resolved in a Session 3 follow-up** (below) by
+giving `ContentCard` a `compact` display mode.
 
-## Session 4
+The Chainsaw Man red accent (series panel border/gradient bleed, and the
+red sparkline tint) is not hardcoded into the CSS — it's passed down as
+CSS custom properties (`--series-accent`, `--series-accent-soft`,
+`--series-spark-high`, `--series-spark-peak`) set via inline `style` from
+the hardcoded `SERIES` object, with the CSS falling back to the default
+purple accent when unset. This keeps `search.module.css` series-agnostic
+so a future real series lookup only needs to supply a color.
+
+### Session 3 follow-up: ContentCard compact mode
 
 Gave `ContentCard` a `compact` boolean prop instead of only having the
 one tall vertical layout:
@@ -73,13 +81,52 @@ one tall vertical layout:
   cards are visually unchanged, and the search page's cards now match
   the mockup's compact row style.
 
-The Chainsaw Man red accent (series panel border/gradient bleed, and the
-red sparkline tint) is not hardcoded into the CSS — it's passed down as
-CSS custom properties (`--series-accent`, `--series-accent-soft`,
-`--series-spark-high`, `--series-spark-peak`) set via inline `style` from
-the hardcoded `SERIES` object, with the CSS falling back to the default
-purple accent when unset. This keeps `search.module.css` series-agnostic
-so a future real series lookup only needs to supply a color.
+## Session 4
+
+Converted the home page mockup into `app/page.jsx` (replacing the old
+placeholder that just redirected `/` to the arc page). Added:
+
+- `app/page.module.css` — styles unique to the home page (nav links,
+  hero, search bar, quick-search chips, hero stats, section headers, arc
+  cards, series scroll cards, feature pills, trending moments list),
+  following the same colocated-CSS-Module pattern as the search page so
+  none of it collides with `globals.css` or `search.module.css`. The
+  radial purple gradient behind the hero (`background: radial-gradient(
+  ellipse 80% 60% at 50% -10%, rgba(123,108,246,0.13) 0%, transparent
+  70%)`) is copied byte-for-byte from the mockup.
+- **Trending arc cards reuse `components/Sparkline.jsx`** for their mini
+  intensity charts instead of introducing the mockup's own
+  `.mini-intensity`/`.mbar` classes, per the task instructions. Since the
+  mockup's version needed 9 bars stretched across the full card width
+  (vs. the search page's fixed 34×20px, 5-bar sparkline), `Sparkline` was
+  given optional `width`/`height`/`gap` props (defaulting to the existing
+  34px/20px/1.5px so the search page's call site didn't need to change)
+  — the home page passes `width="100%" height="36px"`. The bar colors/
+  radius are still exactly `Sparkline`'s existing values (not the
+  mockup's slightly different 0.22/0.45 opacities or 2px radius), which
+  is an intentional consistency choice over pixel-matching a third
+  variant of the same chart.
+- `components/HeroSearch.jsx` — a small **client component**
+  (`"use client"`) holding the hero search input and the "Try:" quick-
+  search chips, since both need interactivity that a server component
+  can't have:
+  - Pressing Enter in the search input navigates to
+    `/search?q=<input value>` via `useRouter().push(...)`.
+  - Clicking a quick-search chip sets the input's value to that chip's
+    text and immediately navigates to `/search?q=<chip value>`.
+  - Everything else on the home page (nav, hero copy, stats, arc cards,
+    series cards, moments list, feature pills) stays a plain server
+    component — `HeroSearch` is the only client-rendered piece.
+- Trending arc cards are `next/link`s to `/arc/[slug]`; popular series
+  cards are `next/link`s to `/search?q=<series name>`. Both were
+  click-tested: an arc card navigates to and renders `/arc/<slug>`, and
+  a quick-search chip navigates to `/search?q=...`.
+- The series horizontal scroll row uses `overflow-x: auto` with both
+  `scrollbar-width: none` (Firefox) and `::-webkit-scrollbar { display:
+  none }` (Chromium/WebKit) — the same no-visible-scrollbar technique
+  already used for the arc strip on the arc page — confirmed
+  programmatically that the row still overflows/scrolls
+  (`scrollWidth > clientWidth`) while no scrollbar is drawn.
 
 ## Stack
 
@@ -95,7 +142,8 @@ so a future real series lookup only needs to supply a color.
 app/
   layout.jsx            Root layout: loads Syne + Inter from Google Fonts, imports globals.css
   globals.css           All shared page styles, copied from the arc-page mockup's <style> block
-  page.jsx               Redirects "/" to "/arc/shibuya-incident-arc" for convenience
+  page.jsx               The home page. Holds all hardcoded data consts and composes the components below.
+  page.module.css        Styles unique to the home page (see Session 4 notes above)
   arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
   search/page.jsx        The search results page. Holds all hardcoded data consts (SERIES, ARCS, CHARACTERS, TOP_CONTENT, etc.)
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
@@ -107,15 +155,17 @@ components/
   BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
   ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags)
   ContentCard.module.css  Colocated styles for ContentCard's compact (horizontal) display mode
-  Sparkline.jsx        A tiny 5-bar intensity sparkline, used per-arc-row on the search page
+  Sparkline.jsx        A small intensity sparkline (5 bars on the search page, 9 on the home page)
   Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
+  HeroSearch.jsx       Client component: home page's hero search input + quick-search chips
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 
-The top site nav bar (logo, search bar, Browse/Sign in buttons) and the footer
-disclaimer note are rendered directly in `app/arc/[slug]/page.jsx` — they
-weren't part of the five requested components, so they were kept inline
-rather than split into extra component files.
+The top site nav bar (logo, search bar/links, Sign in/Submit content
+buttons) and the footer/feature-pill content are rendered directly in
+each page file rather than split into extra shared components, since nav
+contents differ meaningfully between the arc, search, and home pages
+(different links, different search UI).
 
 ## What each component does
 
@@ -155,15 +205,50 @@ rather than split into extra component files.
     classes in `globals.css`, unchanged since Session 1/2) or, when
     `compact` is true, a horizontal row with an 80×52px thumbnail on the
     left and text on the right (uses `compact*` classes in the colocated
-    `ContentCard.module.css`, added in Session 4). The two variants don't
-    share classes, so styling one can't accidentally affect the other.
-- **Sparkline** — renders one arc row's 5-bar intensity sparkline. Takes a
-  `bars` array of `{ heightPct, tier }` (same `"normal" | "high" | "peak"`
-  vocabulary as `IntensityChart`'s beats). Bar colors default to the same
+    `ContentCard.module.css`). The two variants don't share classes, so
+    styling one can't accidentally affect the other.
+- **Sparkline** — renders a small intensity sparkline: 5 bars at a fixed
+  34×20px on the search page's arc list, 9 bars stretched full-width at
+  36px tall on the home page's trending arc cards. Takes a `bars` array
+  of `{ heightPct, tier }` (same `"normal" | "high" | "peak"` vocabulary
+  as `IntensityChart`'s beats) plus optional `width`/`height`/`gap` props
+  (defaulting to `34px`/`20px`/`1.5px`, the search page's original size,
+  so that call site needed no changes). Bar colors default to the same
   purple accent as `IntensityChart`, but fall back to whatever
   `--series-spark-high` / `--series-spark-peak` CSS variables are set on
   an ancestor element, which is how the search page tints these red for
-  Chainsaw Man without the component needing a `color` prop.
+  Chainsaw Man without the component needing a `color` prop; the home
+  page doesn't set these, so its bars use the default purple.
+- **HeroSearch** — the only client component (`"use client"`) in the
+  project. Renders the home page's hero search input and its "Try:"
+  quick-search chips, and owns the input's value as local state so a
+  chip click can visibly populate the field before navigating. Enter in
+  the input, or clicking a chip, calls `router.push('/search?q=...')`
+  via `next/navigation`'s `useRouter`.
+
+## Hardcoded data (in `app/page.jsx`)
+
+- `NAV_LINKS`, `HERO_STATS`, `FEATURES` — static nav links and top-line
+  numbers; `NAV_LINKS`' "active" link is hand-set, not derived from the
+  current route.
+- `TRENDING_ARCS` — the 6 trending arc cards (series badge color/label,
+  arc name/meta line, 9-bar sparkline data, item count, up to 3 platform
+  dot colors, peak-moment label). `slug` builds each card's `/arc/[slug]`
+  link — same caveat as the search page's arc list: every slug currently
+  renders the same hardcoded Shibuya arc page. Sparkline heights/tiers
+  are hand-picked the same way as `INTENSITY_BEATS`/`ARCS[].spark`
+  elsewhere and will eventually come from real per-arc engagement data,
+  and "trending" itself will need a real ranking query.
+- `POPULAR_SERIES` — the horizontally-scrolling series cards (name,
+  poster gradient, arc count, item count). Links to
+  `/search?q=<series name>`; the search page doesn't actually read that
+  query param yet (`app/search/page.jsx` always renders its own
+  hardcoded Chainsaw Man results regardless of `?q=`), so this link is
+  correct but not yet "wired through."
+- `TRENDING_MOMENTS` — the 5 trending-moment rows (rank, whether it's a
+  top-3 "hot" rank, moment name, series/arc, item count, weekly delta).
+  These rows aren't links yet — there's no destination page for an
+  individual story beat/moment outside of an arc page's beat sections.
 
 ## Hardcoded data (in `app/search/page.jsx`)
 
@@ -239,12 +324,18 @@ page file, standing in for what will eventually come from a database/API:
 
 - No routing/data logic keyed off the `[slug]` param — every slug renders
   the same hardcoded Shibuya Incident Arc, including the arc links
-  clicked from the search page (`/arc/introduction-arc`,
-  `/arc/bat-devil-arc`, etc. all currently render the same Shibuya page).
-- No tab/filter-pill filtering on either page — clicking a tab or a
-  filter pill doesn't change which items are shown.
-- No API, database, auth, or real search functionality — the nav search
-  bar/input, "Browse"/"Submit content"/"Sign in" buttons, character
-  chips, and "also found" rows are all static, non-functional markup.
+  clicked from the search page and the home page's trending arc cards
+  (`/arc/introduction-arc`, `/arc/rumbling-arc`, etc. all currently
+  render the same Shibuya page).
+- The `?q=` query param on `/search` isn't read yet — every link into the
+  search page (quick-search chips, Enter in the hero search bar, series
+  cards) navigates correctly, but the destination always shows the same
+  hardcoded Chainsaw Man results regardless of the query string.
+- No tab/filter-pill filtering on any page — clicking a tab or a filter
+  pill doesn't change which items are shown.
+- No API, database, auth, or real search functionality — the nav
+  links/search bar/input, "Browse"/"Submit content"/"Sign in" buttons,
+  character chips, "also found" rows, and trending-moment rows are all
+  static, non-functional markup beyond the navigation described above.
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
