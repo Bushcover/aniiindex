@@ -1,0 +1,406 @@
+/* ── Nav search input (distinct from the arc page's .search-bar div) ── */
+.searchWrap {
+  flex: 1;
+  max-width: 480px;
+  position: relative;
+}
+.searchBarInput {
+  width: 100%;
+  height: 36px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  padding: 0 36px 0 36px;
+  font-size: 14px;
+  font-family: var(--body);
+  color: var(--t1);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.searchBarInput:focus {
+  border-color: rgba(123, 108, 246, 0.4);
+}
+.searchIcon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--t3);
+  pointer-events: none;
+}
+.searchClear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--t3);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.searchClear:hover {
+  color: var(--t2);
+}
+
+/* ── Results header ── */
+.resultsHeader {
+  border-bottom: 1px solid var(--border);
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.resultsQuery {
+  font-size: 13px;
+  color: var(--t2);
+}
+.resultsQuery strong {
+  color: var(--t1);
+  font-weight: 600;
+}
+.resultsCount {
+  font-size: 12px;
+  color: var(--t3);
+}
+
+.typeFilters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.filterPill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  color: var(--t2);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+}
+.filterPill:hover {
+  color: var(--t1);
+  border-color: var(--border-mid);
+}
+.filterPillActive {
+  background: var(--surface-2);
+  border-color: var(--border-mid);
+  color: var(--t1);
+}
+.pillCount {
+  color: var(--t3);
+  margin-left: 4px;
+  font-size: 11px;
+}
+.filterPillActive .pillCount {
+  color: var(--t2);
+}
+
+/* ── Series panel ── */
+.seriesPanel {
+  margin: 24px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--series-accent, var(--accent));
+  border-radius: var(--r);
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+}
+.seriesPanelBody {
+  flex: 1;
+  padding: 20px 24px;
+  background: linear-gradient(to right, var(--series-accent-soft, var(--accent-soft)) 0%, transparent 50%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.seriesInfo {
+  flex: 1;
+  min-width: 0;
+}
+.seriesEyebrow {
+  font-size: 10px;
+  color: var(--series-accent, var(--accent));
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.seriesName {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+  color: var(--t1);
+  margin-bottom: 6px;
+}
+.seriesMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--t2);
+}
+.dot {
+  color: var(--t3);
+}
+.seriesTag {
+  padding: 2px 8px;
+  background: var(--surface-3);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--t2);
+}
+.seriesStats {
+  display: flex;
+  gap: 20px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.sstat {
+}
+.sstatVal {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--t1);
+}
+.sstatLabel {
+  font-size: 10px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.seriesActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.seriesBtn {
+  padding: 8px 16px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid;
+  font-family: var(--body);
+  transition: all 0.15s;
+}
+.seriesBtnPrimary {
+  background: var(--series-accent, var(--accent));
+  border-color: var(--series-accent, var(--accent));
+  color: #fff;
+}
+.seriesBtnGhost {
+  background: transparent;
+  border-color: var(--border-mid);
+  color: var(--t2);
+}
+.seriesBtnGhost:hover {
+  color: var(--t1);
+  border-color: var(--border-mid);
+}
+
+/* ── Two column ── */
+.twoCol {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 24px;
+  padding-bottom: 64px;
+}
+
+/* ── Arc list ── */
+.colTitle {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--t1);
+  margin-bottom: 6px;
+}
+.colSub {
+  font-size: 11px;
+  color: var(--t3);
+  margin-bottom: 16px;
+}
+
+.arcList {
+  display: flex;
+  flex-direction: column;
+}
+.arcRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  text-decoration: none;
+}
+.arcRow:hover {
+  background: var(--surface-2);
+}
+.arcRow:hover .arcRowArrow {
+  opacity: 1;
+}
+.arcNum {
+  font-size: 10px;
+  color: var(--t3);
+  width: 18px;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: var(--display);
+  font-weight: 600;
+}
+.arcRowName {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t1);
+  min-width: 0;
+}
+.arcRowCount {
+  font-size: 11px;
+  color: var(--t3);
+  width: 48px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.arcRowPeak {
+  flex-shrink: 0;
+}
+.arcPeakDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.arcRowArrow {
+  font-size: 12px;
+  color: var(--t3);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.arcDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.showMore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--t2);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.showMore:hover {
+  color: var(--t1);
+}
+
+/* ── Also found ── */
+.alsoFound {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.alsoRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.alsoRow:hover {
+  background: var(--surface-2);
+}
+.alsoType {
+  font-size: 10px;
+  color: var(--t3);
+  width: 52px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.alsoName {
+  flex: 1;
+  font-size: 13px;
+  color: var(--t1);
+}
+.alsoCount {
+  font-size: 11px;
+  color: var(--t3);
+}
+
+/* ── Right column: characters ── */
+.charsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 28px;
+}
+.charChip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-decoration: none;
+  color: var(--t1);
+}
+.charChip:hover {
+  border-color: var(--border-mid);
+}
+.charAv {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.charCount {
+  color: var(--t3);
+  font-size: 11px;
+}
+.moreChars {
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--t2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Right column: top content ── */
+.topContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

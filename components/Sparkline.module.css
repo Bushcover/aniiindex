@@ -1,0 +1,22 @@
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.spark {
+  flex: 1;
+  border-radius: 1px 1px 0 0;
+  background: var(--surface-3);
+}
+
+.sparkHigh {
+  background: var(--series-spark-high, rgba(123, 108, 246, 0.3));
+}
+
+.sparkPeak {
+  background: var(--series-spark-peak, rgba(123, 108, 246, 0.6));
+}

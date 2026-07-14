@@ -23,6 +23,45 @@ names (`thumbGradient` → `thumbnailUrl`, `tags` → `contentType` +
 rendered page was screenshot-compared against Session 1 and is pixel-
 identical.
 
+## Session 3
+
+Converted the search-results mockup into `app/search/page.jsx` (a
+hardcoded "Chainsaw Man" search). Added:
+
+- `components/Sparkline.jsx` (+ colocated `Sparkline.module.css`) — a
+  small reusable 5-bar sparkline used in the arc list, styled with the
+  same tiered normal/high/peak language as `IntensityChart`, but scoped
+  to its own CSS Module rather than added to `globals.css`.
+- `app/search/search.module.css` — all styles unique to the search page
+  (nav search input, results header/filter pills, series panel, two-column
+  layout, arc list, "also found", characters grid). This mockup reuses
+  some class names from the arc-page mockup for visually *different*
+  things — most notably `.search-bar` is a plain placeholder `<div>` on
+  the arc page but a real `<input>` here. Rather than let one definition
+  clobber the other in the shared `globals.css`, the search page's own
+  classes live in a CSS Module (scoped, collision-proof) and only the
+  handful of genuinely identical shared rules (`nav`, `.logo`,
+  `.nav-right`, `.btn`/`.btn-ghost`/`.btn-primary`, `.container`) are
+  reused straight from `globals.css`.
+
+Per the task instructions, the "top content this week" cards reuse the
+existing `components/ContentCard.jsx` as-is rather than recreating the
+mockup's compact horizontal `.content-card` row style. This is a known,
+intentional visual trade-off: `ContentCard` renders as the taller,
+16:9-thumbnail vertical card from the arc page, which makes the right
+column noticeably taller than the left column on the search page (visible
+as empty space at the bottom of the arc list). Worth reconciling later —
+either give `ContentCard` a compact display variant, or accept the
+height mismatch.
+
+The Chainsaw Man red accent (series panel border/gradient bleed, and the
+red sparkline tint) is not hardcoded into the CSS — it's passed down as
+CSS custom properties (`--series-accent`, `--series-accent-soft`,
+`--series-spark-high`, `--series-spark-peak`) set via inline `style` from
+the hardcoded `SERIES` object, with the CSS falling back to the default
+purple accent when unset. This keeps `search.module.css` series-agnostic
+so a future real series lookup only needs to supply a color.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -35,10 +74,12 @@ identical.
 
 ```
 app/
-  layout.jsx          Root layout: loads Syne + Inter from Google Fonts, imports globals.css
-  globals.css          All page styles, copied from the mockup <style> block (unchanged)
-  page.jsx              Redirects "/" to "/arc/shibuya-incident-arc" for convenience
-  arc/[slug]/page.jsx  The arc page. Holds all hardcoded data consts and composes the components below.
+  layout.jsx            Root layout: loads Syne + Inter from Google Fonts, imports globals.css
+  globals.css           All shared page styles, copied from the arc-page mockup's <style> block
+  page.jsx               Redirects "/" to "/arc/shibuya-incident-arc" for convenience
+  arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
+  search/page.jsx        The search results page. Holds all hardcoded data consts (SERIES, ARCS, CHARACTERS, TOP_CONTENT, etc.)
+  search/search.module.css  Styles unique to the search page (see Session 3 notes above)
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips, stat row
@@ -46,6 +87,8 @@ components/
   IntensityChart.jsx   Bar chart of "community response by story beat" with peak-moment markers
   BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
   ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags)
+  Sparkline.jsx        A tiny 5-bar intensity sparkline, used per-arc-row on the search page
+  Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 
@@ -87,6 +130,46 @@ rather than split into extra component files.
   icon, display label, and CSS class — YouTube red, TikTok black, X
   near-black, Instagram pink-red, and Reddit orange, all defined as
   existing `.plt-*` classes in `globals.css`.
+- **Sparkline** — renders one arc row's 5-bar intensity sparkline. Takes a
+  `bars` array of `{ heightPct, tier }` (same `"normal" | "high" | "peak"`
+  vocabulary as `IntensityChart`'s beats). Bar colors default to the same
+  purple accent as `IntensityChart`, but fall back to whatever
+  `--series-spark-high` / `--series-spark-peak` CSS variables are set on
+  an ancestor element, which is how the search page tints these red for
+  Chainsaw Man without the component needing a `color` prop.
+
+## Hardcoded data (in `app/search/page.jsx`)
+
+- `SERIES` — the matched series' identity, blurb, tags, top-line stats,
+  and its accent color (`accent`/`accentSoft`/`sparkHigh`/`sparkPeak`).
+  Will come from a series lookup keyed by the search query; the color
+  fields imply aniindex will need some scheme for assigning/storing a
+  per-series accent color.
+- `RESULTS_SUMMARY` and `FILTERS` — the results-count line and the type
+  filter pills with their counts. None of the filter pills actually
+  filter anything yet (only "All" is marked active); wiring them up needs
+  real per-type counts and a query mechanism.
+- `ARCS` — the 8 detailed arc rows (slug, display number, name, item
+  count, sparkline bars, whether it gets a "peak" dot). `slug` is used to
+  build each row's `/arc/[slug]` link. The `dividerAfter` flag on one arc
+  hardcodes where the mockup's visual divider falls — a real version
+  would probably derive that from a "part" grouping instead. `spark`
+  heights/tiers are hand-picked exactly like `INTENSITY_BEATS` on the arc
+  page and will eventually derive from real per-arc engagement data.
+- `MORE_ARCS_LABEL` and `MORE_CHARACTERS_COUNT` — static stand-ins for
+  the "+N more" affordances; today they're plain text, not real
+  expand/pagination.
+- `ALSO_FOUND` — the "Manga / OST / Related" rows; currently static
+  text-only rows (not links) since there's no destination page for a
+  manga part, an OST, or a "related works" listing yet.
+- `CHARACTERS` — the character chips (initials, avatar color, name,
+  mention count). Chip links are still `href="#"` placeholders — no
+  character detail/filter page exists yet.
+- `TOP_CONTENT` — 4 items shaped exactly like `ContentCard`'s props
+  (`title`, `creator`, `platform`, `thumbnailUrl`, `contentType`,
+  `characterTags`, `sourceUrl`). Same caveats as `BEATS` on the arc page:
+  `thumbnailUrl` is a CSS gradient placeholder and `sourceUrl` is `"#"`
+  for every item.
 
 ## Hardcoded data (in `app/arc/[slug]/page.jsx`)
 
@@ -125,11 +208,19 @@ page file, standing in for what will eventually come from a database/API:
   switch to a real `background-image: url(...)` or an `<img>` once actual
   thumbnail images exist.
 
-## Explicitly not done in this session
+## Explicitly not done
 
 - No routing/data logic keyed off the `[slug]` param — every slug renders
-  the same hardcoded Shibuya Incident Arc.
-- No tab filtering — clicking a tab doesn't change which cards are shown.
-- No API, database, auth, or search functionality — the search bar,
-  "Browse", and "Sign in" controls in the top nav are static markup.
-- No pagination/infinite scroll for the card grids.
+  the same hardcoded Shibuya Incident Arc, including the arc links
+  clicked from the search page (`/arc/introduction-arc`,
+  `/arc/bat-devil-arc`, etc. all currently render the same Shibuya page).
+- No tab/filter-pill filtering on either page — clicking a tab or a
+  filter pill doesn't change which items are shown.
+- No API, database, auth, or real search functionality — the nav search
+  bar/input, "Browse"/"Submit content"/"Sign in" buttons, character
+  chips, and "also found" rows are all static, non-functional markup.
+- No pagination/infinite scroll for the card grids, and no real
+  expansion behind the "+N more" affordances on the search page.
+- The search page's "top content" column is visibly taller than its arc
+  list column (see the Session 3 note above on reusing `ContentCard`
+  as-is) — not fixed yet.
