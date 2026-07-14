@@ -1,27 +1,12 @@
 import Link from "next/link";
 import ContentCard from "@/components/ContentCard";
 import Sparkline from "@/components/Sparkline";
+import { searchSeries } from "@/lib/anilist";
 import styles from "./search.module.css";
 
-const SERIES = {
-  slug: "chainsaw-man",
-  eyebrow: "✦ Series match",
-  name: "Chainsaw Man",
-  author: "Tatsuki Fujimoto",
-  years: "2018 (manga) · 2022 (anime)",
-  tags: ["Action", "Dark fantasy", "Seinen"],
-  accent: "#CC2828",
-  accentSoft: "rgba(204,40,40,0.12)",
-  sparkHigh: "rgba(204,40,40,0.35)",
-  sparkPeak: "rgba(204,40,40,0.65)",
-  stats: [
-    { value: "11", label: "Arcs indexed" },
-    { value: "6,847", label: "Fan items" },
-    { value: "34,201", label: "Saves" },
-    { value: "892", label: "This week" },
-  ],
-};
-
+// Hardcoded placeholder counts for the sections that aren't wired to real
+// data yet (arcs/characters/content — see the ARCS/CHARACTERS/TOP_CONTENT
+// comments below). Not derived from whatever series is actually searched.
 const RESULTS_SUMMARY = "11 arcs · 22 characters · 6,847 fan items";
 
 const FILTERS = [
@@ -33,6 +18,10 @@ const FILTERS = [
   { label: "Discussion", count: 1612 },
 ];
 
+// TODO(Session 8): AniList has no arc-level data, so this arc list is still
+// hardcoded placeholder content (originally authored for Chainsaw Man) and
+// isn't tied to whichever series the search above actually resolves. Replace
+// this with real per-series arc data once the series page is built.
 const ARCS = [
   {
     slug: "introduction-arc",
@@ -157,6 +146,8 @@ const ALSO_FOUND = [
   { type: "Related", name: "Tatsuki Fujimoto Works", count: "Fire Punch · Look Back · +3" },
 ];
 
+// Also still hardcoded (Session 6 only wires the series panel to real data;
+// characters and top content remain placeholders until a real backend exists).
 const CHARACTERS = [
   { initials: "DE", color: "#CC2828", name: "Denji", count: 1892 },
   { initials: "PO", color: "#D45E8A", name: "Power", count: 1543 },
@@ -209,7 +200,28 @@ const TOP_CONTENT = [
   },
 ];
 
-export default function SearchPage() {
+function formatLabel(format) {
+  return format ? format.replaceAll("_", " ") : null;
+}
+
+export default async function SearchPage({ searchParams }) {
+  const rawQuery = Array.isArray(searchParams?.q) ? searchParams.q[0] : searchParams?.q;
+  const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
+
+  let series = null;
+  let fetchFailed = false;
+
+  if (query) {
+    try {
+      const results = await searchSeries(query);
+      series = results[0] || null;
+    } catch (err) {
+      fetchFailed = true;
+    }
+  }
+
+  const seriesName = series ? series.title.english || series.title.romaji : null;
+
   return (
     <>
       <nav>
@@ -229,7 +241,7 @@ export default function SearchPage() {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <input className={styles.searchBarInput} type="text" defaultValue={SERIES.name} />
+          <input className={styles.searchBarInput} type="text" defaultValue={query} />
           <span className={styles.searchClear}>×</span>
         </div>
         <div className="nav-right">
@@ -242,10 +254,16 @@ export default function SearchPage() {
 
       <div className={styles.resultsHeader}>
         <div>
-          <div className={styles.resultsQuery}>
-            Results for <strong>&quot;{SERIES.name}&quot;</strong>
-          </div>
-          <div className={styles.resultsCount}>{RESULTS_SUMMARY}</div>
+          {query ? (
+            <>
+              <div className={styles.resultsQuery}>
+                Results for <strong>&quot;{query}&quot;</strong>
+              </div>
+              <div className={styles.resultsCount}>{RESULTS_SUMMARY}</div>
+            </>
+          ) : (
+            <div className={styles.resultsQuery}>Browse aniindex</div>
+          )}
         </div>
         <div className={styles.typeFilters}>
           {FILTERS.map((filter) => (
@@ -259,125 +277,175 @@ export default function SearchPage() {
         </div>
       </div>
 
-      <div
-        className="container"
-        style={{
-          "--series-accent": SERIES.accent,
-          "--series-accent-soft": SERIES.accentSoft,
-          "--series-spark-high": SERIES.sparkHigh,
-          "--series-spark-peak": SERIES.sparkPeak,
-        }}
-      >
-        <div className={styles.seriesPanel}>
-          <div className={styles.seriesPanelBody}>
-            <div className={styles.seriesInfo}>
-              <div className={styles.seriesEyebrow}>{SERIES.eyebrow}</div>
-              <div className={styles.seriesName}>{SERIES.name}</div>
-              <div className={styles.seriesMeta}>
-                <span>{SERIES.author}</span>
-                <span className={styles.dot}>·</span>
-                <span>{SERIES.years}</span>
-                <span className={styles.dot}>·</span>
-                {SERIES.tags.map((tag) => (
-                  <span key={tag} className={styles.seriesTag}>
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <div className={styles.seriesStats}>
-                {SERIES.stats.map((stat) => (
-                  <div key={stat.label} className={styles.sstat}>
-                    <div className={styles.sstatVal}>{stat.value}</div>
-                    <div className={styles.sstatLabel}>{stat.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={styles.seriesActions}>
-              <button className={`${styles.seriesBtn} ${styles.seriesBtnPrimary}`}>Browse arcs</button>
-              <button className={`${styles.seriesBtn} ${styles.seriesBtnGhost}`}>Characters</button>
+      <div className="container">
+        {!query && (
+          <div className={styles.stateMessage}>
+            <div className={styles.stateMessageTitle}>Search for a series</div>
+            <div className={styles.stateMessageSub}>
+              Type an anime title into the search bar above to find its arcs, characters, and fan content.
             </div>
           </div>
-        </div>
+        )}
 
-        <div className={styles.twoCol}>
-          <div>
-            <div className={styles.colTitle}>Arcs</div>
-            <div className={styles.colSub}>Each bar shows community response intensity across story beats</div>
+        {query && fetchFailed && (
+          <div className={styles.stateMessage}>
+            <div className={styles.stateMessageTitle}>Couldn&rsquo;t reach AniList</div>
+            <div className={styles.stateMessageSub}>
+              Something went wrong fetching results for &quot;{query}&quot;. Please try again in a moment.
+            </div>
+          </div>
+        )}
 
-            <div className={styles.arcList}>
-              {ARCS.map((arc) => (
-                <div key={arc.slug}>
-                  <Link href={`/arc/${arc.slug}`} className={styles.arcRow}>
-                    <div className={styles.arcNum}>{arc.num}</div>
-                    <div className={styles.arcRowName}>{arc.name}</div>
-                    <Sparkline bars={arc.spark} />
-                    <div className={styles.arcRowCount}>{arc.count.toLocaleString("en-US")}</div>
-                    {arc.peak && (
-                      <div className={styles.arcRowPeak}>
-                        <div className={styles.arcPeakDot}></div>
-                      </div>
+        {query && !fetchFailed && !series && (
+          <div className={styles.stateMessage}>
+            <div className={styles.stateMessageTitle}>No results</div>
+            <div className={styles.stateMessageSub}>
+              We couldn&rsquo;t find a series matching &quot;{query}&quot;. Try a different title or check the
+              spelling.
+            </div>
+          </div>
+        )}
+
+        {series && (
+          <>
+            <div className={styles.seriesPanel}>
+              <div className={styles.seriesPanelBody}>
+                {series.coverImage?.large && (
+                  <img
+                    className={styles.seriesPanelPoster}
+                    src={series.coverImage.large}
+                    alt={`${seriesName} poster`}
+                  />
+                )}
+                <div className={styles.seriesInfo}>
+                  <div className={styles.seriesEyebrow}>✦ Series match</div>
+                  <div className={styles.seriesName}>{seriesName}</div>
+                  <div className={styles.seriesMeta}>
+                    {formatLabel(series.format) && <span>{formatLabel(series.format)}</span>}
+                    {series.seasonYear && (
+                      <>
+                        <span className={styles.dot}>·</span>
+                        <span>{series.seasonYear}</span>
+                      </>
                     )}
-                    <div className={styles.arcRowArrow}>›</div>
-                  </Link>
-                  {arc.dividerAfter && <div className={styles.arcDivider}></div>}
+                    {(series.genres || []).slice(0, 4).map((genre) => (
+                      <span key={genre} className={styles.seriesTag}>
+                        {genre}
+                      </span>
+                    ))}
+                  </div>
+                  <div className={styles.seriesStats}>
+                    <div className={styles.sstat}>
+                      <div className={styles.sstatVal}>
+                        {series.averageScore != null ? `${series.averageScore}%` : "—"}
+                      </div>
+                      <div className={styles.sstatLabel}>Score</div>
+                    </div>
+                    <div className={styles.sstat}>
+                      <div className={styles.sstatVal}>
+                        {series.popularity != null ? series.popularity.toLocaleString("en-US") : "—"}
+                      </div>
+                      <div className={styles.sstatLabel}>Popularity</div>
+                    </div>
+                    <div className={styles.sstat}>
+                      <div className={styles.sstatVal}>{series.episodes ?? "—"}</div>
+                      <div className={styles.sstatLabel}>Episodes</div>
+                    </div>
+                    <div className={styles.sstat}>
+                      <div className={styles.sstatVal}>{series.seasonYear ?? "—"}</div>
+                      <div className={styles.sstatLabel}>Year</div>
+                    </div>
+                  </div>
                 </div>
-              ))}
-
-              <div className={styles.showMore}>
-                <span>{MORE_ARCS_LABEL}</span>
+                <div className={styles.seriesActions}>
+                  <button className={`${styles.seriesBtn} ${styles.seriesBtnPrimary}`}>Browse arcs</button>
+                  <button className={`${styles.seriesBtn} ${styles.seriesBtnGhost}`}>Characters</button>
+                </div>
               </div>
             </div>
 
-            <div className={styles.alsoFound}>
-              <div className={styles.colTitle} style={{ marginBottom: 12 }}>
-                Also found
-              </div>
-              <div className={styles.arcList}>
-                {ALSO_FOUND.map((item) => (
-                  <div key={item.name} className={styles.alsoRow}>
-                    <div className={styles.alsoType}>{item.type}</div>
-                    <div className={styles.alsoName}>{item.name}</div>
-                    <div className={styles.alsoCount}>{item.count}</div>
+            <div className={styles.twoCol}>
+              <div>
+                <div className={styles.colTitle}>Arcs</div>
+                <div className={styles.colSub}>
+                  Each bar shows community response intensity across story beats
+                </div>
+
+                <div className={styles.arcList}>
+                  {ARCS.map((arc) => (
+                    <div key={arc.slug}>
+                      <Link href={`/arc/${arc.slug}`} className={styles.arcRow}>
+                        <div className={styles.arcNum}>{arc.num}</div>
+                        <div className={styles.arcRowName}>{arc.name}</div>
+                        <Sparkline bars={arc.spark} />
+                        <div className={styles.arcRowCount}>{arc.count.toLocaleString("en-US")}</div>
+                        {arc.peak && (
+                          <div className={styles.arcRowPeak}>
+                            <div className={styles.arcPeakDot}></div>
+                          </div>
+                        )}
+                        <div className={styles.arcRowArrow}>›</div>
+                      </Link>
+                      {arc.dividerAfter && <div className={styles.arcDivider}></div>}
+                    </div>
+                  ))}
+
+                  <div className={styles.showMore}>
+                    <span>{MORE_ARCS_LABEL}</span>
                   </div>
-                ))}
+                </div>
+
+                <div className={styles.alsoFound}>
+                  <div className={styles.colTitle} style={{ marginBottom: 12 }}>
+                    Also found
+                  </div>
+                  <div className={styles.arcList}>
+                    {ALSO_FOUND.map((item) => (
+                      <div key={item.name} className={styles.alsoRow}>
+                        <div className={styles.alsoType}>{item.type}</div>
+                        <div className={styles.alsoName}>{item.name}</div>
+                        <div className={styles.alsoCount}>{item.count}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className={styles.colTitle}>Characters</div>
+                <div className={styles.colSub} style={{ marginBottom: 14 }}>
+                  Filter any arc page by character
+                </div>
+                <div className={styles.charsGrid}>
+                  {CHARACTERS.map((char) => (
+                    <a key={char.name} className={styles.charChip} href="#">
+                      <div className={styles.charAv} style={{ background: char.color }}>
+                        {char.initials}
+                      </div>
+                      {char.name} <span className={styles.charCount}>{char.count.toLocaleString("en-US")}</span>
+                    </a>
+                  ))}
+                  <div className={styles.moreChars}>+{MORE_CHARACTERS_COUNT} more</div>
+                </div>
+
+                <div style={{ height: 1, background: "var(--border)", marginBottom: 20 }}></div>
+
+                <div className={styles.colTitle} style={{ marginBottom: 6 }}>
+                  Top content this week
+                </div>
+                <div className={styles.colSub} style={{ marginBottom: 14 }}>
+                  Most saved across all {seriesName} arcs
+                </div>
+
+                <div className={styles.topContent}>
+                  {TOP_CONTENT.map((item, i) => (
+                    <ContentCard key={i} compact {...item} />
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-
-          <div>
-            <div className={styles.colTitle}>Characters</div>
-            <div className={styles.colSub} style={{ marginBottom: 14 }}>
-              Filter any arc page by character
-            </div>
-            <div className={styles.charsGrid}>
-              {CHARACTERS.map((char) => (
-                <a key={char.name} className={styles.charChip} href="#">
-                  <div className={styles.charAv} style={{ background: char.color }}>
-                    {char.initials}
-                  </div>
-                  {char.name} <span className={styles.charCount}>{char.count.toLocaleString("en-US")}</span>
-                </a>
-              ))}
-              <div className={styles.moreChars}>+{MORE_CHARACTERS_COUNT} more</div>
-            </div>
-
-            <div style={{ height: 1, background: "var(--border)", marginBottom: 20 }}></div>
-
-            <div className={styles.colTitle} style={{ marginBottom: 6 }}>
-              Top content this week
-            </div>
-            <div className={styles.colSub} style={{ marginBottom: 14 }}>
-              Most saved across all {SERIES.name} arcs
-            </div>
-
-            <div className={styles.topContent}>
-              {TOP_CONTENT.map((item, i) => (
-                <ContentCard key={i} compact {...item} />
-              ))}
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </>
   );

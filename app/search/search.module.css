@@ -118,6 +118,14 @@
   gap: 20px;
   flex-wrap: wrap;
 }
+.seriesPanelPoster {
+  width: 64px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  background: var(--surface-3);
+}
 .seriesInfo {
   flex: 1;
   min-width: 0;
@@ -403,4 +411,24 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* ── State messages (no query / no results / request failed) ── */
+.stateMessage {
+  padding: 64px 28px;
+  text-align: center;
+}
+.stateMessageTitle {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--t1);
+  margin-bottom: 8px;
+}
+.stateMessageSub {
+  font-size: 13px;
+  color: var(--t3);
+  max-width: 420px;
+  margin: 0 auto;
+  line-height: 1.6;
 }

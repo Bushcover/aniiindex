@@ -216,6 +216,74 @@ the shared `.btn` rule in `globals.css`, since it's now applied to an
 text. Click-tested from all three pages to confirm each lands on
 `/submit`.
 
+## Session 6
+
+Wired the search page to the real AniList GraphQL API — the first real
+external data source in the project. Everything else on the app is still
+hardcoded (see below); this is the first crack in that.
+
+- **`lib/anilist.js`** — a `searchSeries(query, { perPage })` utility
+  that POSTs a GraphQL query to `https://graphql.anilist.co`, fetching
+  `id`, `title { romaji english }`, `format`, `seasonYear`, `genres`,
+  `coverImage { large }`, `averageScore`, `popularity`, and `episodes`
+  for up to `perPage` (default 5) matching anime (`type: ANIME,
+  sort: SEARCH_MATCH`). Returns `[]` for a blank query or zero matches;
+  throws if the HTTP request fails or AniList returns a GraphQL error,
+  so the page can tell "no results" and "request failed" apart.
+- **Caching**: the `fetch` call sets `next: { revalidate: 3600 }` —
+  Next.js's built-in Data Cache, not a hand-rolled in-memory `Map` or
+  Supabase (not set up, per the task). This caches per exact
+  request (URL + method + body), so repeat searches for the same title
+  reuse the cached AniList response for up to an hour instead of
+  re-fetching. Verified informally: two identical requests seconds apart
+  both returned in well under typical AniList round-trip time.
+- **`app/search/page.jsx` is now an async Server Component** that reads
+  `searchParams.q` and calls `searchSeries`. Three non-happy-path states,
+  each replacing the whole results area with a centered message instead
+  of a broken or misleading page:
+  - no `?q=` at all → "Search for a series" prompt
+  - a query with zero AniList matches → "No results" message naming the
+    query
+  - the AniList request throwing → a friendly "Couldn't reach AniList"
+    message (never a stack trace or blank page)
+- **The series panel now renders the real top match** — title (English
+  name if AniList has one, else romaji), format + season year, up to 4
+  genres as tag pills, a real poster image (`coverImage.large`), and four
+  stats that are now genuinely real (`Score`, `Popularity`, `Episodes`,
+  `Year`) instead of the old fully-fabricated ones (`Fan items`, `Saves`,
+  `This week`). AniList doesn't return an author/studio field in what we
+  fetch, so that line was dropped rather than keep showing a fake name
+  next to real data. The per-series accent color (red border/gradient
+  bleed, tinted sparkline) is also gone for real results — there's no
+  color in the AniList fields we fetch, so the `--series-accent`/etc. CSS
+  variables are simply left unset, and `search.module.css`'s existing
+  `var(--series-accent, var(--accent))`-style fallbacks (built in Session
+  3) take over automatically, defaulting to the app's standard purple.
+  The nav search input and the "Results for ___" heading now reflect the
+  actual `?q=` value instead of a hardcoded string.
+- **Arcs and characters are untouched, per the task** — AniList has no
+  arc-level data, so `ARCS` in `app/search/page.jsx` is still the exact
+  hardcoded Chainsaw Man arc list from Session 3, now with a `TODO(Session
+  8)` comment explaining it isn't tied to whatever series was actually
+  searched and will be replaced once the real series/arc page exists.
+  `CHARACTERS` and `TOP_CONTENT` are likewise still fully hardcoded and
+  commented as such. Practically, this means searching "Attack on Titan"
+  shows a real Attack on Titan series panel with a Chainsaw Man arc list
+  underneath it — an intentional, documented placeholder mismatch, not a
+  bug.
+- One environment-specific caveat surfaced while testing in this sandbox:
+  the real poster image didn't load here because this session's outbound
+  network policy allowlists `graphql.anilist.co` but blocks AniList's
+  image CDN (`s4.anilist.co`) — confirmed via the proxy's own status
+  endpoint, not a code issue. The `coverImage.large` URL returned by the
+  API is valid and will render normally in a real browser/deployment
+  outside this sandbox's restricted proxy.
+- Verified end-to-end: a real `curl` to AniList confirms the exact fields
+  fetched match what's rendered; searching "Attack on Titan" renders its
+  real title/format/year/genres/score/popularity/episodes; a
+  nonsense query renders the "No results" state; visiting `/search` with
+  no query renders the "Search for a series" prompt.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -233,10 +301,12 @@ app/
   page.jsx               The home page. Holds all hardcoded data consts and composes the components below.
   page.module.css        Styles unique to the home page (see Session 4 notes above)
   arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
-  search/page.jsx        The search results page. Holds all hardcoded data consts (SERIES, ARCS, CHARACTERS, TOP_CONTENT, etc.)
+  search/page.jsx        The search results page. Async Server Component — fetches the series panel from AniList (Session 6); ARCS/CHARACTERS/TOP_CONTENT are still hardcoded consts.
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
   submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above)
   submit/submit.module.css Styles unique to the submit page
+lib/
+  anilist.js             searchSeries(query) — calls the AniList GraphQL API, cached via Next's fetch cache (see Session 6 notes above)
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips, stat row
@@ -342,11 +412,11 @@ contents differ meaningfully between the arc, search, and home pages
 
 ## Hardcoded data (in `app/search/page.jsx`)
 
-- `SERIES` — the matched series' identity, blurb, tags, top-line stats,
-  and its accent color (`accent`/`accentSoft`/`sparkHigh`/`sparkPeak`).
-  Will come from a series lookup keyed by the search query; the color
-  fields imply aniindex will need some scheme for assigning/storing a
-  per-series accent color.
+As of Session 6, the series panel itself is **real data** fetched from
+AniList via `lib/anilist.js` (see the Session 6 notes above) — it's no
+longer a hardcoded const. Still hardcoded, unaffected by the actual
+search query:
+
 - `RESULTS_SUMMARY` and `FILTERS` — the results-count line and the type
   filter pills with their counts. None of the filter pills actually
   filter anything yet (only "All" is marked active); wiring them up needs
@@ -442,16 +512,19 @@ page file, standing in for what will eventually come from a database/API:
   clicked from the search page and the home page's trending arc cards
   (`/arc/introduction-arc`, `/arc/rumbling-arc`, etc. all currently
   render the same Shibuya page).
-- The `?q=` query param on `/search` isn't read yet — every link into the
-  search page (quick-search chips, Enter in the hero search bar, series
-  cards) navigates correctly, but the destination always shows the same
-  hardcoded Chainsaw Man results regardless of the query string.
+- **Resolved in Session 6**: the `?q=` query param on `/search` is now
+  read and drives a real AniList lookup for the series panel. What's
+  still not real: the arc list, characters, "also found," and top
+  content sections all stay fully hardcoded regardless of `?q=` (see the
+  Session 6 notes above) — e.g. searching "Attack on Titan" shows a real
+  AniList series panel over a hardcoded Chainsaw Man arc list.
 - No tab/filter-pill filtering on any page — clicking a tab or a filter
   pill doesn't change which items are shown.
-- No API, database, auth, or real search functionality — the nav
-  links/search bar/input, "Browse"/"Submit content"/"Sign in" buttons,
-  character chips, "also found" rows, and trending-moment rows are all
-  static, non-functional markup beyond the navigation described above.
+- No API, database, or auth — the nav links, "Browse"/"Submit
+  content"/"Sign in" buttons, character chips, "also found" rows, and
+  trending-moment rows are all static, non-functional markup beyond the
+  navigation described elsewhere in this doc. (Search itself is real as
+  of Session 6, for the series panel only.)
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
 - No real link resolution, series/arc/character/beat detection, or
