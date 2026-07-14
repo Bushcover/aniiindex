@@ -1,6 +1,6 @@
-import Link from "next/link";
 import ArcList from "@/components/ArcList";
 import CharacterChips from "@/components/CharacterChips";
+import SearchNav from "@/components/SearchNav";
 import { getSeriesWithRelations, getSeriesCharacters } from "@/lib/anilist";
 import styles from "./series.module.css";
 
@@ -149,22 +149,7 @@ export default async function SeriesPage({ params }) {
 
   return (
     <>
-      <nav>
-        <Link href="/" className="logo">
-          ani<span>index</span>
-        </Link>
-        <div className="search-bar">
-          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          Search series, arcs, characters…
-        </div>
-        <div className="nav-right">
-          <button className="btn btn-ghost">Browse</button>
-          <button className="btn btn-primary">Sign in</button>
-        </div>
-      </nav>
+      <SearchNav query="" />
 
       {!series && (
         <div className={styles.stateMessage}>

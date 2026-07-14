@@ -473,6 +473,40 @@ Jujutsu Kaisen and Attack on Titan — see below).
   network policy blocks AniList's image CDN (`s4.anilist.co`); the URLs
   themselves are real and will load normally in a real browser.
 
+### Session 8 follow-up: fix series page nav + character ranking
+
+Two bugs found after Session 8 shipped:
+
+1. **The series page's search bar didn't work.** It had been built with
+   the same decorative, non-interactive nav markup as the arc page
+   (logo + a plain `<div>` "search bar" with no input at all) instead of
+   the `SearchNav` client component the search page already uses. Fixed
+   by swapping it in directly — `<SearchNav query="" />` (the series page
+   has no `?q=` of its own to seed the field with, since its `[slug]` is
+   an AniList id, not a search string). This also means the series page's
+   nav-right buttons changed from "Browse"/"Sign in" to "Sign in"/"Submit
+   content," matching `SearchNav` exactly rather than a near-identical
+   copy — the intent was consistency, not a redesign.
+2. **`getSeriesCharacters` surfaced minor characters over main ones.**
+   The AniList sort was `[ROLE, FAVOURITES]` — `ROLE` correctly grouped
+   MAIN before SUPPORTING, but plain `FAVOURITES` sorts **ascending**,
+   so within each role group the *least*-favourited characters came
+   first. For Jujutsu Kaisen this put Nobara (14,539 favourites) before
+   Gojo (40,950) among MAIN characters, and surfaced near-zero-favourite
+   background characters (a few named students with 2–5 favourites each)
+   ahead of genuinely prominent SUPPORTING characters like Nanami Kento
+   (14,110) or Sukuna (12,417). Fixed by sorting `[ROLE,
+   FAVOURITES_DESC]` instead — confirmed via a direct AniList query
+   before and after the change that this reorders the top 10 to Gojo,
+   Yuji, Megumi, Nobara (MAIN, highest-favourited first), then Nanami,
+   Maki Zenin, Sukuna, Toge Inumaki, Geto, Aoi Todo (SUPPORTING, same
+   ordering) — exactly the "actual main cast" the task asked for.
+- Verified both fixes together on `/series/113415`: character chips now
+  read Satoru Gojou → Yuuji Itadori → Megumi Fushiguro → Nobara Kugisaki
+  → Kento Nanami → …; typing "One Piece" into the series page's nav
+  search bar and pressing Enter navigates to `/search?q=One%20Piece` and
+  renders One Piece's real AniList data, exactly like the search page.
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
