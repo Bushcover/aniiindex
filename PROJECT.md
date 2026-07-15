@@ -1240,6 +1240,130 @@ agree:
   `PLATFORM_META` — the full round trip, submit through display, works
   with the new value.
 
+## Session 12
+
+Built real Open Graph auto-detection for the submit form, replacing
+Session 5's entirely-fake link "detection" (`RESOLVED_LINK` always
+represented the same hardcoded TikTok item regardless of what URL was
+pasted) with a genuine server-side fetch-and-parse of whatever URL the
+user actually types in.
+
+- **`app/api/og-fetch/route.js`** (new) — a `POST` route handler that
+  takes `{ url }`, fetches that URL server-side, and returns
+  `{ title, thumbnailUrl, platform, creator }`.
+  - **HTML parsing is regex-based, not a DOM/HTML-parsing dependency** —
+    matches this project's established "no external UI or data
+    libraries" stance (see the Stack section). `extractMetaTag(html,
+    property)` matches `<meta property="og:x" content="...">` in either
+    attribute order, and also checks `name=` (non-standard but common in
+    the wild) as a fallback. A small `decodeHtmlEntities` helper handles
+    `&amp;`/`&quot;`/numeric entities, since real page titles routinely
+    contain them (confirmed via a mock TikTok-style page titled `"...
+    sealed &amp; the internet broke"` decoding correctly to `&`).
+  - **Platform detection** is a hostname allowlist:
+    `tiktok.com`→`tiktok`, `youtube.com`/`youtu.be`→`youtube`,
+    `twitter.com`/`x.com`→`x`, `instagram.com`→`instagram`,
+    `reddit.com`→`reddit`; anything else returns `platform: null` rather
+    than guessing.
+  - **Creator detection** is platform-specific, per the task: TikTok
+    pulls the `@username` path segment directly from the URL (regex
+    against `pathname`, no fetch needed for this part); YouTube uses
+    `og:site_name` (in practice this is usually the literal string
+    "YouTube" on real video pages, not the uploading channel — that's
+    what the task specified, so that's what's implemented, but it's
+    worth knowing this won't produce an actual channel name for most
+    real YouTube URLs); everything else — X, Instagram, Reddit, and any
+    unrecognized platform — falls back to the URL's own hostname.
+  - `og:description` is extracted (per the task's explicit list of tags
+    to parse) but not currently returned — no consumer needs it yet, so
+    it's left as an unused local rather than inventing a 5th response
+    field the task didn't ask for.
+  - `og:image` is resolved against the target page's own origin if it's
+    a relative path (`new URL(ogImageRaw, parsedUrl)`) — technically a
+    spec violation on the source site's part, but common enough in
+    practice to be worth handling rather than silently dropping the
+    thumbnail.
+  - **Basic SSRF hardening**, since this route fetches an arbitrary,
+    user-supplied URL server-side: rejects non-http/https schemes, and
+    rejects a hostname-literal blocklist (`localhost`, `127.*`, `10.*`,
+    `172.16–31.*`, `192.168.*`, `169.254.*`, `::1`) before ever
+    fetching. This is a literal-hostname check, not DNS-resolution-aware
+    — it won't catch a public domain that resolves to a private IP (DNS
+    rebinding), which would need resolving DNS and validating the
+    resolved IP before connecting; that's meaningfully more involved and
+    considered out of scope for this feature, noted here rather than
+    silently assumed away.
+  - **An 8-second timeout** (`AbortController`) on the upstream fetch, so
+    a hanging target can't hang the whole request indefinitely — verified
+    directly against a mock endpoint that never responds; the route
+    correctly aborted and returned an error at ~8s, not sooner and not
+    later. No response-size cap was added (a fast-but-huge response could
+    still consume memory within that 8s window) — considered a
+    reasonable, explicitly-noted trade-off rather than adding streaming-
+    with-truncation complexity for a feature that didn't ask for it.
+- **`app/submit/page.jsx`** step 1 now debounces on `url` (500ms
+  `setTimeout`, reset on every keystroke via the effect's cleanup) before
+  calling `/api/og-fetch`, and aborts a still-in-flight request
+  (`AbortController`) if the URL changes again before it resolves, so a
+  slow, superseded response can never overwrite a newer one. Three new
+  pieces of state — `resolvedLink` (the raw API response or `null`),
+  `ogStatus` (`idle`/`loading`/`success`/`error`), `ogError` — drive:
+  - An inline status line directly under the URL input: the original
+    static "Works with TikTok..." hint while idle, "Detecting link
+    details…" while loading, a red error banner while failed (explicitly
+    stating the user can still continue manually, per the task), or a
+    green "✓ Detected from `<Platform>`: `<title>`" line on success.
+  - **`RESOLVED_LINK` was removed entirely**, replaced by a derived
+    `effectiveLink` object (`title`/`thumbnailUrl`/`platform`/`creator`)
+    that reads from `resolvedLink` when available and falls back to
+    honest placeholders otherwise (`"Untitled link"`, a generic gradient,
+    `"other"`, `"Unknown creator"`) — this is what "let the user proceed
+    with manual entry" means in practice here, since there's no actual
+    manual-entry form for these fields (out of scope for this task).
+    `effectiveLink` is now what the step 1 completed-summary card, the
+    step 3 `ContentCard` preview, and the real `content_items` insert all
+    read from — the "Next →" button's enabled condition was intentionally
+    left unchanged (`url.trim().length === 0` only), so a failed or
+    still-pending fetch never blocks progress.
+  - `platform` specifically can't fall back to `null` for the DB insert,
+    since `content_items.platform` is `NOT NULL` — `"other"` is used as a
+    genuine, `ContentCard`-safe "unknown platform" sentinel instead of
+    guessing.
+- **`components/ContentCard.jsx`** gained a `DEFAULT_PLATFORM_META`
+  fallback (`meta = PLATFORM_META[platform] || DEFAULT_PLATFORM_META`) —
+  necessary, not optional, once real detected platform values (including
+  `null`/`"other"` for unrecognized links) could reach this component;
+  without it, an unrecognized platform would crash the card instead of
+  rendering a neutral "🔗 Link" badge.
+- **Verified thoroughly**, since this route's core job — fetching
+  arbitrary real-world URLs — can't be exercised against genuine TikTok/
+  YouTube/etc. pages from this sandbox (no general outbound network
+  access) and doing so wouldn't be appropriate for automated testing
+  regardless. Instead: added temporary `/etc/hosts` entries mapping
+  `tiktok.com`, `youtube.com`, `reddit.com`, and a synthetic
+  `unknownsite.test` to `127.0.0.1`, and ran a local mock HTTP server
+  that serves different canned OG-tagged HTML per `Host` header — this
+  makes the API route's own hostname-based platform detection and
+  fetch/parse logic run entirely for real, against real (if locally-
+  redirected) hostnames, not a mocked function. Directly confirmed via
+  `curl` against the real running route: correct title/platform/creator/
+  thumbnail (including HTML entity decoding and relative-image-URL
+  resolution) for TikTok; `og:site_name`-based creator for YouTube;
+  hostname-fallback creator for Reddit and for an unrecognized domain;
+  every error path (invalid URL, missing `url` field, each SSRF-blocked
+  host pattern, non-http scheme, non-HTML response, upstream 5xx, and the
+  8-second timeout) returning the right status and message. Then, with
+  Supabase calls mocked at the browser level (same sandbox network
+  restriction as every prior session) but `/api/og-fetch` genuinely real
+  and same-origin, drove the full wizard in Playwright: typed the mock
+  TikTok URL character-by-character, confirmed the loading state
+  appeared, confirmed the real title/platform showed up in both the step
+  1 completed-summary card and the step 3 preview, and confirmed the
+  final (mocked) `content_items` insert carried the real title, `@testcreator`
+  creator, `"tiktok"` platform, and the resolved absolute thumbnail URL —
+  the complete pipeline, not just the API route in isolation. Restored
+  `/etc/hosts` and stopped all mock servers afterward.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -1401,10 +1525,11 @@ app/
   arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
   search/page.jsx        The search results page. Async Server Component — fetches the series panel from AniList (Session 6); ARCS/CHARACTERS/TOP_CONTENT are still hardcoded consts.
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
-  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above).
+  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above). Step 1 debounces real Open Graph auto-detection via /api/og-fetch (see Session 12 notes above).
   submit/submit.module.css Styles unique to the submit page
   series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
   series/[slug]/series.module.css  Styles unique to the series page
+  api/og-fetch/route.js  POST route: fetches a pasted URL server-side and extracts Open Graph metadata + platform/creator (see Session 12 notes above)
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
   supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11)
@@ -1621,16 +1746,19 @@ database/API:
 
 ## Hardcoded data (in `app/submit/page.jsx`)
 
-- `RESOLVED_LINK` — stands in for what a real link-resolver service would
-  return for the pasted URL (title, creator, platform, thumbnail). It's
-  the same TikTok item as the Shibuya arc page's "The Sealing" beat
-  (Session 1), used regardless of what the user actually types into the
-  step 1 URL field — the "auto-detection" is entirely fake.
+- ~~`RESOLVED_LINK`~~ — **removed in Session 12.** Step 1's link resolution
+  is now genuinely real, via `/api/og-fetch` — see the Session 12 notes
+  above. `DEFAULT_THUMBNAIL` and `PLATFORM_LABELS` remain as the honest
+  fallbacks used when detection hasn't succeeded (still loading, or
+  failed and the user is proceeding manually).
 - `SERIES_DETECTED` / `ARC_DETECTED` — the step 2 "auto-detected" series
   and arc, always Jujutsu Kaisen / Shibuya Incident Arc regardless of the
   resolved link. A real version needs actual title/caption parsing (or
   manual series/arc pickers behind the still-inert "Change" links).
   `note` is the small "Detected from…" explainer text under each field.
+  Note this is a step *behind* Session 12's link detection now — the link
+  title/platform/creator are real, but which series/arc that content
+  belongs to is still guessed from nothing.
 - ~~`BEATS`~~ — **removed in the Session 11 follow-up.** The 10-bar beat
   selector now renders from `realBeats`, fetched live via
   `getArcBeats(ARC_SLUG)` on mount — real titles and real intensities,
@@ -1693,17 +1821,22 @@ database/API:
   beyond the hardcoded `'pending'` every submission is written with.
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
-- No real link resolution or series/arc/character/beat *detection* on
-  `/submit` — `RESOLVED_LINK`, `SERIES_DETECTED`, `ARC_DETECTED`, and
-  `INITIAL_CHARACTERS` are all still hardcoded regardless of what URL the
-  user actually pastes; the Series/Arc "Change" links, "+ Add character",
-  "Skip this beat", and "How placement works" links are all still inert.
-  **Resolved in Session 10**: the final step's submit button is no longer
-  disabled — clicking "Add to aniindex" performs a real Supabase insert
-  into `content_items` using the real (typed) `source_url`, the real
-  selected `content_type`/`character_tags`/beat, and a real, currently
-  hardcoded-to-Shibuya `arc_id`, with genuine success/error feedback (see
-  the Session 10 notes above). Submissions are real database rows now;
-  they just can't yet be placed against any arc other than Shibuya, and
-  nothing downstream (an arc page, a moderation queue) reads `status` or
-  displays these rows yet.
+- No real series/arc/character *detection* on `/submit` —
+  `SERIES_DETECTED`, `ARC_DETECTED`, and `INITIAL_CHARACTERS` are all
+  still hardcoded regardless of what URL the user actually pastes; the
+  Series/Arc "Change" links, "+ Add character", "Skip this beat", and
+  "How placement works" links are all still inert. **Resolved in Session
+  10**: the final step's submit button is no longer disabled — clicking
+  "Add to aniindex" performs a real Supabase insert into `content_items`
+  using the real (typed) `source_url`, the real selected `content_type`/
+  `character_tags`/beat, and a real, currently hardcoded-to-Shibuya
+  `arc_id`, with genuine success/error feedback (see the Session 10 notes
+  above). Submissions are real database rows now; they just can't yet be
+  placed against any arc other than Shibuya, and nothing downstream (an
+  arc page's moderation view) reads `status` or displays these rows by
+  status yet — the arc page (Session 11) does now display them, just not
+  filtered/grouped by status. **Resolved in Session 12**: link
+  resolution itself is real — `/api/og-fetch` genuinely fetches the
+  pasted URL and extracts its real title/thumbnail/platform/creator (see
+  the Session 12 notes above), replacing what was previously a fully
+  fake, always-the-same-TikTok-item stand-in.

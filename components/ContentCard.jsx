@@ -23,6 +23,13 @@ const PLATFORM_META = {
   reddit: PLATFORM_RD,
 };
 
+// Falls back to a neutral, unstyled badge for any platform value that
+// isn't a recognized key above — necessary as of Session 12, where
+// /api/og-fetch's platform detection can genuinely come back unrecognized
+// (a link from a site outside the five known platforms) and still needs
+// to render, not crash.
+const DEFAULT_PLATFORM_META = { className: "", compactClassName: "", icon: "🔗", label: "Link" };
+
 export default function ContentCard({
   title,
   creator,
@@ -34,7 +41,7 @@ export default function ContentCard({
   beatLabel,
   compact = false,
 }) {
-  const meta = PLATFORM_META[platform];
+  const meta = PLATFORM_META[platform] || DEFAULT_PLATFORM_META;
   const genTags = [].concat(contentType ?? []);
   const charTags = [].concat(characterTags ?? []);
   const ariaLabel = beatLabel ? `${title} — ${beatLabel}` : title;

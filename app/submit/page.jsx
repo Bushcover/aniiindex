@@ -18,14 +18,19 @@ const STEP_META = [
   { num: 3, label: "Review" },
 ];
 
-// Same TikTok item already hardcoded on the Shibuya Incident Arc page (Session 1's
-// "The Sealing" beat) — this flow simulates submitting that exact piece of content.
-const RESOLVED_LINK = {
-  platform: "tiktok",
-  thumbnailUrl: "linear-gradient(135deg,#0f0820,#1a0f3a)",
-  title: "The moment Gojo got sealed and the internet broke in real time 💔",
-  creator: "@jjkmoments_ · 8.4M views",
-  sourceMeta: "@jjkmoments_ · 8.4M views · tiktok.com",
+// Fallbacks used whenever /api/og-fetch (Session 12) hasn't resolved real
+// data yet — either it's still loading, or it failed and the user is
+// proceeding with manual entry, which the task explicitly allows. There's
+// no manual-entry form for these fields (out of scope here), so "manual
+// entry" in practice means: the wizard still works end to end with these
+// honest placeholders instead of fabricated ones.
+const DEFAULT_THUMBNAIL = "linear-gradient(135deg,#1a1230,#2a1a45)";
+const PLATFORM_LABELS = {
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  x: "X (Twitter)",
+  instagram: "Instagram",
+  reddit: "Reddit",
 };
 
 const SERIES_DETECTED = { name: "Jujutsu Kaisen", note: 'Detected from "Gojo" in title and caption keywords' };
@@ -61,6 +66,65 @@ export default function SubmitPage() {
   const [submitError, setSubmitError] = useState("");
   const [realBeats, setRealBeats] = useState(null); // null until getArcBeats resolves
   const [beatsLoadError, setBeatsLoadError] = useState("");
+  const [resolvedLink, setResolvedLink] = useState(null); // { title, thumbnailUrl, platform, creator } | null
+  const [ogStatus, setOgStatus] = useState("idle"); // idle | loading | success | error
+  const [ogError, setOgError] = useState("");
+
+  // Debounced Open Graph auto-detection: waits 500ms after the user stops
+  // typing/pasting before calling /api/og-fetch, and aborts a still-in-
+  // flight request if the URL changes again before it resolves (so a
+  // slow, superseded response can't overwrite a newer one).
+  useEffect(() => {
+    if (url.trim().length === 0) {
+      setResolvedLink(null);
+      setOgStatus("idle");
+      setOgError("");
+      return;
+    }
+
+    setOgStatus("loading");
+    setOgError("");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      fetch("/api/og-fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Couldn't resolve this link.");
+          setResolvedLink(data);
+          setOgStatus("success");
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          setResolvedLink(null);
+          setOgStatus("error");
+          setOgError(err.message || "Couldn't resolve this link.");
+        });
+    }, 500);
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [url]);
+
+  // What the rest of the wizard actually renders/saves — real resolved
+  // data where available, honest fallbacks otherwise. `platform` can't
+  // fall back to null here since content_items.platform is NOT NULL in
+  // Supabase; "other" is a genuine, ContentCard-safe "unknown" value
+  // (see components/ContentCard.jsx's default platform meta), not a
+  // guess at the real platform.
+  const effectiveLink = {
+    title: resolvedLink?.title || "Untitled link",
+    thumbnailUrl: resolvedLink?.thumbnailUrl || DEFAULT_THUMBNAIL,
+    platform: resolvedLink?.platform || "other",
+    creator: resolvedLink?.creator || "Unknown creator",
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -117,10 +181,10 @@ export default function SubmitPage() {
         arc_id: arc.id,
         beat_id: selectedBeat.id,
         source_url: url,
-        title: RESOLVED_LINK.title,
-        creator: RESOLVED_LINK.creator,
-        platform: RESOLVED_LINK.platform,
-        thumbnail_url: RESOLVED_LINK.thumbnailUrl,
+        title: effectiveLink.title,
+        creator: effectiveLink.creator,
+        platform: effectiveLink.platform,
+        thumbnail_url: effectiveLink.thumbnailUrl,
         content_type: contentType,
         character_tags: characters.map((c) => c.name),
         status: "pending",
@@ -207,9 +271,23 @@ export default function SubmitPage() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                 />
-                <div className={styles.detectNote}>
-                  Works with TikTok, YouTube, X (Twitter), Instagram, and Reddit links
-                </div>
+                {ogStatus === "idle" && (
+                  <div className={styles.detectNote}>
+                    Works with TikTok, YouTube, X (Twitter), Instagram, and Reddit links
+                  </div>
+                )}
+                {ogStatus === "loading" && <div className={styles.detectNote}>Detecting link details…</div>}
+                {ogStatus === "error" && (
+                  <div className={styles.submitErrorMsg}>
+                    Couldn&rsquo;t auto-detect this link: {ogError} — you can still continue and add it manually.
+                  </div>
+                )}
+                {ogStatus === "success" && resolvedLink && (
+                  <div className={styles.detectNote}>
+                    ✓ Detected{resolvedLink.platform ? ` from ${PLATFORM_LABELS[resolvedLink.platform] || resolvedLink.platform}` : ""}
+                    {resolvedLink.title ? `: ${resolvedLink.title}` : " — no title found, you can still continue"}
+                  </div>
+                )}
               </div>
             </div>
             <div className={styles.stepFooter}>
@@ -231,12 +309,12 @@ export default function SubmitPage() {
         {step > 1 && (
           <div className={styles.stepCompleted} style={{ marginBottom: 12 }}>
             <div className={styles.completedCheck}>✓</div>
-            <div className={styles.completedThumb} style={{ background: RESOLVED_LINK.thumbnailUrl }}>
-              <div className={styles.completedPlt}>TikTok</div>
+            <div className={styles.completedThumb} style={{ background: effectiveLink.thumbnailUrl }}>
+              <div className={styles.completedPlt}>{PLATFORM_LABELS[effectiveLink.platform] || "Link"}</div>
             </div>
             <div className={styles.completedInfo}>
-              <div className={styles.completedTitle}>{RESOLVED_LINK.title}</div>
-              <div className={styles.completedMeta}>{RESOLVED_LINK.sourceMeta}</div>
+              <div className={styles.completedTitle}>{effectiveLink.title}</div>
+              <div className={styles.completedMeta}>{effectiveLink.creator}</div>
             </div>
             <button className={styles.completedChange} onClick={() => setStep(1)}>
               Change
@@ -441,10 +519,10 @@ export default function SubmitPage() {
                 <div className={styles.fieldLabel}>Preview</div>
                 <div className={styles.previewCardWrap}>
                   <ContentCard
-                    title={RESOLVED_LINK.title}
-                    creator={RESOLVED_LINK.creator}
-                    platform={RESOLVED_LINK.platform}
-                    thumbnailUrl={RESOLVED_LINK.thumbnailUrl}
+                    title={effectiveLink.title}
+                    creator={effectiveLink.creator}
+                    platform={effectiveLink.platform}
+                    thumbnailUrl={effectiveLink.thumbnailUrl}
                     contentType={[contentType]}
                     characterTags={characters.map((c) => c.name)}
                     sourceUrl={url || "#"}
