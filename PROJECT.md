@@ -1134,6 +1134,55 @@ how the `sb_publishable_...`-format key maps to Postgres roles. Only
 hidden from anonymous reads. Not verified live — this sandbox can't
 reach `*.supabase.co`.
 
+### Session 11 follow-up: arc page serving stale data — Next.js fetch caching
+
+Even with data confirmed present and readable, the arc page kept showing
+stale/missing `content_items`. Cause: Next.js patches the global `fetch`
+during Server Component rendering and, absent an explicit cache
+directive, defaults to `force-cache` — so `getArcBeats`/`getArcContent`'s
+underlying HTTP requests (and, without anything forcing the route
+dynamic, the rendered page itself) were eligible to be cached and reused
+across requests, entirely independent of Supabase or RLS. `lib/anilist.js`
+already opts into this deliberately (`next: { revalidate: 3600 }`, an
+hour-long cache, by design per Session 6); `lib/supabase.js` had no cache
+directive at all, which meant it was silently inheriting Next's
+aggressive default instead of being fetched fresh.
+
+Two fixes, both applied:
+
+- **`lib/supabase.js`** now passes a custom `fetch` to `createClient()`
+  (`global.fetch`) that adds `next: { revalidate: 0 }` to every request
+  this client makes, opting all Supabase traffic out of Next's Data
+  Cache. Applies globally to the one shared client (used by both the arc
+  page's server-side calls and `/submit`'s browser-side calls) — harmless
+  for the browser calls, since Next's fetch patching/caching only affects
+  server-side rendering, not client-side `fetch()`.
+- **`app/arc/[slug]/page.jsx`** gained `export const revalidate = 0` at
+  the top of the file — the route segment config that forces the whole
+  route to render dynamically and revalidate on every request, rather
+  than being eligible for the static/ISR-style caching Next can apply to
+  a dynamic-segment page once nothing else forces it dynamic. **Side
+  effect, and an intentional trade-off**: per Next's docs, when multiple
+  fetches in one route specify different revalidate times, the *lowest*
+  wins for the whole route — so this also overrides `lib/anilist.js`'s
+  hour-long cache for the `getSeriesById`/`getSeriesCharacters` calls this
+  same page makes, meaning the arc page now hits the AniList API fresh on
+  every load too, not just Supabase. This matches what was explicitly
+  asked for ("force the entire page to be dynamic and never cached") and
+  is fine functionally, but is worth knowing: this page no longer
+  benefits from AniList response caching the way the search/series pages
+  still do.
+- **Verified the fix actually eliminates caching**, not just theoretically
+  correct: pointed the app at a local mock PostgREST server (same
+  approach as Session 11's original verification) that returns a
+  different, counter-tagged `content_items` row on each request, ran a
+  real `next build` + `next start`, and issued three separate requests to
+  `/arc/shibuya-incident-arc` — each one returned a distinct counter value
+  (`LIVE FETCH #1`, `#2`, `#3`), proving the page genuinely re-executes
+  the Supabase queries on every request rather than serving a cached
+  response. Restored the real Supabase env vars and rebuilt afterward to
+  confirm no test state leaked into the deploy.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

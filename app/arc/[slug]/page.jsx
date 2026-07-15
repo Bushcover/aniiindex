@@ -7,6 +7,13 @@ import BeatSection from "@/components/BeatSection";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent } from "@/lib/supabase";
 
+// Forces this route to always render dynamically and re-fetch on every
+// request — without it, Next can treat this dynamic-segment page as
+// eligible for static/ISR-style caching once nothing else forces it
+// dynamic, which would keep serving whatever content_items/beats data was
+// fetched on an earlier request instead of the current database state.
+export const revalidate = 0;
+
 // AniList numeric id for the series this arc belongs to (Jujutsu Kaisen).
 // Every slug currently renders this same hardcoded arc (see PROJECT.md), so
 // this id is hardcoded too — it isn't derived from `params.slug` yet.
