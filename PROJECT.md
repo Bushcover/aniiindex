@@ -532,24 +532,28 @@ into any page yet, this session just lays the plumbing.
   called `createClient(...)` with the real values, and confirmed the
   returned client has a working `.auth` and `.from(...)` — i.e. it's a
   genuine, usable Supabase client, not just code that type-checks.
-- **Four tables designed, not yet created** — `series`, `arcs`, `beats`,
+- **Four tables designed and created** — `series`, `arcs`, `beats`,
   `content_items`, mirroring the hardcoded data shapes already used across
   `app/arc/[slug]/page.jsx`, `app/search/page.jsx`, and
   `app/series/[slug]/page.jsx` (see "Database schema" below for the full
   SQL and column-by-column notes). Per the task, the SQL was handed to the
   user to run manually in the Supabase SQL editor rather than executed by
-  any tool here — as of this session, none of these tables exist yet in
-  the actual Supabase project, and no page reads from or writes to
-  Supabase. That wiring (replacing the hardcoded `ARC`/`ARCS`/`BEATS`/etc.
-  consts with real queries) is future work.
+  any tool here — the user ran it and confirmed all four tables now exist
+  in the Supabase project's Table Editor. **The database itself is set up
+  and empty** — no page reads from or writes to Supabase yet. That wiring
+  (replacing the hardcoded `ARC`/`ARCS`/`BEATS`/etc. consts with real
+  queries, and inserting rows) is future work.
 
 ## Database schema
 
-Four tables, designed to eventually replace the hardcoded per-page consts
-documented above (`ARC_NAV`/`ARC`/`INTENSITY_BEATS`/`BEATS` on the arc
-page, `ARCS`/`CHARACTERS`/`TOP_CONTENT` on the search page, `ARCS` on the
-series page). Created manually via the Supabase SQL editor — not migrated
-through any tool in this repo yet.
+Four tables, **created and confirmed live** in the Supabase project
+(verified in the Table Editor), designed to eventually replace the
+hardcoded per-page consts documented above (`ARC_NAV`/`ARC`/
+`INTENSITY_BEATS`/`BEATS` on the arc page, `ARCS`/`CHARACTERS`/
+`TOP_CONTENT` on the search page, `ARCS` on the series page). Created
+manually via the Supabase SQL editor, not through any tool/migration in
+this repo — all four tables exist but are currently empty, and no page
+queries them yet.
 
 - **`series`** — one row per anime series. Keyed by `anilist_id` (unique)
   so a series can be looked up or upserted from an AniList id the same
@@ -645,9 +649,10 @@ create table content_items (
   project's database; see "Database schema" above. `lib/supabase.js`
   exports a shared client, credentials come from `.env.local`
   (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`, gitignored).
-  No page reads/writes Supabase data yet — all four tables exist only as
-  SQL to run manually, and every page is still on its Session 1–8
-  hardcoded data / AniList calls.
+  All four tables (`series`, `arcs`, `beats`, `content_items`) are created
+  and confirmed live in the Supabase project, but empty — no page
+  reads/writes Supabase data yet, and every page is still on its
+  Session 1–8 hardcoded data / AniList calls.
 
 ## File layout
 
