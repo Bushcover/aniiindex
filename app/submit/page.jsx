@@ -4,7 +4,13 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ContentCard from "@/components/ContentCard";
+import { supabase } from "@/lib/supabase";
 import styles from "./submit.module.css";
+
+// Matches the arc seeded into Supabase in Session 10 (see PROJECT.md's
+// Database schema section for the seed SQL) — the only arc real
+// submissions can currently be saved against.
+const ARC_SLUG = "shibuya-incident-arc";
 
 const STEP_META = [
   { num: 1, label: "Link" },
@@ -58,6 +64,8 @@ export default function SubmitPage() {
   const [contentType, setContentType] = useState(DEFAULT_CONTENT_TYPE);
   const [check1, setCheck1] = useState(true);
   const [check2, setCheck2] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState("idle"); // idle | submitting | success | error
+  const [submitError, setSubmitError] = useState("");
 
   const selectedBeat = BEATS[selectedBeatIndex];
 
@@ -69,6 +77,54 @@ export default function SubmitPage() {
 
   function handleRemoveCharacter(name) {
     setCharacters((prev) => prev.filter((c) => c.name !== name));
+  }
+
+  async function handleSubmit() {
+    setSubmitStatus("submitting");
+    setSubmitError("");
+
+    try {
+      const { data: arc, error: arcError } = await supabase
+        .from("arcs")
+        .select("id")
+        .eq("slug", ARC_SLUG)
+        .single();
+      if (arcError || !arc) {
+        throw new Error("Couldn't find the Shibuya Incident Arc in the database.");
+      }
+
+      const { data: beats, error: beatsError } = await supabase
+        .from("beats")
+        .select("id")
+        .eq("arc_id", arc.id)
+        .order("order_index", { ascending: true });
+      if (beatsError) {
+        throw new Error("Couldn't load story beats for this arc.");
+      }
+      const beatId = beats?.[selectedBeatIndex]?.id ?? null;
+
+      const { error: insertError } = await supabase.from("content_items").insert({
+        arc_id: arc.id,
+        beat_id: beatId,
+        source_url: url,
+        title: RESOLVED_LINK.title,
+        creator: RESOLVED_LINK.creator,
+        platform: RESOLVED_LINK.platform,
+        thumbnail_url: RESOLVED_LINK.thumbnailUrl,
+        content_type: contentType,
+        character_tags: characters.map((c) => c.name),
+        status: "pending",
+        submitted_by: "anonymous",
+      });
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      setSubmitStatus("success");
+    } catch (err) {
+      setSubmitStatus("error");
+      setSubmitError(err.message || "Something went wrong. Please try again.");
+    }
   }
 
   return (
@@ -393,15 +449,32 @@ export default function SubmitPage() {
                   </button>
                 </div>
               </div>
+
+              {submitStatus === "success" && (
+                <div className={styles.submitSuccess}>
+                  ✓ Submitted — this content is now pending review.
+                </div>
+              )}
+              {submitStatus === "error" && (
+                <div className={styles.submitErrorMsg}>Couldn&rsquo;t submit: {submitError}</div>
+              )}
             </div>
 
             <div className={styles.stepFooter}>
-              <button className="btn btn-ghost" onClick={() => setStep(2)}>
+              <button className="btn btn-ghost" onClick={() => setStep(2)} disabled={submitStatus === "submitting"}>
                 ← Back
               </button>
               <div className={styles.unsureNote} />
-              <button className={styles.btnComingSoon} disabled>
-                Coming soon — backend not connected yet
+              <button
+                className={styles.btnContinue}
+                disabled={submitStatus === "submitting" || submitStatus === "success"}
+                onClick={handleSubmit}
+              >
+                {submitStatus === "submitting"
+                  ? "Adding…"
+                  : submitStatus === "success"
+                  ? "Added ✓"
+                  : "Add to aniindex"}
               </button>
             </div>
           </div>

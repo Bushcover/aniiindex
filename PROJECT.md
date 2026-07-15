@@ -544,6 +544,97 @@ into any page yet, this session just lays the plumbing.
   (replacing the hardcoded `ARC`/`ARCS`/`BEATS`/etc. consts with real
   queries, and inserting rows) is future work.
 
+## Session 10
+
+Wired `/submit` to Supabase, so the wizard's final step now performs a
+real database write instead of ending on a disabled "Coming soon" button.
+Two parts:
+
+- **Part 1: seeded reference data.** The `content_items` table needs a
+  real `arc_id` (and, ideally, real `beat_id`s) to insert against, so this
+  session seeded exactly one series/arc/beat set — Jujutsu Kaisen's
+  Shibuya Incident Arc — via SQL handed to the user to run manually in
+  the Supabase SQL editor (same "give SQL, don't execute it from a tool"
+  pattern as Session 9's table creation). One `series` row
+  (`anilist_id: 113415`, `slug: 'jujutsu-kaisen'`), one `arcs` row
+  (`slug: 'shibuya-incident-arc'`, `episode_start: 38`, `episode_end: 47`,
+  `order_index: 6`, `series_id` resolved via a `select` against the
+  just-inserted series row rather than a hardcoded id), and ten `beats`
+  rows in order (`order_index` 1–10), with `is_peak: true` on "The
+  Sealing" and "Yuji breaks" — see "Database schema" below for the exact
+  SQL. **This is the only arc real submissions can currently be saved
+  against** — the seed data intentionally uses the canonical beat titles
+  ("Shibuya station", "Domain battle") rather than the shorter labels
+  `/submit`'s own hardcoded `BEATS` array uses for its chart ("Station",
+  "Domain"); the wiring code (below) matches beats by array *position*
+  (`order_index`), not by title text, specifically so this naming
+  mismatch can't break the lookup.
+- **Part 2: real inserts from the wizard.** `app/submit/page.jsx` gained:
+  - An import of the shared `supabase` client from `lib/supabase.js`
+    (Session 9) — the first page to actually use it.
+  - `handleSubmit`, an async function that: looks up the seeded arc's id
+    by `slug = 'shibuya-incident-arc'`; fetches that arc's `beats`
+    ordered by `order_index` and reads `beats[selectedBeatIndex].id` to
+    get the real `beat_id` matching whichever bar the user clicked in
+    step 2; then inserts one `content_items` row with `source_url` (the
+    URL the user actually typed in step 1 — not a hardcoded stand-in),
+    `title`/`creator`/`platform`/`thumbnail_url` from `RESOLVED_LINK`,
+    `content_type` from step 2's selected pill, `character_tags` from
+    step 2's character chip list, `status: 'pending'`, and
+    `submitted_by: 'anonymous'`. Three new pieces of `useState`
+    (`submitStatus`: `idle`/`submitting`/`success`/`error`, plus
+    `submitError`) drive the UI through the request.
+  - The step 3 submit button (`.btnComingSoon`, permanently disabled,
+    "Coming soon — backend not connected yet") was replaced with an
+    enabled button reading **"Add to aniindex"** (reusing the existing
+    `.btnContinue` style), showing "Adding…" while the request is in
+    flight and "Added ✓" (disabled, to prevent a duplicate insert) after
+    a successful one. The now-unused `.btnComingSoon` rule was deleted
+    from `submit.module.css` rather than left as dead CSS.
+  - Two new message states render above the footer: a green
+    `.submitSuccess` banner ("✓ Submitted — this content is now pending
+    review.") on success, or a red `.submitErrorMsg` banner ("Couldn't
+    submit: `<message>`") on failure — covering both a failed arc/beat
+    lookup and a failed insert (e.g. an RLS rejection or a network error)
+    with the underlying error's message, never a silent failure or a raw
+    stack trace.
+- **Verified with two different tests, since this sandbox's network
+  policy blocks `*.supabase.co` outbound** (confirmed via the proxy's own
+  status endpoint, the same class of restriction as the AniList image CDN
+  noted in Sessions 6–8) — a live end-to-end insert isn't possible from
+  inside this environment:
+  1. **Real request, sandbox network block** — drove the actual wizard in
+     a headless browser against the real `lib/supabase.js` client with no
+     mocking. The request genuinely leaves the browser, the sandbox's
+     network policy kills it, and — after the browser's own retry/timeout
+     behavior plays out (~20s) — `handleSubmit`'s `catch` block correctly
+     converts that into the red error banner ("Couldn't submit: Couldn't
+     find the Shibuya Incident Arc in the database.") and re-enables the
+     button rather than hanging forever or throwing an unhandled
+     rejection. This is genuine proof the error path is wired correctly,
+     not just code review.
+  2. **Mocked Supabase REST responses** — intercepted the three
+     `/rest/v1/...` calls (`arcs` select, `beats` select, `content_items`
+     insert) in the same headless browser and returned crafted successful
+     responses, to verify the success path and the exact row shape
+     without needing real network access. Selecting beat index 6 ("Yuji
+     breaks") and submitting produced an insert body of `{ arc_id: 42,
+     beat_id: 106, source_url: "https://www.tiktok.com/@jjkmoments_/...",
+     title: "...", creator: "...", platform: "tt", thumbnail_url: "...",
+     content_type: "Edit / AMV", character_tags: ["Gojo Satoru"], status:
+     "pending", submitted_by: "anonymous" }` — confirming the beat-index-
+     to-`beat_id` mapping is correct (index 6 of the mocked 10-beat array)
+     and every field matches the task's spec — and the UI correctly
+     showed the green success banner and a disabled "Added ✓" button.
+  3. **Not verified in this session, needs the user to confirm**: an
+     actual row landing in the real Supabase `content_items` table from a
+     real browser outside this sandbox. Once the Part 1 seed SQL has been
+     run, submitting a real link through `/submit` in a normal browser
+     (not this sandboxed environment) should produce exactly the insert
+     shape confirmed in test 2 above, and the row should be visible in
+     Supabase's Table Editor.
+- `next build` passes with no new errors or warnings after these changes.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -552,8 +643,14 @@ hardcoded per-page consts documented above (`ARC_NAV`/`ARC`/
 `INTENSITY_BEATS`/`BEATS` on the arc page, `ARCS`/`CHARACTERS`/
 `TOP_CONTENT` on the search page, `ARCS` on the series page). Created
 manually via the Supabase SQL editor, not through any tool/migration in
-this repo — all four tables exist but are currently empty, and no page
-queries them yet.
+this repo. As of Session 10, `content_items` is genuinely written to by
+`app/submit/page.jsx`'s step 3 submit button (see the Session 10 notes
+above); `series`, `arcs`, and `beats` are also seeded with one real row
+set (Jujutsu Kaisen / Shibuya Incident Arc / its ten beats) that
+`/submit` depends on. No page *reads* from Supabase yet — `/submit`'s
+step 2 beat chart and step 3 preview both still use `/submit`'s own
+hardcoded `BEATS`/`RESOLVED_LINK` consts, and every other page is still
+on Session 1–8 hardcoded data / AniList calls.
 
 - **`series`** — one row per anime series. Keyed by `anilist_id` (unique)
   so a series can be looked up or upserted from an AniList id the same
@@ -574,13 +671,15 @@ queries them yet.
   replaces relying on array position for beat ordering.
 - **`content_items`** — one row per submitted fan-content link, i.e. the
   real backing store for what `BEATS[].items` (arc page) and
-  `TOP_CONTENT` (search page) currently hardcode, and what `/submit`'s
-  wizard would eventually insert into once its "Coming soon" button is
-  wired up. `arc_id` is required; `beat_id` is optional (nullable) since
-  a submission could plausibly land at the arc level before/without a
+  `TOP_CONTENT` (search page) currently hardcode. As of Session 10,
+  `/submit`'s step 3 button genuinely inserts into this table (see the
+  Session 10 notes above) — it's no longer just a future destination.
+  `arc_id` is required; `beat_id` is optional (nullable) since a
+  submission could plausibly land at the arc level before/without a
   specific beat assignment. `status` (default `'pending'`) and
-  `submitted_by` anticipate the moderation workflow `/submit` currently
-  has no backend for; `confirmation_count` anticipates some future
+  `submitted_by` anticipate the moderation workflow `/submit` still has no
+  backend for beyond writing the row (nothing reads `status` or shows a
+  moderation queue yet); `confirmation_count` anticipates some future
   "confirm this is accurate" community signal that doesn't exist in the
   UI yet. `character_tags` is a Postgres `text[]`, matching
   `ContentCard`'s existing `characterTags` array prop directly — no
@@ -638,6 +737,38 @@ create table content_items (
 );
 ```
 
+### Seed data (Session 10)
+
+Run once in the Supabase SQL editor, after the tables above exist. Seeds
+the one series/arc/beat set `/submit` currently saves content against:
+
+```sql
+insert into series (anilist_id, title, slug)
+values (113415, 'Jujutsu Kaisen', 'jujutsu-kaisen');
+
+insert into arcs (series_id, anilist_series_id, title, slug, episode_start, episode_end, order_index)
+select id, 113415, 'Shibuya Incident Arc', 'shibuya-incident-arc', 38, 47, 6
+from series
+where anilist_id = 113415;
+
+insert into beats (arc_id, title, order_index, intensity, is_peak)
+select arcs.id, beat.title, beat.order_index, beat.intensity, beat.is_peak
+from arcs
+cross join (values
+  ('Curtain falls',   1,  28, false),
+  ('Shibuya station', 2,  35, false),
+  ('Gojo arrives',    3,  54, false),
+  ('Domain battle',   4,  63, false),
+  ('The Sealing',     5,  87, true),
+  ('Nanami',          6,  70, false),
+  ('Yuji breaks',     7, 100, true),
+  ('Nobara',          8,  77, false),
+  ('Aftermath',       9,  42, false),
+  ('Fallout',         10, 30, false)
+) as beat(title, order_index, intensity, is_peak)
+where arcs.slug = 'shibuya-incident-arc';
+```
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -665,13 +796,13 @@ app/
   arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
   search/page.jsx        The search results page. Async Server Component — fetches the series panel from AniList (Session 6); ARCS/CHARACTERS/TOP_CONTENT are still hardcoded consts.
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
-  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above)
+  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above).
   submit/submit.module.css Styles unique to the submit page
   series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
   series/[slug]/series.module.css  Styles unique to the series page
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
-  supabase.js             Exports a shared Supabase client (see Session 9 notes above); not yet used by any page
+  supabase.js             Exports a shared Supabase client (see Session 9 notes above); used by app/submit/page.jsx as of Session 10
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
@@ -895,7 +1026,12 @@ database/API:
   placeholder item count). Same caveat as `INTENSITY_BEATS` on the arc
   page: heights are hand-picked, not derived from real engagement data;
   `count` is invented per-beat except "The Sealing" and "Yuji breaks"
-  (see the Session 5 note above).
+  (see the Session 5 note above). **As of Session 10, this array's
+  *position* (not its text) is load-bearing** — `handleSubmit` maps
+  `selectedBeatIndex` straight onto the same-position row in Supabase's
+  real `beats` table (ordered by `order_index`) to get a real `beat_id`,
+  so this array and the seeded `beats` rows need to stay the same length
+  and order or that mapping breaks.
 - `INITIAL_CHARACTERS` — the one pre-detected character chip (Gojo
   Satoru). A real version needs actual character detection from the
   video/caption, plus a working character picker behind "+ Add
@@ -903,6 +1039,11 @@ database/API:
 - `CONTENT_TYPE_OPTIONS` — the 6 content-type pills; "Edit / AMV" is
   preselected to match the mockup. These are just labels, not IDs tied to
   any real taxonomy yet.
+- `ARC_SLUG` (Session 10) — the one arc real submissions can currently be
+  saved against (`"shibuya-incident-arc"`, matching the Part 1 seed
+  data's `arcs.slug`). Not itself hardcoded *display* data like the
+  consts above — it's the lookup key `handleSubmit` uses to find the real
+  `arc_id` at submit time.
 
 ## Hardcoded data (in `app/series/[slug]/page.jsx`)
 
@@ -931,18 +1072,25 @@ database/API:
   AniList series panel over a hardcoded Chainsaw Man arc list.
 - No tab/filter-pill filtering on any page — clicking a tab or a filter
   pill doesn't change which items are shown.
-- No API, database, or auth — the nav links, "Browse"/"Submit
-  content"/"Sign in" buttons, character chips, "also found" rows, and
-  trending-moment rows are all static, non-functional markup beyond the
-  navigation described elsewhere in this doc. (Search itself is real as
-  of Session 6, for the series panel only.)
+- No auth — the nav's "Sign in" buttons and character chip links are
+  still static, non-functional markup. **Partially resolved in Session
+  9/10**: a real database (Supabase) now exists, and `/submit`'s final
+  step genuinely writes to it (see below) — but nothing reads from
+  Supabase yet, and there's still no login/identity system behind
+  `submitted_by` (hardcoded to the string `"anonymous"`).
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
-- No real link resolution, series/arc/character/beat detection, or
-  submission on `/submit` — every field in the wizard is either hardcoded
-  ("detected" values, the resolved link) or purely local `useState` (beat
-  selection, character removal, content type, checkboxes). The final
-  step's button is intentionally disabled ("Coming soon — backend not
-  connected yet"); nothing on this page can actually add content to the
-  index yet. The Series/Arc "Change" links, "+ Add character", "Skip
-  this beat", and "How placement works" links are all inert.
+- No real link resolution or series/arc/character/beat *detection* on
+  `/submit` — `RESOLVED_LINK`, `SERIES_DETECTED`, `ARC_DETECTED`, and
+  `INITIAL_CHARACTERS` are all still hardcoded regardless of what URL the
+  user actually pastes; the Series/Arc "Change" links, "+ Add character",
+  "Skip this beat", and "How placement works" links are all still inert.
+  **Resolved in Session 10**: the final step's submit button is no longer
+  disabled — clicking "Add to aniindex" performs a real Supabase insert
+  into `content_items` using the real (typed) `source_url`, the real
+  selected `content_type`/`character_tags`/beat, and a real, currently
+  hardcoded-to-Shibuya `arc_id`, with genuine success/error feedback (see
+  the Session 10 notes above). Submissions are real database rows now;
+  they just can't yet be placed against any arc other than Shibuya, and
+  nothing downstream (an arc page, a moderation queue) reads `status` or
+  displays these rows yet.

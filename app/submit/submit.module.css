@@ -625,22 +625,6 @@
   color: var(--t3);
   cursor: not-allowed;
 }
-.btnComingSoon {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 20px;
-  background: var(--surface-3);
-  border: 1px solid var(--border-mid);
-  border-radius: var(--r-sm);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--t3);
-  cursor: not-allowed;
-  font-family: var(--body);
-  flex-shrink: 0;
-}
-
 /* Step upcoming (grayed placeholder) */
 .stepUpcoming {
   background: var(--surface);
@@ -681,4 +665,24 @@
 /* Step 3: card preview wrap */
 .previewCardWrap {
   max-width: 320px;
+}
+
+/* Step 3: submit result messages */
+.submitSuccess {
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--green-soft);
+  border: 1px solid rgba(106, 240, 168, 0.3);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 500;
+}
+.submitErrorMsg {
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: rgba(240, 112, 106, 0.1);
+  border: 1px solid rgba(240, 112, 106, 0.3);
+  color: var(--red, #f0706a);
+  font-size: 12px;
+  font-weight: 500;
 }
