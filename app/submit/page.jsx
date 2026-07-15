@@ -21,7 +21,7 @@ const STEP_META = [
 // Same TikTok item already hardcoded on the Shibuya Incident Arc page (Session 1's
 // "The Sealing" beat) — this flow simulates submitting that exact piece of content.
 const RESOLVED_LINK = {
-  platform: "tt",
+  platform: "tiktok",
   thumbnailUrl: "linear-gradient(135deg,#0f0820,#1a0f3a)",
   title: "The moment Gojo got sealed and the internet broke in real time 💔",
   creator: "@jjkmoments_ · 8.4M views",
@@ -327,10 +327,12 @@ export default function SubmitPage() {
                       </div>
                     </div>
 
-                    <div className={styles.beatSelectedRow}>
-                      <div className={styles.beatSelectedIcon}>✦</div>
-                      <div className={styles.beatSelectedName}>{selectedBeat.title}</div>
-                    </div>
+                    {selectedBeat && (
+                      <div className={styles.beatSelectedRow}>
+                        <div className={styles.beatSelectedIcon}>✦</div>
+                        <div className={styles.beatSelectedName}>{selectedBeat.title}</div>
+                      </div>
+                    )}
 
                     <div className={styles.beatUnsure}>
                       Not sure which beat? <a>Skip this and the community can help place it</a>

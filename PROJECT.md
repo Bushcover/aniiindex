@@ -1183,6 +1183,63 @@ Two fixes, both applied:
   response. Restored the real Supabase env vars and rebuilt afterward to
   confirm no test state leaked into the deploy.
 
+### Session 11 follow-up: platform values saved as short codes instead of full names
+
+`content_items.platform` was being saved as `"tt"` instead of `"tiktok"`
+(and would have had the same issue for YouTube/X/Instagram/Reddit, had
+the submit form's fake "detection" ever produced anything but TikTok).
+Cause: `app/submit/page.jsx`'s `RESOLVED_LINK.platform` — the single
+hardcoded value used for both the step 3 preview and the actual
+`content_items` insert (the submit flow's link "detection" has always
+been entirely fake, per Session 5 — it's always this same hardcoded
+TikTok item) — was `"tt"`, the short code `ContentCard`'s `PLATFORM_META`
+map has always used internally as its lookup key.
+
+Fixed both ends of this, not just the saved value, since they have to
+agree:
+
+- **`app/submit/page.jsx`**: `RESOLVED_LINK.platform` changed from
+  `"tt"` to `"tiktok"`.
+- **`components/ContentCard.jsx`**: `PLATFORM_META` now accepts *both*
+  the short code and the full name as keys for all five platforms
+  (`yt`/`youtube`, `tt`/`tiktok`, `x`, `ig`/`instagram`, `rd`/`reddit`),
+  both mapping to the same meta object. This was necessary, not optional
+  — every hardcoded content item across the rest of the app (arc page
+  `BEATS`, search page `TOP_CONTENT`) still uses the short codes, so
+  narrowing `PLATFORM_META` to only the full names would have broken
+  every one of those cards; widening it to accept either keeps both the
+  old hardcoded data and new real `content_items` rows (which now store
+  the full name) rendering correctly through the same component. `x` was
+  left as-is — Twitter/X's short code and "full" value are already both
+  `"x"`, so there was nothing to fix there.
+- **Found and fixed a real, unrelated crash while testing this**: the
+  beat-selector's "selected beat name" row (`app/submit/page.jsx`) was
+  guarded on `realBeats` (the fetched array) being loaded, not on
+  `selectedBeat` (`realBeats[selectedBeatIndex]`) being non-null. Since
+  `DEFAULT_BEAT_INDEX` is `4`, this only actually crashes if `realBeats`
+  ever resolves with 5 or fewer beats — never the case with the real
+  10-beat Shibuya seed data, so it hadn't surfaced yet, but it's a real
+  latent bug (any future arc seeded with fewer beats would crash for
+  every real user on step 2, not just a test). Found via a Playwright
+  test using a deliberately short mocked `beats` response, fixed by
+  guarding that one sub-block on `{selectedBeat && (...)}` instead of the
+  outer `{realBeats && (...)}`.
+- **Verified with a real dev server and mocked Supabase REST responses**
+  (`next build` + `next start`, matching this project's established
+  verification pattern — an initial attempt via `next dev` produced noisy,
+  unreliable results from React DevMode/Fast-Refresh machinery and was
+  discarded in favor of a production build): reproduced the crash above
+  with a 1-beat mock, confirmed the fix resolves it; then, with a
+  realistic 10-beat mock matching the real seed data, drove the full
+  wizard end-to-end — the step 3 preview correctly showed the "TikTok"
+  badge, and the mocked `content_items` insert's `platform` field was
+  exactly `"tiktok"`. Separately, pointed a mock PostgREST server's
+  `content_items` response at a row with `platform: "tiktok"` and
+  confirmed `/arc/shibuya-incident-arc` rendered it with the correct
+  TikTok badge/icon (`plt plt-tt` class, `♪` icon) via the widened
+  `PLATFORM_META` — the full round trip, submit through display, works
+  with the new value.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

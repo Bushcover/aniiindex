@@ -1,11 +1,26 @@
 import styles from "./ContentCard.module.css";
 
+const PLATFORM_YT = { className: "plt-yt", compactClassName: styles.compactPltYt, icon: "▶", label: "YouTube" };
+const PLATFORM_TT = { className: "plt-tt", compactClassName: styles.compactPltTt, icon: "♪", label: "TikTok" };
+const PLATFORM_X = { className: "plt-x", compactClassName: styles.compactPltX, icon: "𝕏", label: "Twitter" };
+const PLATFORM_IG = { className: "plt-ig", compactClassName: styles.compactPltIg, icon: "◈", label: "Instagram" };
+const PLATFORM_RD = { className: "plt-rd", compactClassName: styles.compactPltRd, icon: "⬆", label: "Reddit" };
+
+// Every hardcoded content item across the app (arc page, search page) still
+// uses the short codes below, but real content_items rows from Supabase
+// store the full platform name (see Session 10/11's submit form fix) —
+// both representations resolve to the same meta object here so either one
+// renders correctly.
 const PLATFORM_META = {
-  yt: { className: "plt-yt", compactClassName: styles.compactPltYt, icon: "▶", label: "YouTube" },
-  tt: { className: "plt-tt", compactClassName: styles.compactPltTt, icon: "♪", label: "TikTok" },
-  x: { className: "plt-x", compactClassName: styles.compactPltX, icon: "𝕏", label: "Twitter" },
-  ig: { className: "plt-ig", compactClassName: styles.compactPltIg, icon: "◈", label: "Instagram" },
-  rd: { className: "plt-rd", compactClassName: styles.compactPltRd, icon: "⬆", label: "Reddit" },
+  yt: PLATFORM_YT,
+  youtube: PLATFORM_YT,
+  tt: PLATFORM_TT,
+  tiktok: PLATFORM_TT,
+  x: PLATFORM_X,
+  ig: PLATFORM_IG,
+  instagram: PLATFORM_IG,
+  rd: PLATFORM_RD,
+  reddit: PLATFORM_RD,
 };
 
 export default function ContentCard({
