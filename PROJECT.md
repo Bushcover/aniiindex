@@ -887,6 +887,16 @@ resolved.
 - **Reminder: delete `app/api/check-env/route.js` once this investigation
   is resolved** — it's diagnostic-only, not a permanent part of the app.
 
+**Resolved.** The root cause was the branch/environment mismatch, not a
+Supabase or code issue: work was being pushed to
+`claude/aniindex-project-review-uf50xx`, which produced Vercel Preview
+deployments, not Production — so the Production-scoped Supabase env vars
+never applied. Fixed by merging that branch into
+`claude/aniindex-arc-page-nextjs-wwizd5` (this repo's actual default
+branch, and the one Vercel treats as Production) and pushing there
+instead (see the top-level branch note). With that fixed, `app/api/check-
+env/route.js` has served its purpose and was deleted.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
