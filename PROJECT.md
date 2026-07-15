@@ -679,6 +679,66 @@ the deploy will succeed but every submission will fail with the "Couldn't
 submit" error, since the client falls back to the non-existent
 placeholder host.
 
+### Session 10 follow-up: RLS policies for anonymous access
+
+Once the build/env-var issues above were resolved, `/submit` reached
+Supabase successfully but every submission still failed with "Couldn't
+submit: Couldn't find the Shibuya Incident Arc in the database." — the
+`arcs` select-by-slug query was returning zero rows even though the
+Session 10 seed data exists. Cause: the four tables were created with
+plain `create table` statements (no RLS was ever enabled or configured),
+and Supabase projects created after mid-2023 default to Postgres's own
+RLS-friendly stance where a table with RLS *not explicitly enabled* still
+behaves permissively via the anon key **only if RLS is off** — but this
+project's Supabase instance had RLS already on (Supabase's dashboard
+enables it by default for new tables in newer projects), so with zero
+policies defined, every request — reads and writes alike — was silently
+denied, returning an empty result set rather than an error. That reads
+identically to "the row doesn't exist," which is what made this look like
+a missing-seed-data bug at first rather than a permissions bug.
+
+Fixed with a real Supabase auth model — RLS stays **on** for all four
+tables (not disabled), with narrow policies matching the app's actual
+access pattern: `series`/`arcs`/`beats` are public reference data (open
+`SELECT`, no writes at all — the app itself never writes to these three
+outside the manual seed SQL), and `content_items` is open for anonymous
+`INSERT` (submissions) but has no `UPDATE`/`DELETE` policy, so no
+anonymous request can alter or remove a row once submitted — only Supabase
+service-role access (not used anywhere in this app) could.
+
+```sql
+alter table series enable row level security;
+alter table arcs enable row level security;
+alter table beats enable row level security;
+alter table content_items enable row level security;
+
+create policy "Public read access on series"
+  on series for select
+  to anon
+  using (true);
+
+create policy "Public read access on arcs"
+  on arcs for select
+  to anon
+  using (true);
+
+create policy "Public read access on beats"
+  on beats for select
+  to anon
+  using (true);
+
+create policy "Public insert access on content_items"
+  on content_items for insert
+  to anon
+  with check (true);
+```
+
+No `UPDATE`/`DELETE` policies were added for any table, and no `SELECT`
+policy for `content_items` — RLS denies by default, so those operations
+stay blocked for the `anon` role without needing an explicit deny rule.
+`content_items` will need a `SELECT` policy in a future session once some
+page actually reads submitted content back out (nothing does yet).
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
