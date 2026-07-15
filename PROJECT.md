@@ -1426,6 +1426,29 @@ using YouTube's public oEmbed endpoint instead of scraping:
   regress the existing paths. All test certs, mock servers, and
   `/etc/hosts` changes were removed/reverted afterward.
 
+### Session 12 follow-up: next.config.mjs image domain allowlist
+
+Added `images.remotePatterns` to `next.config.mjs`, allowlisting
+`i.ytimg.com` (YouTube thumbnails, from the oEmbed integration above) and
+`s4.anilist.co` (AniList's character/series image CDN, used since
+Sessions 6–8) — both `https`, wildcard `pathname: "/**"`.
+
+**Worth being precise about what this does and doesn't fix**: this
+config only affects Next.js's `next/image` component, which **isn't
+used anywhere in this codebase yet** — `ContentCard.jsx` renders
+`thumbnailUrl` via a plain CSS `background`, and character portraits
+(`CharacterChips.jsx`) render via a plain `background-image`, neither of
+which is subject to Next's image-domain allowlist at all. There's also
+no CSP configured anywhere that would block these hosts another way. So
+if YouTube thumbnails are genuinely not rendering visually, this change
+by itself doesn't explain why, and isn't a complete fix for that
+symptom — it's a correct, safe, forward-looking addition for whenever a
+future session switches these components to `next/image` for real
+optimization (a natural next step, now that real thumbnail/portrait URLs
+actually flow through the app instead of only gradients). Flagged this
+directly rather than silently complying with a diagnosis the codebase
+doesn't support.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
