@@ -1032,6 +1032,68 @@ the `[arc/[slug]] diagnostic:` line after loading the page.
 **Reminder: remove this `console.log` once the cause is found** — it's
 diagnostic-only.
 
+### Session 11 follow-up: wire the submit form's beat selector to real beats too
+
+The arc page now reads real beats correctly, but `app/submit/page.jsx`
+was still using its own Session 5 hardcoded `BEATS` array (10 beats with
+slightly different labels — `"Station"`, `"Domain"` — from the real seed
+data's `"Shibuya station"`, `"Domain battle"`) for the beat-selector
+chart, and — even though `handleSubmit` already saved a real, database-
+sourced `beat_id` — it got there by re-querying `beats` at submit time
+and mapping `selectedBeatIndex` onto that freshly-fetched array by
+position, entirely decoupled from whatever the chart itself was showing
+the user.
+
+- **Removed the hardcoded `BEATS` const entirely.** `app/submit/page.jsx`
+  now calls `getArcBeats(ARC_SLUG)` (the function added to
+  `lib/supabase.js` in Session 11) in a `useEffect` on mount, storing the
+  result in a new `realBeats` state (`null` until resolved). The beat
+  chart, bar heights, labels, and the "selected beat" name all render
+  directly from `realBeats` — real `title`/`intensity` fields, not the
+  old hand-picked `label`/`heightPct` values.
+- **`selectedBeat` is now `realBeats?.[selectedBeatIndex] ?? null`** — a
+  real beat row (with a real `id`) once loaded, not a lookup into a
+  parallel hardcoded array. `handleSubmit` was simplified to match: the
+  redundant `beats` query it used to run at submit time is gone, and the
+  insert now uses `selectedBeat.id` directly — the exact same real id
+  already driving what's on screen, not a second, independently-fetched
+  copy that merely happened to agree by array position.
+- **Three states while `realBeats` loads**: a "Loading story beats…" note
+  while the fetch is in flight, a red error message (reusing the
+  `.submitErrorMsg` style from Session 10) if `getArcBeats` rejects or
+  returns nothing, or the real chart once loaded — never a silent fall
+  back to fabricated data, since this task (unlike the arc page's
+  explicit "fall back to hardcoded JJK data" instruction) didn't call for
+  one, and reintroducing fake beats here would just recreate the bug
+  being fixed. Step 2's "Continue →" button is now `disabled={!selectedBeat}`,
+  which guarantees a real beat is loaded before the user can ever reach
+  step 3 — so every later reference to `selectedBeat.title` (the step-2
+  completed summary, step 3's `ContentCard` preview) is safe without
+  needing its own null guard.
+- **Dropped the fabricated "`{count} items already here`" line** in the
+  selected-beat row — `getArcBeats` doesn't return an item count (that
+  would need a separate `content_items` query this task didn't ask for),
+  and this project's established convention is to omit a stat rather
+  than keep showing an invented number once the real data source can't
+  back it (same call made for the arc page's stats in Session 6, and the
+  character mention-count badge in Session 7). Removed the now-dead
+  `.beatSelectedCount` CSS rule along with it.
+- **Verified interactively** with a real dev server and mocked Supabase
+  REST responses (this page's Supabase calls run client-side, so
+  Playwright's request interception applies directly here, unlike the
+  arc page's server-side fetch): loading `/submit` and reaching step 2
+  rendered the real beat titles `"Shibuya station"` and `"Domain
+  battle"` — confirming the *real* seed titles render, not the old
+  hardcoded `"Station"`/`"Domain"` labels (checked their absence
+  directly, count `0`). Clicked "Yuji breaks" (mocked real id `107`,
+  not index `6`), continued to step 3, and submitted — the mocked
+  `content_items` insert's `beat_id` was exactly `107`, proving the
+  saved id comes from the real beat object already driving the UI, not
+  a coincidental index match into a separately-fetched array.
+- Not verified against the real, live Supabase project, for the same
+  reason as every Supabase-touching session so far — this sandbox's
+  network policy blocks `*.supabase.co`.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -1423,16 +1485,11 @@ database/API:
   resolved link. A real version needs actual title/caption parsing (or
   manual series/arc pickers behind the still-inert "Change" links).
   `note` is the small "Detected from…" explainer text under each field.
-- `BEATS` — the 10-bar beat selector's chart data (label, bar height,
-  placeholder item count). Same caveat as `INTENSITY_BEATS` on the arc
-  page: heights are hand-picked, not derived from real engagement data;
-  `count` is invented per-beat except "The Sealing" and "Yuji breaks"
-  (see the Session 5 note above). **As of Session 10, this array's
-  *position* (not its text) is load-bearing** — `handleSubmit` maps
-  `selectedBeatIndex` straight onto the same-position row in Supabase's
-  real `beats` table (ordered by `order_index`) to get a real `beat_id`,
-  so this array and the seeded `beats` rows need to stay the same length
-  and order or that mapping breaks.
+- ~~`BEATS`~~ — **removed in the Session 11 follow-up.** The 10-bar beat
+  selector now renders from `realBeats`, fetched live via
+  `getArcBeats(ARC_SLUG)` on mount — real titles and real intensities,
+  not a hand-picked hardcoded array. See the Session 11 follow-up notes
+  above.
 - `INITIAL_CHARACTERS` — the one pre-detected character chip (Gojo
   Satoru). A real version needs actual character detection from the
   video/caption, plus a working character picker behind "+ Add

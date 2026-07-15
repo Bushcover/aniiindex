@@ -408,10 +408,6 @@
   color: var(--accent);
   flex: 1;
 }
-.beatSelectedCount {
-  font-size: 11px;
-  color: var(--t2);
-}
 .beatUnsure {
   font-size: 11px;
   color: var(--t3);

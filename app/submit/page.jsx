@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ContentCard from "@/components/ContentCard";
-import { supabase } from "@/lib/supabase";
+import { supabase, getArcBeats } from "@/lib/supabase";
 import styles from "./submit.module.css";
 
 // Matches the arc seeded into Supabase in Session 10 (see PROJECT.md's
@@ -31,18 +31,11 @@ const RESOLVED_LINK = {
 const SERIES_DETECTED = { name: "Jujutsu Kaisen", note: 'Detected from "Gojo" in title and caption keywords' };
 const ARC_DETECTED = { name: "Shibuya Incident Arc", note: 'Detected from "Gojo sealed", "Shibuya" in caption' };
 
-const BEATS = [
-  { label: "Curtain falls", heightPct: 28, count: 156 },
-  { label: "Station", heightPct: 35, count: 178 },
-  { label: "Gojo arrives", heightPct: 54, count: 245 },
-  { label: "Domain", heightPct: 63, count: 312 },
-  { label: "The Sealing", heightPct: 87, count: 891 },
-  { label: "Nanami", heightPct: 70, count: 402 },
-  { label: "Yuji breaks", heightPct: 100, count: 1102 },
-  { label: "Nobara", heightPct: 77, count: 298 },
-  { label: "Aftermath", heightPct: 42, count: 134 },
-  { label: "Fallout", heightPct: 30, count: 89 },
-];
+// Real beats (id, title, order_index, intensity, is_peak) are fetched from
+// Supabase on mount via getArcBeats(ARC_SLUG) — see the `realBeats` state
+// below. Session 10's seed data keeps "The Sealing" at index 4, so this
+// stays a reasonable initial selection regardless of when the fetch
+// resolves.
 const DEFAULT_BEAT_INDEX = 4; // "The Sealing"
 
 const INITIAL_CHARACTERS = [{ name: "Gojo Satoru", initials: "GS", color: "#7B6CF6" }];
@@ -66,8 +59,30 @@ export default function SubmitPage() {
   const [check2, setCheck2] = useState(false);
   const [submitStatus, setSubmitStatus] = useState("idle"); // idle | submitting | success | error
   const [submitError, setSubmitError] = useState("");
+  const [realBeats, setRealBeats] = useState(null); // null until getArcBeats resolves
+  const [beatsLoadError, setBeatsLoadError] = useState("");
 
-  const selectedBeat = BEATS[selectedBeatIndex];
+  useEffect(() => {
+    let cancelled = false;
+    getArcBeats(ARC_SLUG)
+      .then((beats) => {
+        if (cancelled) return;
+        if (!beats || beats.length === 0) {
+          setBeatsLoadError("No story beats found for this arc.");
+          return;
+        }
+        setRealBeats(beats);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBeatsLoadError(err.message || "Couldn't load story beats.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedBeat = realBeats?.[selectedBeatIndex] ?? null;
 
   function getBarTier(i) {
     if (i === selectedBeatIndex) return "selected";
@@ -98,23 +113,9 @@ export default function SubmitPage() {
         throw new Error(`Couldn't find the Shibuya Incident Arc in the database (${detail}).`);
       }
 
-      console.log('[submit] querying beats: select id from beats where arc_id =', arc.id);
-      const { data: beats, error: beatsError } = await supabase
-        .from("beats")
-        .select("id")
-        .eq("arc_id", arc.id)
-        .order("order_index", { ascending: true });
-      console.log('[submit] beats query result:', { beats, beatsError });
-      if (beatsError) {
-        throw new Error(
-          `Couldn't load story beats for this arc (${beatsError.message}${beatsError.code ? ` [${beatsError.code}]` : ""}).`
-        );
-      }
-      const beatId = beats?.[selectedBeatIndex]?.id ?? null;
-
       const { error: insertError } = await supabase.from("content_items").insert({
         arc_id: arc.id,
-        beat_id: beatId,
+        beat_id: selectedBeat.id,
         source_url: url,
         title: RESOLVED_LINK.title,
         creator: RESOLVED_LINK.creator,
@@ -284,50 +285,58 @@ export default function SubmitPage() {
                   Select the moment this content is about — click a bar
                 </div>
 
-                <div className={styles.beatSelector}>
-                  <div className={styles.beatChartWrap}>
-                    <div className={styles.beatBars}>
-                      {BEATS.map((beat, i) => {
-                        const tier = getBarTier(i);
-                        return (
+                {!realBeats && !beatsLoadError && (
+                  <div className={styles.detectNote}>Loading story beats…</div>
+                )}
+                {beatsLoadError && (
+                  <div className={styles.submitErrorMsg}>Couldn&rsquo;t load story beats: {beatsLoadError}</div>
+                )}
+
+                {realBeats && (
+                  <div className={styles.beatSelector}>
+                    <div className={styles.beatChartWrap}>
+                      <div className={styles.beatBars}>
+                        {realBeats.map((beat, i) => {
+                          const tier = getBarTier(i);
+                          return (
+                            <button
+                              key={beat.id}
+                              className={cx(
+                                styles.bbar,
+                                tier === "dim" && styles.bbarDim,
+                                tier === "nearby" && styles.bbarNearby,
+                                tier === "selected" && styles.bbarSelected
+                              )}
+                              style={{ height: `${beat.intensity}%` }}
+                              onClick={() => setSelectedBeatIndex(i)}
+                              aria-label={beat.title}
+                            ></button>
+                          );
+                        })}
+                      </div>
+                      <div className={styles.beatLabels}>
+                        {realBeats.map((beat, i) => (
                           <button
-                            key={beat.label}
-                            className={cx(
-                              styles.bbar,
-                              tier === "dim" && styles.bbarDim,
-                              tier === "nearby" && styles.bbarNearby,
-                              tier === "selected" && styles.bbarSelected
-                            )}
-                            style={{ height: `${beat.heightPct}%` }}
+                            key={beat.id}
+                            className={cx(styles.blabel, i === selectedBeatIndex && styles.blabelSelected)}
                             onClick={() => setSelectedBeatIndex(i)}
-                            aria-label={beat.label}
-                          ></button>
-                        );
-                      })}
+                          >
+                            {beat.title}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className={styles.beatLabels}>
-                      {BEATS.map((beat, i) => (
-                        <button
-                          key={beat.label}
-                          className={cx(styles.blabel, i === selectedBeatIndex && styles.blabelSelected)}
-                          onClick={() => setSelectedBeatIndex(i)}
-                        >
-                          {beat.label}
-                        </button>
-                      ))}
+
+                    <div className={styles.beatSelectedRow}>
+                      <div className={styles.beatSelectedIcon}>✦</div>
+                      <div className={styles.beatSelectedName}>{selectedBeat.title}</div>
+                    </div>
+
+                    <div className={styles.beatUnsure}>
+                      Not sure which beat? <a>Skip this and the community can help place it</a>
                     </div>
                   </div>
-
-                  <div className={styles.beatSelectedRow}>
-                    <div className={styles.beatSelectedIcon}>✦</div>
-                    <div className={styles.beatSelectedName}>{selectedBeat.label}</div>
-                    <div className={styles.beatSelectedCount}>{selectedBeat.count} items already here</div>
-                  </div>
-
-                  <div className={styles.beatUnsure}>
-                    Not sure which beat? <a>Skip this and the community can help place it</a>
-                  </div>
-                </div>
+                )}
               </div>
 
               <div className={styles.field}>
@@ -380,7 +389,7 @@ export default function SubmitPage() {
                 Content stays pending review until a second contributor confirms the placement.{" "}
                 <a>How placement works →</a>
               </div>
-              <button className={styles.btnContinue} onClick={() => setStep(3)}>
+              <button className={styles.btnContinue} onClick={() => setStep(3)} disabled={!selectedBeat}>
                 Continue →
               </button>
             </div>
@@ -393,7 +402,7 @@ export default function SubmitPage() {
             <div className={styles.completedCheck}>✓</div>
             <div className={styles.completedInfo}>
               <div className={styles.completedTitle}>
-                {SERIES_DETECTED.name} · {ARC_DETECTED.name} · {selectedBeat.label}
+                {SERIES_DETECTED.name} · {ARC_DETECTED.name} · {selectedBeat.title}
               </div>
               <div className={styles.completedMeta}>
                 {contentType} · {characters.length} character{characters.length === 1 ? "" : "s"} tagged
@@ -437,7 +446,7 @@ export default function SubmitPage() {
                     contentType={[contentType]}
                     characterTags={characters.map((c) => c.name)}
                     sourceUrl={url || "#"}
-                    beatLabel={selectedBeat.label}
+                    beatLabel={selectedBeat.title}
                   />
                 </div>
               </div>
