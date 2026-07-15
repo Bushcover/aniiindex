@@ -5,6 +5,7 @@ import ContentTabs from "@/components/ContentTabs";
 import IntensityChart from "@/components/IntensityChart";
 import BeatSection from "@/components/BeatSection";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
+import { getArcBeats, getArcContent } from "@/lib/supabase";
 
 // AniList numeric id for the series this arc belongs to (Jujutsu Kaisen).
 // Every slug currently renders this same hardcoded arc (see PROJECT.md), so
@@ -187,14 +188,48 @@ const BEATS = [
   },
 ];
 
+// Groups real content items under their real beat, in the same order the
+// beats table returned (already sorted by order_index). Every beat gets a
+// section — including ones with zero items — per the task: a beat with no
+// submissions yet shows its header with no cards, not a hardcoded stand-in.
+function buildBeatSections(beats, content) {
+  const itemsByBeatId = new Map();
+  for (const item of content) {
+    if (!itemsByBeatId.has(item.beat_id)) itemsByBeatId.set(item.beat_id, []);
+    itemsByBeatId.get(item.beat_id).push(item);
+  }
+
+  return beats.map((beat) => {
+    const items = itemsByBeatId.get(beat.id) ?? [];
+    return {
+      title: beat.title,
+      count: items.length,
+      peakLabel: beat.is_peak ? "Peak moment" : null,
+      items: items.map((item) => ({
+        platform: item.platform,
+        thumbnailUrl: item.thumbnail_url,
+        title: item.title,
+        creator: item.creator,
+        contentType: item.content_type,
+        characterTags: item.character_tags,
+        sourceUrl: item.source_url,
+      })),
+    };
+  });
+}
+
 export default async function ArcPage({ params }) {
-  const [seriesResult, charactersResult] = await Promise.allSettled([
+  const [seriesResult, charactersResult, beatsResult, contentResult] = await Promise.allSettled([
     getSeriesById(ANILIST_SERIES_ID),
     getSeriesCharacters(ANILIST_SERIES_ID),
+    getArcBeats(params.slug),
+    getArcContent(params.slug),
   ]);
 
   const series = seriesResult.status === "fulfilled" ? seriesResult.value : null;
   const realCharacters = charactersResult.status === "fulfilled" ? charactersResult.value : null;
+  const realArcBeats = beatsResult.status === "fulfilled" ? beatsResult.value : null;
+  const realArcContent = contentResult.status === "fulfilled" ? contentResult.value : null;
 
   const seriesName = series ? series.title.english || series.title.romaji : ARC.breadcrumb[0];
   const description = series?.description || ARC.description;
@@ -206,6 +241,21 @@ export default async function ArcPage({ params }) {
     description,
     characters,
   };
+
+  // `getArcBeats`/`getArcContent` both resolve to `null` specifically when
+  // `params.slug` doesn't match a seeded arc — treated as one signal so the
+  // page never mixes real beats with hardcoded content or vice versa.
+  const arcFoundInDb = realArcBeats !== null && realArcContent !== null;
+
+  const intensityBeats = arcFoundInDb
+    ? realArcBeats.map((beat) => ({
+        label: beat.title,
+        heightPct: beat.intensity,
+        tier: beat.is_peak ? "peak" : beat.intensity >= 50 ? "high" : "normal",
+      }))
+    : INTENSITY_BEATS;
+
+  const beatSections = arcFoundInDb ? buildBeatSections(realArcBeats, realArcContent) : BEATS;
 
   return (
     <>
@@ -233,10 +283,10 @@ export default async function ArcPage({ params }) {
       <ContentTabs tabs={TABS} />
 
       <div className="container">
-        <IntensityChart beats={INTENSITY_BEATS} />
+        <IntensityChart beats={intensityBeats} />
 
         <div className="content-body">
-          {BEATS.map((beat) => (
+          {beatSections.map((beat) => (
             <BeatSection key={beat.title} beat={beat} />
           ))}
         </div>

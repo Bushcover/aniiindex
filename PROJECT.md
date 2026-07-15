@@ -897,6 +897,113 @@ branch, and the one Vercel treats as Production) and pushing there
 instead (see the top-level branch note). With that fixed, `app/api/check-
 env/route.js` has served its purpose and was deleted.
 
+## Session 11
+
+Wired the arc page to read real story beats and real submitted content
+from Supabase, replacing the hardcoded `INTENSITY_BEATS`/`BEATS` consts
+whenever the URL's `[slug]` matches a seeded arc — the first page in the
+project where `params.slug` actually drives a database query, not just
+an `active` flag in `ARC_NAV`.
+
+- **`lib/supabase.js`** gained two new functions, plus a private
+  (unexported) `getArcRowBySlug(arcSlug)` helper both of them share:
+  - `getArcBeats(arcSlug)` — fetches an arc's `beats` rows (`id`, `title`,
+    `order_index`, `intensity`, `is_peak`), ordered by `order_index`
+    ascending.
+  - `getArcContent(arcSlug)` — fetches that arc's `content_items` where
+    `status` is `'confirmed'` or `'pending'`, joined with each item's
+    `beats(order_index)` (a to-one embed via `beat_id`) so the results can
+    be sorted by the beat's `order_index` ascending, then `created_at`
+    descending within a beat. PostgREST's cross-table `order` syntax for
+    a to-one embed is real but not something this session wanted to
+    depend on sight-unseen (this sandbox can't reach Supabase to verify
+    it works as expected) — so the DB query orders by `created_at`
+    descending only, and the actual required order (beat first, then
+    recency) is applied in JS after the fetch, which is simple to reason
+    about and easy to unit-test independent of PostgREST version
+    behavior.
+  - Both functions share `getArcRowBySlug`'s "not found" contract: if no
+    arc matches the slug, `getArcRowBySlug` returns `null` (checking for
+    PostgREST's `PGRST116` "no rows" error code specifically) and both
+    public functions return `null` in turn. Any *other* error (RLS,
+    network) is rethrown rather than swallowed, so — matching this
+    project's established `Promise.allSettled` pattern from Sessions
+    7–8 — a genuine failure and a nonexistent arc both still land the
+    caller in its fallback path, but for callers that want to
+    distinguish them, the distinction is preserved rather than collapsed
+    at the source.
+- **`app/arc/[slug]/page.jsx`** now calls `getArcBeats(params.slug)` and
+  `getArcContent(params.slug)` alongside the existing AniList calls, all
+  via one `Promise.allSettled` (same independent-fallback pattern as
+  Session 7). `arcFoundInDb` is `true` only when *both* calls resolved to
+  a non-`null` array — deliberately treated as one combined signal so the
+  page can never end up mixing real beats against hardcoded cards or vice
+  versa (a subtler kind of broken than an outright error).
+  - **When the arc is found**: `intensityBeats` is built straight from
+    the real `beats` rows (`label` ← `title`, `heightPct` ← `intensity`,
+    `tier` ← `"peak"` if `is_peak`, else `"high"` at `intensity >= 50`,
+    else `"normal"` — the same 50-point threshold the original hardcoded
+    `INTENSITY_BEATS` effectively used, confirmed by comparing the two
+    side by side). A new `buildBeatSections(beats, content)` helper groups
+    the real content items by `beat_id` and produces one section **per
+    real beat, always** — including beats with zero items, per the task:
+    a beat with nothing submitted yet shows its header (with `0 items`)
+    and an empty card grid, never a hardcoded placeholder card standing
+    in for missing real data. `count` on each section is the real item
+    count (not a fabricated inflated number like the hardcoded data's
+    placeholder counts), and `peakLabel` is `"Peak moment"` for any
+    `is_peak` beat (the hardcoded data's second, distinct "Highest
+    moment" label for one specific beat has no real equivalent to derive
+    from, so real peak beats all read the same).
+  - **When the arc isn't found** (or either call rejected): both
+    `intensityBeats` and the beat sections fall back to the original
+    hardcoded `INTENSITY_BEATS`/`BEATS` consts, unchanged — every other
+    slug still renders the Shibuya mockup data exactly as before this
+    session, and the page never breaks or shows a partial/empty state for
+    an arc that simply isn't wired up to real data yet.
+  - Nothing else on the arc page changed — `ARC_NAV`, `ARC`'s own
+    fields (name, episodes, badges, stats), and `TABS` are all still
+    fully hardcoded, and the AniList-backed breadcrumb/description/
+    character wiring from Session 7 is untouched.
+- **Verified with a local mock PostgREST server**, since this sandbox
+  cannot reach `*.supabase.co` (same restriction as every Supabase-related
+  session since Session 9): wrote a small Node HTTP server reproducing
+  the exact three request/response shapes `getArcRowBySlug`/`getArcBeats`/
+  `getArcContent` make (including PostgREST's real `PGRST116`/406
+  behavior for `.single()` finding zero rows), pointed
+  `NEXT_PUBLIC_SUPABASE_URL` at it for a real `next build` + `next start`,
+  and fetched the actual rendered HTML — not a mocked browser fetch, but
+  the real Next.js server doing real SSR against a real HTTP server that
+  happens to be a stand-in for Supabase. Confirmed, reading the rendered
+  HTML directly:
+  - `/arc/shibuya-incident-arc` (mocked as a seeded arc, with one mocked
+    `content_items` row on the "The Sealing" beat) rendered all 10 real
+    beat titles in both the intensity chart and the beat sections, the
+    mocked item's title/creator/platform/tags appeared as a real
+    `ContentCard` under "The Sealing" specifically (item count `1`), all
+    9 other beats rendered with item count `0` and an empty card grid,
+    "The Sealing" and "Yuji breaks" carried the peak styling, and zero
+    hardcoded fallback strings (e.g. "Curtain falls & Shibuya Station")
+    appeared anywhere in the page.
+  - `/arc/totally-unknown-arc-slug` (mocked as not seeded) rendered the
+    original hardcoded 3-section `BEATS` data and hardcoded
+    `INTENSITY_BEATS` exactly as before this session, with zero real-data
+    strings (the mocked item's title) appearing anywhere.
+  - Restored the real Supabase env vars and rebuilt afterward to confirm
+    no test state leaked into the actual deploy.
+- **Not verified against the real, live Supabase project** — this
+  sandbox's network policy still blocks `*.supabase.co`. The task asked
+  to submit a real item through `/submit` and confirm it shows up on the
+  arc page; that step needs to happen from a real browser outside this
+  sandbox. Given the mock-server verification above exercises the exact
+  same code path end-to-end (including the real query shapes and the
+  real grouping/fallback logic), the expected outcome is: after running
+  the Session 10 seed SQL and submitting a link on `/submit` (which
+  writes to `content_items` with `status: 'pending'`), reloading
+  `/arc/shibuya-incident-arc` should show that submission as a real card
+  under whichever beat was selected, with every other beat showing 0
+  items — matching exactly what the mock server test demonstrated.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -1064,7 +1171,7 @@ app/
   series/[slug]/series.module.css  Styles unique to the series page
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
-  supabase.js             Exports a shared Supabase client (see Session 9 notes above); used by app/submit/page.jsx as of Session 10
+  supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11)
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
@@ -1242,9 +1349,10 @@ database/API:
 - `ARC_NAV` — the list of arcs shown in the horizontal strip, with fan-item
   counts and which one is "active". Will come from a per-series "arcs"
   table/endpoint, keyed by the same `slug` the route already receives via
-  `params.slug` (not yet used — the page always renders the Shibuya arc,
-  and the same hardcoded AniList series id, regardless of the URL's
-  `[slug]`).
+  `params.slug`. **`params.slug` itself is now used** (Session 11) — just
+  not here yet; `getArcBeats`/`getArcContent` key off it, but `ARC_NAV`'s
+  own list and `active` flag are still the fixed array above regardless of
+  which slug is in the URL.
 - `ARC` — arc-specific metadata that's still fully hardcoded: name,
   episode range, season/date line, badges, and the four top-line stats.
   (`breadcrumb[0]`, `description`, and `characters` are overridden by
@@ -1255,22 +1363,25 @@ database/API:
   computed from the real content index; only "All" is meaningful right
   now since the other tabs don't yet filter anything (no filtering logic
   has been wired up).
-- `INTENSITY_BEATS` — the ten story-beat bars (label, bar height, tier).
-  Bar heights are hand-picked to look right in the mockup; a real version
-  will derive `heightPct` from some engagement/intensity metric per beat
-  and derive `tier` from thresholds on that metric instead of being
-  hand-assigned.
-- `BEATS` — the three story-beat sections and their content cards
-  (`platform`, `thumbnailUrl`, `title`, `creator`, `contentType`,
-  `characterTags`, `sourceUrl` — currently `"#"` for every card). This is
-  the actual fan-content index data and will come from the content
-  database — one row per submitted item, with real thumbnails, real
-  outbound links, and moderation state. Note: `thumbnailUrl` currently
-  holds a CSS `linear-gradient(...)` string (there are no real images
-  yet) — `ContentCard` applies it directly as the thumbnail's
-  `background`, which works for a gradient string today but will need to
-  switch to a real `background-image: url(...)` or an `<img>` once actual
-  thumbnail images exist.
+- `INTENSITY_BEATS` — **fallback only, as of Session 11.** When
+  `params.slug` matches a seeded arc, the intensity chart is built from
+  real `beats` rows via `getArcBeats` instead (see the Session 11 notes
+  above); this hand-picked array only renders for a slug that isn't in
+  the database yet (i.e. everything except `shibuya-incident-arc` today).
+- `BEATS` — **fallback only, as of Session 11**, same as
+  `INTENSITY_BEATS` above. When the arc is found in the database, the
+  beat sections and their `ContentCard`s are built from real
+  `content_items`/`beats` rows via `getArcContent`/`getArcBeats`
+  (`buildBeatSections` in `app/arc/[slug]/page.jsx`) — one section per
+  real beat, including beats with zero submitted items, rather than this
+  three-section, always-populated hardcoded array. `thumbnailUrl` for
+  real content items is still whatever `content_items.thumbnail_url`
+  holds — currently a CSS `linear-gradient(...)` string for the one item
+  seeded/submitted so far (Session 10's `/submit` flow doesn't do real
+  thumbnail extraction either), same caveat as the hardcoded data it
+  replaces: will need to switch to a real `background-image: url(...)`
+  or an `<img>` once actual thumbnail images exist anywhere in the
+  pipeline.
 
 ## Hardcoded data (in `app/submit/page.jsx`)
 
@@ -1321,11 +1432,18 @@ database/API:
 
 ## Explicitly not done
 
-- No routing/data logic keyed off the `[slug]` param — every slug renders
-  the same hardcoded Shibuya Incident Arc, including the arc links
-  clicked from the search page and the home page's trending arc cards
-  (`/arc/introduction-arc`, `/arc/rumbling-arc`, etc. all currently
-  render the same Shibuya page).
+- **Partially resolved in Session 11**: `params.slug` now drives real
+  queries (`getArcBeats`/`getArcContent`) for the intensity chart and beat
+  sections — `/arc/shibuya-incident-arc` shows real data, any other slug
+  falls back to the hardcoded Shibuya mockup data (see the Session 11
+  notes above). Still not real: `ARC_NAV`, `ARC`'s own fields (name,
+  episodes, badges, stats), and `TABS` are all still the same fixed data
+  regardless of the URL's `[slug]` — the arc links clicked from the
+  search page and the home page's trending arc cards
+  (`/arc/introduction-arc`, `/arc/rumbling-arc`, etc.) render real beats
+  only if that exact slug happens to be seeded (today, only
+  `shibuya-incident-arc` is), and the hardcoded Shibuya mockup data for
+  everything else on the page regardless.
 - **Resolved in Session 6**: the `?q=` query param on `/search` is now
   read and drives a real AniList lookup for the series panel. What's
   still not real: the arc list, characters, "also found," and top
@@ -1335,11 +1453,13 @@ database/API:
 - No tab/filter-pill filtering on any page — clicking a tab or a filter
   pill doesn't change which items are shown.
 - No auth — the nav's "Sign in" buttons and character chip links are
-  still static, non-functional markup. **Partially resolved in Session
-  9/10**: a real database (Supabase) now exists, and `/submit`'s final
-  step genuinely writes to it (see below) — but nothing reads from
-  Supabase yet, and there's still no login/identity system behind
-  `submitted_by` (hardcoded to the string `"anonymous"`).
+  still static, non-functional markup. **Partially resolved in Sessions
+  9–11**: a real database (Supabase) now exists, `/submit`'s final step
+  genuinely writes to it, and the arc page reads real beats/content back
+  out for seeded arcs (see below) — but there's still no login/identity
+  system behind `submitted_by` (hardcoded to the string `"anonymous"`),
+  and no moderation UI reads/changes a `content_items` row's `status`
+  beyond the hardcoded `'pending'` every submission is written with.
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
 - No real link resolution or series/arc/character/beat *detection* on
