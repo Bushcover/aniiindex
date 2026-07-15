@@ -2,7 +2,7 @@
 
 A fan content index for anime series. No API or database is connected
 yet — everything on the arc page is hardcoded sample data for the
-"Shibuya Incident Arc" (Jujutsu Kaisen).
+"Shibuya Incident Arc" (Jujutsu Kaisen). 
 
 ## Session 1
 
