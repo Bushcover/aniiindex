@@ -41,13 +41,13 @@ function detectPlatform(hostname) {
   return match ? match.platform : null;
 }
 
-function detectCreator(platform, parsedUrl, ogSiteName) {
+// YouTube is handled entirely by fetchYouTubeOEmbed below, so this never
+// sees a "youtube" platform in practice — kept scoped to the platforms
+// that still go through the HTML-scraping path.
+function detectCreator(platform, parsedUrl) {
   if (platform === "tiktok") {
     const match = parsedUrl.pathname.match(/\/@([^/?#]+)/);
     if (match) return `@${match[1]}`;
-  }
-  if (platform === "youtube" && ogSiteName) {
-    return ogSiteName;
   }
   return parsedUrl.hostname.replace(/^www\./, "");
 }
@@ -107,6 +107,32 @@ async function fetchHtml(targetUrl) {
   }
 }
 
+// YouTube actively blocks/serves incomplete markup to server-side scraping
+// (confirmed: real YouTube submissions were coming back as "Untitled link"
+// with no thumbnail via the regular og:* scrape), so YouTube uses its own
+// public oEmbed endpoint instead — no API key required, and it's a fixed,
+// known host we're fetching (`www.youtube.com`), not the user-supplied URL
+// itself, so this doesn't need the SSRF hostname check that guards the
+// general scrape path (the raw `targetUrl` is only ever passed along as an
+// encoded query *value*, never fetched directly).
+async function fetchYouTubeOEmbed(targetUrl) {
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(targetUrl)}&format=json`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(oembedUrl, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      throw new Error(`YouTube's oEmbed endpoint responded with ${res.status}.`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function POST(request) {
   let body;
   try {
@@ -135,6 +161,27 @@ export async function POST(request) {
     return Response.json({ error: "This URL can't be fetched." }, { status: 400 });
   }
 
+  const platform = detectPlatform(parsedUrl.hostname);
+
+  if (platform === "youtube") {
+    let oembed;
+    try {
+      oembed = await fetchYouTubeOEmbed(parsedUrl.toString());
+    } catch (err) {
+      const message =
+        err.name === "AbortError"
+          ? "That link took too long to respond."
+          : err.message || "Couldn't reach YouTube's oEmbed endpoint.";
+      return Response.json({ error: message }, { status: 502 });
+    }
+    return Response.json({
+      title: oembed.title ?? null,
+      thumbnailUrl: oembed.thumbnail_url ?? null,
+      platform: "youtube",
+      creator: oembed.author_name ?? null,
+    });
+  }
+
   let html;
   try {
     html = await fetchHtml(parsedUrl.toString());
@@ -148,12 +195,15 @@ export async function POST(request) {
 
   const ogTitle = extractMetaTag(html, "og:title");
   const ogImageRaw = extractMetaTag(html, "og:image");
-  // Extracted per spec but not currently surfaced in the response — no
-  // consumer needs it yet; kept here so a future caller doesn't have to
-  // re-add the extraction.
+  // Both extracted per spec but not currently surfaced in the response or
+  // used in creator detection (og:site_name's only consumer, YouTube, is
+  // now handled entirely by the oEmbed branch above) — no consumer needs
+  // them yet; kept here so a future caller doesn't have to re-add the
+  // extraction.
   const ogDescription = extractMetaTag(html, "og:description");
   const ogSiteName = extractMetaTag(html, "og:site_name");
   void ogDescription;
+  void ogSiteName;
 
   // A handful of real-world sites emit a relative og:image path, which
   // technically violates the OG spec but is common enough to be worth
@@ -167,8 +217,7 @@ export async function POST(request) {
     }
   }
 
-  const platform = detectPlatform(parsedUrl.hostname);
-  const creator = detectCreator(platform, parsedUrl, ogSiteName);
+  const creator = detectCreator(platform, parsedUrl);
 
   return Response.json({
     title: ogTitle,

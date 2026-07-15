@@ -1364,6 +1364,68 @@ user actually types in.
   the complete pipeline, not just the API route in isolation. Restored
   `/etc/hosts` and stopped all mock servers afterward.
 
+### Session 12 follow-up: YouTube blocks server-side scraping — use oEmbed instead
+
+Real YouTube submissions were coming back as "Untitled link" with no
+thumbnail — YouTube actively blocks/serves incomplete markup to
+server-side scrapers (no real `og:*` tags in the HTML a plain server-side
+`fetch()` gets back), so the regex-based scrape that works for TikTok/
+Reddit/etc. never had real data to extract for YouTube.
+
+Fixed by giving YouTube its own path in `app/api/og-fetch/route.js`,
+using YouTube's public oEmbed endpoint instead of scraping:
+
+- After the existing scheme/SSRF checks, platform is now detected
+  *before* deciding how to fetch (previously this happened at the end,
+  after scraping). If `platform === "youtube"`, a new
+  `fetchYouTubeOEmbed(targetUrl)` calls
+  `https://www.youtube.com/oembed?url=<encoded target>&format=json` — no
+  API key needed — and the response is mapped directly: `title` →
+  `title`, `author_name` → `creator`, `thumbnail_url` → `thumbnailUrl`,
+  `platform` hardcoded to `"youtube"`. Everything else (TikTok, X,
+  Instagram, Reddit, unrecognized domains) still goes through the
+  original HTML-scraping path unchanged.
+- This fetch **doesn't need the SSRF hostname blocklist** the scrape path
+  has — it always fetches the fixed, known host `www.youtube.com`, never
+  the user-supplied URL directly (that URL is only ever passed along as
+  an encoded query *value*, which YouTube's own service resolves on
+  their end, not ours).
+- Same 8-second `AbortController` timeout as the scrape path, and the
+  same clean-error-message contract on failure (a 404 from oEmbed, e.g.
+  for a private/deleted video, or a 5xx, both surface as a normal
+  `{ error: "..." }` response rather than a crash).
+- `detectCreator` no longer has a YouTube-specific branch (its only
+  purpose was reading `og:site_name`, which in practice usually just
+  said "YouTube" itself rather than the channel name — see the original
+  Session 12 caveat above) — dead code once every YouTube URL is
+  redirected to the oEmbed branch before ever reaching it. `og:site_name`
+  is still extracted from the HTML for the remaining platforms (per the
+  original task's tag list) but is unused now that its one consumer is
+  gone, same as `og:description`.
+- **Verified against a real running instance of the route**, not just
+  logic review — this couldn't be tested with a plain HTTP mock like the
+  original Session 12 verification, since the oEmbed URL is hardcoded to
+  `https://www.youtube.com`, and Node's own `fetch()` needs a TLS
+  connection there. Rather than disable certificate verification (which
+  would be a real, unnecessary weakening), generated a throwaway test CA
+  and a `www.youtube.com` server cert signed by it, ran a local HTTPS
+  mock oEmbed server with that cert, redirected `www.youtube.com` to
+  `127.0.0.1` via a temporary `/etc/hosts` entry, and started the real
+  Next.js server with `NODE_EXTRA_CA_CERTS` pointed at the test CA —
+  scoping trust to exactly that one test certificate rather than
+  disabling verification globally. (Confirmed first that Node's built-in
+  `fetch()`, unlike `curl`, doesn't automatically honor this sandbox's
+  `HTTPS_PROXY` env var, so this direct connection was actually reaching
+  the local mock rather than being silently proxied/blocked.) Against the
+  real running route: a `youtube.com/watch` URL and a `youtu.be` short
+  URL both correctly returned the real title/creator/thumbnail from the
+  mocked oEmbed response; a mocked private/deleted-video 404 and a mocked
+  5xx both produced clean error messages. Re-ran the original TikTok and
+  Reddit tests too, unchanged, to confirm the refactor (moving platform
+  detection earlier, simplifying `detectCreator`'s signature) didn't
+  regress the existing paths. All test certs, mock servers, and
+  `/etc/hosts` changes were removed/reverted afterward.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
