@@ -30,6 +30,27 @@ const PLATFORM_META = {
 // to render, not crash.
 const DEFAULT_PLATFORM_META = { className: "", compactClassName: "", icon: "🔗", label: "Link" };
 
+// `thumbnailUrl` is either a real image URL (Session 12's real OG/oEmbed
+// data) or a plain CSS value like a gradient (this app's hardcoded
+// placeholder data, still the default everywhere real detection hasn't
+// happened). `background: <bare URL>` is invalid CSS and gets silently
+// dropped by the browser — only `url(...)` wrapped inside
+// background-image actually renders an image. Detect which kind of value
+// this is and apply it correctly either way. Exported since
+// app/submit/page.jsx's step 1 preview card renders a thumbnail the same
+// way, independent of this component.
+export function getThumbnailStyle(thumbnailUrl) {
+  if (!thumbnailUrl) return {};
+  if (/^https?:\/\//i.test(thumbnailUrl)) {
+    return {
+      backgroundImage: `url(${thumbnailUrl})`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    };
+  }
+  return { background: thumbnailUrl };
+}
+
 export default function ContentCard({
   title,
   creator,
@@ -55,7 +76,7 @@ export default function ContentCard({
         rel="noreferrer"
         aria-label={ariaLabel}
       >
-        <div className={styles.compactThumb} style={{ background: thumbnailUrl }}>
+        <div className={styles.compactThumb} style={getThumbnailStyle(thumbnailUrl)}>
           <div className={`${styles.compactPlt} ${meta.compactClassName}`}>
             {meta.icon} {meta.label}
           </div>
@@ -82,7 +103,7 @@ export default function ContentCard({
 
   return (
     <a className="card" href={sourceUrl} target="_blank" rel="noreferrer" aria-label={ariaLabel}>
-      <div className="thumb" style={{ background: thumbnailUrl }}>
+      <div className="thumb" style={getThumbnailStyle(thumbnailUrl)}>
         <div className={`plt ${meta.className}`}>
           {meta.icon} {meta.label}
         </div>

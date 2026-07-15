@@ -1449,6 +1449,63 @@ actually flow through the app instead of only gradients). Flagged this
 directly rather than silently complying with a diagnosis the codebase
 doesn't support.
 
+### Session 12 follow-up: the actual thumbnail bug — invalid CSS, not a domain allowlist
+
+The `remotePatterns` addition above didn't fix it, as flagged — the real
+bug was in how `thumbnailUrl` gets applied as a style, found by checking
+exactly what the previous follow-up predicted needed checking.
+
+- **The DB save path is correct** — traced
+  `resolvedLink.thumbnailUrl` (the raw `/api/og-fetch` response) →
+  `effectiveLink.thumbnailUrl` → `thumbnail_url` on the `content_items`
+  insert in `app/submit/page.jsx`; no bug in that chain. Not verified
+  against the live database directly (this sandbox still can't reach
+  `*.supabase.co`) — to check the actual stored value for a real
+  submission yourself:
+  ```sql
+  select title, platform, thumbnail_url, created_at
+  from content_items
+  where platform = 'youtube'
+  order by created_at desc
+  limit 5;
+  ```
+- **The real bug: `components/ContentCard.jsx` applied `thumbnailUrl` as
+  `style={{ background: thumbnailUrl }}`.** This works for the app's
+  hardcoded placeholder data, which is always a CSS gradient string
+  (`background: linear-gradient(...)` is valid CSS) — but for a real
+  image URL (`background: "https://i.ytimg.com/vi/xxx/hqdefault.jpg"`),
+  a bare URL is **not valid CSS** for the `background` shorthand (it
+  needs `url(...)` wrapping); the browser silently drops the whole
+  declaration rather than erroring, so nothing renders. Confirmed this
+  precisely, not just by inspection: loaded a minimal HTML file with
+  `style="background:https://..."` in a real headless browser and read
+  `getComputedStyle(el).backgroundImage`, which came back `"none"`.
+- **Found the identical bug in a second location** while fixing the
+  first: `app/submit/page.jsx`'s step 1 "completed summary" preview card
+  had the exact same `style={{ background: effectiveLink.thumbnailUrl }}`
+  pattern — same root cause, same fix needed, just not the file the task
+  named.
+- **Fix**: added `getThumbnailStyle(thumbnailUrl)`, exported from
+  `components/ContentCard.jsx` (now genuinely used by two call sites, so
+  sharing it is warranted rather than premature) — returns
+  `{ backgroundImage: "url(...)", backgroundSize: "cover",
+  backgroundPosition: "center" }` for anything starting with `http(s)://`,
+  or falls back to the original `{ background: thumbnailUrl }` for
+  everything else (gradients, any other CSS value). Both `ContentCard`'s
+  `.thumb`/`.compactThumb` divs and the submit page's `.completedThumb`
+  div now use this instead of the raw inline style.
+- **Verified with real browser computed-style checks, not just visual
+  screenshots** (a real https image URL can't actually load in this
+  sandbox regardless, so a screenshot alone wouldn't prove much): on the
+  arc page (hardcoded gradient data, since Supabase is unreachable here)
+  confirmed `getComputedStyle(...).backgroundImage` still reads
+  `linear-gradient(...)` — no regression. Then, driving the submit
+  wizard with a mocked `/api/og-fetch` response carrying a real
+  `i.ytimg.com` thumbnail URL, confirmed both the step 1 completed-
+  summary card and the step 3 `ContentCard` preview now compute
+  `backgroundImage: url("https://i.ytimg.com/...")` — the fix genuinely
+  applies in both places, not just the one the task named.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ContentCard from "@/components/ContentCard";
+import ContentCard, { getThumbnailStyle } from "@/components/ContentCard";
 import { supabase, getArcBeats } from "@/lib/supabase";
 import styles from "./submit.module.css";
 
@@ -309,7 +309,7 @@ export default function SubmitPage() {
         {step > 1 && (
           <div className={styles.stepCompleted} style={{ marginBottom: 12 }}>
             <div className={styles.completedCheck}>✓</div>
-            <div className={styles.completedThumb} style={{ background: effectiveLink.thumbnailUrl }}>
+            <div className={styles.completedThumb} style={getThumbnailStyle(effectiveLink.thumbnailUrl)}>
               <div className={styles.completedPlt}>{PLATFORM_LABELS[effectiveLink.platform] || "Link"}</div>
             </div>
             <div className={styles.completedInfo}>
