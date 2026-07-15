@@ -84,22 +84,31 @@ export default function SubmitPage() {
     setSubmitError("");
 
     try {
+      console.log('[submit] querying arcs: select id from arcs where slug =', ARC_SLUG);
       const { data: arc, error: arcError } = await supabase
         .from("arcs")
         .select("id")
         .eq("slug", ARC_SLUG)
         .single();
+      console.log('[submit] arcs query result:', { arc, arcError });
       if (arcError || !arc) {
-        throw new Error("Couldn't find the Shibuya Incident Arc in the database.");
+        const detail = arcError
+          ? `${arcError.message}${arcError.code ? ` [${arcError.code}]` : ""}`
+          : "query returned no data";
+        throw new Error(`Couldn't find the Shibuya Incident Arc in the database (${detail}).`);
       }
 
+      console.log('[submit] querying beats: select id from beats where arc_id =', arc.id);
       const { data: beats, error: beatsError } = await supabase
         .from("beats")
         .select("id")
         .eq("arc_id", arc.id)
         .order("order_index", { ascending: true });
+      console.log('[submit] beats query result:', { beats, beatsError });
       if (beatsError) {
-        throw new Error("Couldn't load story beats for this arc.");
+        throw new Error(
+          `Couldn't load story beats for this arc (${beatsError.message}${beatsError.code ? ` [${beatsError.code}]` : ""}).`
+        );
       }
       const beatId = beats?.[selectedBeatIndex]?.id ?? null;
 
@@ -116,8 +125,9 @@ export default function SubmitPage() {
         status: "pending",
         submitted_by: "anonymous",
       });
+      console.log('[submit] content_items insert error:', insertError);
       if (insertError) {
-        throw new Error(insertError.message);
+        throw new Error(`${insertError.message}${insertError.code ? ` [${insertError.code}]` : ""}`);
       }
 
       setSubmitStatus("success");

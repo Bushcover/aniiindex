@@ -739,6 +739,101 @@ stay blocked for the `anon` role without needing an explicit deny rule.
 `content_items` will need a `SELECT` policy in a future session once some
 page actually reads submitted content back out (nothing does yet).
 
+### Session 10 follow-up: still failing after the RLS fix — diagnostics + a more defensive policy set
+
+After applying the RLS policies above, submissions still failed with the
+same "Couldn't find the Shibuya Incident Arc in the database" message,
+even with the row confirmed present by a direct SQL query. Three things
+were checked, since the generic error message couldn't distinguish
+between them:
+
+1. **Slug mismatch** — ruled out by direct comparison: `ARC_SLUG` in
+   `app/submit/page.jsx` is the literal string `"shibuya-incident-arc"`,
+   character-for-character identical to the seed SQL's
+   `where arcs.slug = 'shibuya-incident-arc'`. No typo, no case mismatch,
+   confirmed by `grep`, not by inspection alone.
+2. **Client falling back to the placeholder URL** — `lib/supabase.js` now
+   logs `supabaseUrl`, whether an anon key is present, and whether the
+   placeholder fallback is active, at module load. This runs both during
+   `next build`'s static prerender of `/submit` (so it's visible in
+   Vercel's build log — confirmed locally: `[lib/supabase] url:
+   https://trpikvadorxrhvhreyyy.supabase.co | anon key present: true |
+   using placeholder fallback: false`) and in the browser console when
+   the page loads client-side. This doesn't run "on the server" in the
+   sense of a server-side request handler — `/submit` is a fully client
+   component, so there's no server-side code path at submit time to log
+   from; the build-time log is the closest equivalent, and the browser
+   console covers the runtime path.
+3. **RLS still not actually taking effect** — this is the most likely
+   remaining cause, and the previous fix's policies were narrowed to
+   `to anon` specifically. This project's Supabase anon key is the
+   *newer* `sb_publishable_...`-format key rather than a legacy anon JWT;
+   while Supabase documents this as mapping to the same Postgres `anon`
+   role for RLS purposes, there was no way to confirm that mapping from
+   this sandbox (outbound network access to `*.supabase.co` is blocked
+   here, same as every prior session's Supabase/AniList caveats). Rather
+   than guess, two things were done: a read-only query to directly
+   inspect the *actual* policy/RLS state in Supabase (so this can be
+   confirmed instead of assumed), and a reissued policy set that drops
+   the `to anon` restriction — defaulting to `PUBLIC` (all roles) removes
+   any possible role-name mismatch as a variable. This is no less secure
+   for this app specifically, since there's no authenticated-user role in
+   use anywhere yet — `PUBLIC` and `anon` are equivalent in practice here.
+
+Also made the arc/beats/insert error paths surface the *real* underlying
+Supabase error (message + Postgres/PostgREST error code, e.g. `PGRST116`
+for "no rows returned by `.single()`") instead of one generic string for
+every possible failure — the red error banner on `/submit` itself is now
+diagnostic, so the actual cause shows up in the UI without needing
+devtools. Also added `console.log`s around both queries (`arcs`, `beats`)
+and the `content_items` insert, logging the query being made and its raw
+result/error.
+
+**Step 1 — inspect the real state** (run in the Supabase SQL editor, read
+the output, no changes made):
+
+```sql
+select relname as table_name, relrowsecurity as rls_enabled
+from pg_class
+where relname in ('series', 'arcs', 'beats', 'content_items');
+
+select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+from pg_policies
+where tablename in ('series', 'arcs', 'beats', 'content_items');
+```
+
+If `rls_enabled` is `false` for `arcs`, the earlier `alter table ... enable
+row level security` never ran. If the second query returns zero rows (or
+is missing a `select` policy on `arcs`), the policies from the previous
+fix were never created — likely because that whole script wasn't actually
+run, or a later statement in the same script errored out and Supabase's
+SQL editor stopped executing before reaching the `arcs` policy.
+
+**Step 2 — reissue policies, `PUBLIC` instead of `anon`** (safe to
+re-run; drops by name first so it doesn't error on a second run):
+
+```sql
+drop policy if exists "Public read access on series" on series;
+drop policy if exists "Public read access on arcs" on arcs;
+drop policy if exists "Public read access on beats" on beats;
+drop policy if exists "Public insert access on content_items" on content_items;
+
+alter table series enable row level security;
+alter table arcs enable row level security;
+alter table beats enable row level security;
+alter table content_items enable row level security;
+
+create policy "Public read access on series" on series for select using (true);
+create policy "Public read access on arcs" on arcs for select using (true);
+create policy "Public read access on beats" on beats for select using (true);
+create policy "Public insert access on content_items" on content_items for insert with check (true);
+```
+
+Not verified live in this session — this sandbox cannot reach
+`*.supabase.co`. The Step 1 query's output, plus the now-diagnostic error
+banner on `/submit` after this deploy, together should make the actual
+root cause unambiguous on the next attempt.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
