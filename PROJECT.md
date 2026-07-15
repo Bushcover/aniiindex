@@ -635,6 +635,50 @@ Two parts:
      Supabase's Table Editor.
 - `next build` passes with no new errors or warnings after these changes.
 
+### Session 10 follow-up: fix Vercel build crash (`supabaseUrl is required`)
+
+The Vercel deploy failed prerendering `/submit` with `Error: supabaseUrl
+is required.` — `next build` statically prerenders `/submit` (it's a
+static route with no per-request data needs), which runs every module it
+imports, including `lib/supabase.js`, once in Node during the build.
+`lib/supabase.js` called `createClient(supabaseUrl, supabaseAnonKey)` at
+module scope with no fallback, and `createClient` throws synchronously if
+either argument is empty — so on Vercel, where `NEXT_PUBLIC_SUPABASE_URL`
+/ `NEXT_PUBLIC_SUPABASE_ANON_KEY` weren't set as project environment
+variables (`.env.local` is gitignored on purpose, per Session 9, so it
+never reached Vercel), just *importing* the module crashed the whole
+build — even though `/submit` never actually calls Supabase until a user
+clicks "Add to aniindex" in the browser, long after the page has loaded.
+
+Fixed by giving `lib/supabase.js` placeholder fallback values instead of
+letting `createClient` throw:
+
+```js
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-anon-key'
+);
+```
+
+Now the module always loads successfully; if the real env vars are
+genuinely missing, `supabase.from(...)` calls simply fail at the point
+they're used (a normal network/DNS error against the placeholder host)
+and surface through `/submit`'s existing try/catch as the red "Couldn't
+submit" banner, instead of taking down the entire build. Verified both
+ways locally: `next build` with `.env.local` temporarily removed (to
+reproduce Vercel's likely misconfigured state) now succeeds, and `next
+build` with the real values present still succeeds and behaves exactly
+as before.
+
+**This fixes the build, not the underlying missing configuration** — for
+`/submit` to actually work on the deployed Vercel site, `NEXT_PUBLIC_
+SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` still need to be added
+as real environment variables in the Vercel project's settings (Project
+→ Settings → Environment Variables), then redeployed. Without that,
+the deploy will succeed but every submission will fail with the "Couldn't
+submit" error, since the client falls back to the non-existent
+placeholder host.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
