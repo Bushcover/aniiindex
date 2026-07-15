@@ -507,6 +507,133 @@ Two bugs found after Session 8 shipped:
   search bar and pressing Enter navigates to `/search?q=One%20Piece` and
   renders One Piece's real AniList data, exactly like the search page.
 
+## Session 9
+
+Set up Supabase as the project's database — no tables are actually wired
+into any page yet, this session just lays the plumbing.
+
+- **Installed `@supabase/supabase-js`** (`npm install @supabase/supabase-js`).
+- **`lib/supabase.js`** — initializes and exports a single `supabase`
+  client via `createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)`, following the same
+  "one shared client, imported wherever needed" pattern `lib/anilist.js`
+  already established for AniList. `NEXT_PUBLIC_` prefix is required for
+  these to be readable client-side, matching Supabase's own docs — the
+  key involved is the publishable/anon key, which is designed to be
+  exposed in client code (RLS policies, not key secrecy, are what protect
+  the data).
+- **`.env.local`** — holds the real `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` values for this project's Supabase
+  instance. Verified `.env.local` was already covered by the existing
+  `.env*.local` line in `.gitignore` (no change needed) and confirmed with
+  `git check-ignore -v .env.local` that git actually ignores it before
+  doing anything else.
+- **Verified the client initializes correctly**: loaded `.env.local`,
+  called `createClient(...)` with the real values, and confirmed the
+  returned client has a working `.auth` and `.from(...)` — i.e. it's a
+  genuine, usable Supabase client, not just code that type-checks.
+- **Four tables designed, not yet created** — `series`, `arcs`, `beats`,
+  `content_items`, mirroring the hardcoded data shapes already used across
+  `app/arc/[slug]/page.jsx`, `app/search/page.jsx`, and
+  `app/series/[slug]/page.jsx` (see "Database schema" below for the full
+  SQL and column-by-column notes). Per the task, the SQL was handed to the
+  user to run manually in the Supabase SQL editor rather than executed by
+  any tool here — as of this session, none of these tables exist yet in
+  the actual Supabase project, and no page reads from or writes to
+  Supabase. That wiring (replacing the hardcoded `ARC`/`ARCS`/`BEATS`/etc.
+  consts with real queries) is future work.
+
+## Database schema
+
+Four tables, designed to eventually replace the hardcoded per-page consts
+documented above (`ARC_NAV`/`ARC`/`INTENSITY_BEATS`/`BEATS` on the arc
+page, `ARCS`/`CHARACTERS`/`TOP_CONTENT` on the search page, `ARCS` on the
+series page). Created manually via the Supabase SQL editor — not migrated
+through any tool in this repo yet.
+
+- **`series`** — one row per anime series. Keyed by `anilist_id` (unique)
+  so a series can be looked up or upserted from an AniList id the same
+  way `app/series/[slug]/page.jsx` already does; `slug` is aniindex's own
+  URL-friendly identifier (independent of the AniList id, unlike the
+  series page's current `[slug]` param, which *is* the raw AniList id).
+- **`arcs`** — one row per story arc, `series_id` foreign-keyed to
+  `series`. Also keeps its own `anilist_series_id` alongside the
+  `series_id` foreign key, so an arc's originating AniList series is
+  always recoverable even without a join. `episode_start`/`episode_end`
+  match the arc page's existing episode-range meta line; `order_index`
+  drives the arc strip / arc list ordering that `ARC_NAV`/`ARCS` currently
+  hardcode by array order.
+- **`beats`** — one row per story beat within an arc, `arc_id`
+  foreign-keyed to `arcs` (required — a beat always belongs to an arc).
+  `intensity` and `is_peak` are the real-data equivalents of
+  `INTENSITY_BEATS`' hand-picked `heightPct`/`tier` values; `order_index`
+  replaces relying on array position for beat ordering.
+- **`content_items`** — one row per submitted fan-content link, i.e. the
+  real backing store for what `BEATS[].items` (arc page) and
+  `TOP_CONTENT` (search page) currently hardcode, and what `/submit`'s
+  wizard would eventually insert into once its "Coming soon" button is
+  wired up. `arc_id` is required; `beat_id` is optional (nullable) since
+  a submission could plausibly land at the arc level before/without a
+  specific beat assignment. `status` (default `'pending'`) and
+  `submitted_by` anticipate the moderation workflow `/submit` currently
+  has no backend for; `confirmation_count` anticipates some future
+  "confirm this is accurate" community signal that doesn't exist in the
+  UI yet. `character_tags` is a Postgres `text[]`, matching
+  `ContentCard`'s existing `characterTags` array prop directly — no
+  join table needed for this first pass.
+
+SQL (run manually in the Supabase SQL editor — this repo's tooling never
+executed it):
+
+```sql
+create table series (
+  id bigint primary key generated always as identity,
+  anilist_id integer unique not null,
+  title text not null,
+  slug text unique not null,
+  created_at timestamptz default now()
+);
+
+create table arcs (
+  id bigint primary key generated always as identity,
+  series_id bigint references series(id),
+  anilist_series_id integer not null,
+  title text not null,
+  slug text unique not null,
+  episode_start integer,
+  episode_end integer,
+  order_index integer not null,
+  created_at timestamptz default now()
+);
+
+create table beats (
+  id bigint primary key generated always as identity,
+  arc_id bigint references arcs(id) not null,
+  title text not null,
+  order_index integer not null,
+  intensity integer not null default 50,
+  is_peak boolean default false,
+  created_at timestamptz default now()
+);
+
+create table content_items (
+  id bigint primary key generated always as identity,
+  arc_id bigint references arcs(id) not null,
+  beat_id bigint references beats(id),
+  source_url text not null,
+  title text not null,
+  creator text not null,
+  platform text not null,
+  thumbnail_url text,
+  content_type text not null,
+  character_tags text[] default array[]::text[],
+  status text not null default 'pending',
+  submitted_by text,
+  confirmation_count integer default 0,
+  created_at timestamptz default now()
+);
+```
+
 ## Stack
 
 - Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
@@ -514,6 +641,13 @@ Two bugs found after Session 8 shipped:
   `<style>` block, using the same class names and CSS custom properties
   so colors, spacing, and typography match the original exactly
 - No external UI or data libraries
+- **Supabase** (`@supabase/supabase-js`) — added Session 9 as the
+  project's database; see "Database schema" above. `lib/supabase.js`
+  exports a shared client, credentials come from `.env.local`
+  (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`, gitignored).
+  No page reads/writes Supabase data yet — all four tables exist only as
+  SQL to run manually, and every page is still on its Session 1–8
+  hardcoded data / AniList calls.
 
 ## File layout
 
@@ -532,6 +666,7 @@ app/
   series/[slug]/series.module.css  Styles unique to the series page
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
+  supabase.js             Exports a shared Supabase client (see Session 9 notes above); not yet used by any page
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
