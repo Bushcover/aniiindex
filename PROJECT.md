@@ -834,6 +834,59 @@ Not verified live in this session — this sandbox cannot reach
 banner on `/submit` after this deploy, together should make the actual
 root cause unambiguous on the next attempt.
 
+### Session 10 follow-up: env vars still missing on Vercel after re-adding them — temporary diagnostic route
+
+Even after deleting/re-adding `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel's Production environment and
+redeploying, Vercel's build log kept printing `lib/supabase.js`'s
+`missing — using placeholder` line. Added a **temporary** diagnostic
+route, `app/api/check-env/route.js`, to inspect what a live server
+process on Vercel actually sees — should be deleted once this is
+resolved.
+
+- **A build-vs-runtime distinction was tested locally and turned out not
+  to apply the way expected**: the working assumption going in was that
+  `NEXT_PUBLIC_`-prefixed vars are permanently baked at build time
+  wherever `process.env.NEXT_PUBLIC_X` appears in code, server-side
+  included. Tested directly: built `next build` with `.env.local` absent
+  (reproducing "missing" exactly like Vercel's log), then ran `next
+  start` with `.env.local` restored — the route handler's plain
+  `process.env.NEXT_PUBLIC_SUPABASE_URL` read the *live* value, not a
+  stale build-time snapshot. So for server-executed code (route
+  handlers, SSR), Next.js reads these vars live at request/server-start
+  time; the immutable build-time inlining only applies to the actual
+  browser-side JS bundle. The route was written (and rewritten, once this
+  was confirmed) to reflect that — it's a single live `process.env` read,
+  not two paths pretending to compare build-time vs. runtime.
+- **This redirected the likely root cause.** If build and runtime aren't
+  actually different axes for a given deployment on Vercel, the more
+  likely explanation for "set in Production, still missing" is that the
+  *deployment being tested isn't a Production deployment* — Vercel scopes
+  env vars per environment (Production / Preview / Development), and a
+  deployment built from a non-`main` branch (this project's active work
+  happens on `claude/aniindex-project-review-uf50xx`, not `main`) is a
+  **Preview** deployment, which does not receive Production-scoped vars.
+  The route reports Vercel's own `VERCEL_ENV` and `VERCEL_GIT_COMMIT_REF`
+  system variables (injected automatically by Vercel, unrelated to this
+  project's own env var configuration) specifically to make this checkable
+  at a glance, rather than assumed.
+- **What it reports**: `NEXT_PUBLIC_SUPABASE_URL` in full (public by
+  design — same value already shipped in the client bundle whenever this
+  works correctly), the anon key masked (prefix + last 4 chars + length,
+  enough to confirm presence/shape without fully republishing a
+  secret-shaped string on a debug endpoint), `vercelEnv` and `gitBranch`
+  from Vercel's own system vars, and a one-line diagnosis. Marked
+  `export const dynamic = "force-dynamic"` so Next.js can't statically
+  optimize/cache the route's response at build time — confirmed in the
+  build output as a dynamic (`ƒ`) route, not a static (`○`) one.
+- Verified locally end-to-end (`next build` + `next start`, both with and
+  without `.env.local` present) that the route returns valid JSON and
+  correctly reflects presence/absence; `vercelEnv`/`gitBranch` read `null`
+  locally as expected (Vercel-only variables), and will be populated once
+  this deploys to Vercel.
+- **Reminder: delete `app/api/check-env/route.js` once this investigation
+  is resolved** — it's diagnostic-only, not a permanent part of the app.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
