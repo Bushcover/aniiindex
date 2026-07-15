@@ -1094,6 +1094,46 @@ the user.
   reason as every Supabase-touching session so far — this sandbox's
   network policy blocks `*.supabase.co`.
 
+### Session 11 follow-up: content_items had no SELECT policy — arc page showed 0 items on every beat
+
+The arc page correctly read real beats and `arcFoundInDb` was `true`,
+but every beat rendered `0 items` even though `content_items` had real
+rows. Cause: the only RLS policy ever added to `content_items` was the
+Session 10 `INSERT` policy — there was never a `SELECT` policy. For a
+plain (non-`.single()`) query, Postgres RLS silently returns zero rows
+when no policy grants access, rather than raising an error — which is
+exactly why this looked like "no content" instead of a visible failure.
+
+Reviewed `getArcContent` (`lib/supabase.js`) and the downstream
+`buildBeatSections` grouping (`app/arc/[slug]/page.jsx`) specifically for
+a `beat_id`-filtering bug, since the empty result could plausibly have
+been either. **No code bug found** — `getArcContent` correctly filters by
+`content_items.arc_id` (returning every item across all beats in the
+arc, by design, since per-beat grouping happens downstream) and embeds
+`beats(order_index)` only for sorting; `buildBeatSections` correctly
+matches each item's `beat_id` against the real `beats.id` values from
+`getArcBeats`. Session 11's own mock-server test already exercised this
+exact grouping logic end-to-end with real data present and it worked
+correctly then too — the RLS gap fully explains the symptom on its own,
+so no code was changed this round.
+
+Fix (run manually in the Supabase SQL editor):
+
+```sql
+drop policy if exists "Public read access on content_items" on content_items;
+
+create policy "Public read access on content_items"
+  on content_items for select
+  using (status in ('pending', 'confirmed'));
+```
+
+Not scoped `to anon`, matching the earlier lesson from the "still
+failing after the RLS fix" follow-up — `PUBLIC` removes any doubt about
+how the `sb_publishable_...`-format key maps to Postgres roles. Only
+`pending`/`confirmed` rows are readable; any other `status` value stays
+hidden from anonymous reads. Not verified live — this sandbox can't
+reach `*.supabase.co`.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
