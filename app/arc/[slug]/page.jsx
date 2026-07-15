@@ -247,6 +247,20 @@ export default async function ArcPage({ params }) {
   // page never mixes real beats with hardcoded content or vice versa.
   const arcFoundInDb = realArcBeats !== null && realArcContent !== null;
 
+  // TEMPORARY diagnostic — remove once the "still showing hardcoded
+  // content" issue is confirmed fixed. Runs server-side; check Vercel's
+  // function logs for this route.
+  console.log("[arc/[slug]] diagnostic:", {
+    slug: params.slug,
+    beatsStatus: beatsResult.status,
+    beatsValue: beatsResult.status === "fulfilled" ? realArcBeats : undefined,
+    beatsError: beatsResult.status === "rejected" ? beatsResult.reason?.message : undefined,
+    contentStatus: contentResult.status,
+    contentValue: contentResult.status === "fulfilled" ? realArcContent : undefined,
+    contentError: contentResult.status === "rejected" ? contentResult.reason?.message : undefined,
+    arcFoundInDb,
+  });
+
   const intensityBeats = arcFoundInDb
     ? realArcBeats.map((beat) => ({
         label: beat.title,

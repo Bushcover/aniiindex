@@ -1004,6 +1004,34 @@ an `active` flag in `ARC_NAV`.
   under whichever beat was selected, with every other beat showing 0
   items — matching exactly what the mock server test demonstrated.
 
+### Session 11 follow-up: still showing hardcoded content — temporary diagnostic log
+
+Despite the above, `/arc/shibuya-incident-arc` is still rendering the
+hardcoded `BEATS`/`INTENSITY_BEATS` content on the real deployment.
+Added a **temporary** `console.log` right after `arcFoundInDb` is
+computed in `app/arc/[slug]/page.jsx`, logging `params.slug`, each of
+`beatsResult`/`contentResult`'s `status` ("fulfilled" or "rejected"),
+the resolved value when fulfilled, the rejection's error message when
+rejected, and the final `arcFoundInDb` boolean — everything needed to
+tell apart "the arc genuinely isn't seeded," "a query is failing (RLS,
+network, bad slug)," and "the fetch succeeds but something downstream is
+wrong," which a rendered page alone can't distinguish.
+
+Smoke-tested locally (`next start` against this sandbox's real,
+network-blocked Supabase host) to confirm the log actually fires and
+reads correctly before pushing — it correctly reported both
+`beatsResult`/`contentResult` as `"rejected"`, with the real underlying
+error message, and `arcFoundInDb: false`. On the actual Vercel
+deployment this same log should show either real fulfilled data (if the
+page's own logic is somehow still preferring the hardcoded fallback
+despite real data being available — a code bug) or a rejected status
+with a real error message (an RLS/query problem, likely the same class
+of issue as the Session 10 follow-ups). Check Vercel's function logs for
+the `[arc/[slug]] diagnostic:` line after loading the page.
+
+**Reminder: remove this `console.log` once the cause is found** — it's
+diagnostic-only.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
