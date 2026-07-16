@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Sparkline from "@/components/Sparkline";
 import HeroSearch from "@/components/HeroSearch";
+import NavAuth from "@/components/NavAuth";
 import styles from "./page.module.css";
 
 const NAV_LINKS = [
@@ -228,7 +229,7 @@ export default function HomePage() {
           ))}
         </div>
         <div className="nav-right">
-          <button className="btn btn-ghost">Sign in</button>
+          <NavAuth />
           <Link href="/submit" className="btn btn-primary">
             Submit content
           </Link>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import NavAuth from "@/components/NavAuth";
 import styles from "@/app/search/search.module.css";
 
 export default function SearchNav({ query }) {
@@ -59,7 +60,7 @@ export default function SearchNav({ query }) {
         </span>
       </div>
       <div className="nav-right">
-        <button className="btn btn-ghost">Sign in</button>
+        <NavAuth />
         <Link href="/submit" className="btn btn-primary">
           Submit content
         </Link>

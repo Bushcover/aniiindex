@@ -1,14 +1,15 @@
 # aniindex
 
 A fan content index for anime series. Started as a single hardcoded
-mockup page; as of Session 12 it has a real Next.js App Router
-structure, real AniList GraphQL data on several pages, and a real
+mockup page; as of Session 13 it has a real Next.js App Router
+structure, real AniList GraphQL data on several pages, a real
 Supabase database with a working (if narrowly-scoped) submission
-pipeline. See "Current State — Handoff Audit" immediately below for a
-full, current snapshot; the session-by-session log after it is the
-historical record of how each piece got built.
+pipeline, and real Supabase Auth magic-link sign-in. See "Current
+State — Handoff Audit" immediately below for a full, current
+snapshot; the session-by-session log after it is the historical
+record of how each piece got built.
 
-## Current State — Handoff Audit (as of Session 12)
+## Current State — Handoff Audit (as of Session 13)
 
 This section is a complete, current-state snapshot of the project, written
 as a handoff for whichever session picks this up next. The session-by-
@@ -20,11 +21,16 @@ piece of code.
 **Stack**: Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript), no
 CSS framework (global stylesheet ported 1:1 from the original mockup, plus
 colocated CSS Modules per page), `@supabase/supabase-js` as the only real
-dependency beyond Next/React itself. Default branch: **`claude/aniindex-arc-page-nextjs-wwizd5`**
-(not `main` — this repo has no `main` branch; see the branch-related notes
-further down this file for why). Confirmed at the end of this session: git
-status clean, `HEAD` matches `origin/claude/aniindex-arc-page-nextjs-wwizd5`
-exactly, nothing left to push.
+dependency beyond Next/React itself — Session 13's auth work uses the same
+package's `supabase.auth` namespace, no new dependency was installed.
+Default branch: **`claude/aniindex-arc-page-nextjs-wwizd5`** (not `main` —
+this repo has no `main` branch; see the branch-related notes further down
+this file for why). **This session's own work happened on
+`claude/determined-lamport-roi673`**, a separate feature branch — not yet
+merged into the default branch as of the end of this session; whoever
+merges it should follow the same branch/Vercel-env lesson from the Session
+10 follow-up notes (Preview vs. Production env vars) before assuming
+`/auth` works on the deployed site.
 
 **Phases so far, loosely**: Phase 1 (Sessions 1–5) converted static HTML
 mockups into Next.js pages/components with 100% hardcoded data. Phase 2
@@ -32,8 +38,11 @@ mockups into Next.js pages/components with 100% hardcoded data. Phase 2
 series pages. Phase 3 (Sessions 9–12) added Supabase as a real database —
 schema, seeding, the submit form's real write path, the arc page's real
 read path, real Open Graph/oEmbed link detection, and the bug fixes that
-followed each of those. See "Suggested next phase" at the end of this
-section for what a Phase 4 could reasonably cover.
+followed each of those. Phase 4 (Session 13, so far) added real Supabase
+Auth magic-link sign-in and wired the nav to reflect signed-in/signed-out
+state — see "Suggested next phase" at the end of this section for what's
+still left to build on top of it (auth exists now, but nothing yet uses
+*who* is signed in for anything).
 
 ### Complete file inventory
 
@@ -51,9 +60,13 @@ app/
   series/[slug]/page.jsx          Series page — [slug] is an AniList numeric id; real series + characters, hardcoded arc list
   series/[slug]/series.module.css Series-page-only styles
   api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed for YouTube; basic SSRF guard + 8s timeout
+  auth/page.jsx                   (Session 13) Magic-link sign-in card — client component; calls signInWithEmail, shows idle/loading/success/error states
+  auth/auth.module.css            (Session 13) Styles for both the sign-in card and the callback page (imported by both)
+  auth/callback/page.jsx          (Session 13) Magic-link redirect handler — client component; exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error
 lib/
   anilist.js                    searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — real AniList GraphQL calls, each cached via Next's fetch cache (next: { revalidate: 3600 })
   supabase.js                   Exports the shared `supabase` client (fetch explicitly opted out of Next's cache) + getArcBeats / getArcContent
+  auth.js                       (Session 13) signInWithEmail / signOut / getSession — thin wrappers around supabase.auth.{signInWithOtp,signOut,getSession}
 components/
   ArcNav.jsx                   Horizontal arc-chip strip. Props: { arcs: [{ slug, name, count, active? }] }
   ArcHero.jsx                  Breadcrumb/title/meta/badges/description/characters/stats block. Props: { arc: { breadcrumb[], name, episodes, seasonPart, dateRange, badges[{type,label}], description, characters[], stats[{value,label}] } }
@@ -65,9 +78,10 @@ components/
   Sparkline.jsx                  Small bar-chart sparkline. Props: { bars: [{ heightPct, tier }], width?, height?, gap? }
   Sparkline.module.css            Colocated styles
   HeroSearch.jsx                  Client component — home page's hero search input + quick-search chips. No props; owns its own input state
-  SearchNav.jsx                    Client component — search/series pages' nav (logo, search input, icon, clear). Props: { query: string }
+  SearchNav.jsx                    Client component — search/series pages' nav (logo, search input, icon, clear). Props: { query: string }. (Session 13) Now renders NavAuth in its nav-right.
   CharacterChips.jsx               Character chip list (real photo or colored-initials fallback). Props: { characters: [{ id?, name, image?, color?, initials?, count? }] } — correctly uses backgroundImage: url(...) for real photos (this component never had the CSS bug ContentCard had)
   ArcList.jsx                     Arc-row list with sparklines, imports search.module.css directly. Props: { arcs: [{ slug, num, name, count, peak, spark[], dividerAfter? }], moreLabel? }
+  NavAuth.jsx                     (Session 13) Client component — the auth-aware slice of a page's nav-right. Reads the session via lib/auth's getSession() on mount and subscribes to supabase.auth.onAuthStateChange to stay in sync; renders a "Sign in" link to /auth when signed out, or the user's email + a "Sign out" button when signed in. Props: { signInClassName? } (defaults to "btn btn-ghost", overridable per page — the arc page passes "btn btn-primary" to match its existing button styling). Used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx (so both the search and series pages get it for free).
 next.config.mjs                  images.remotePatterns allowlists i.ytimg.com and s4.anilist.co — configured but next/image isn't used anywhere yet (see "Known issues")
 jsconfig.json                    Configures the "@/*" import alias
 package.json                     Dependencies: next, react, react-dom, @supabase/supabase-js
@@ -165,7 +179,10 @@ have ever been seeded.
 - **`/arc/[slug]`** — Real for `shibuya-incident-arc` only: AniList series name/description/characters (keyed by hardcoded `ANILIST_SERIES_ID`, not `params.slug`), and Supabase beats/intensity-chart/content-cards (keyed by `params.slug`, this is the one place `params.slug` genuinely drives a query). Any other slug falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS`/`ARC_NAV` mockup data — the page never breaks, it just isn't real for that slug. `ARC_NAV`, `ARC`'s own fields (name, episodes, badges, stats), and `TABS` are hardcoded regardless of slug.
 - **`/search`** — Real: the series panel (title, format, genres, score, popularity, episodes, poster), driven by `?q=`. Hardcoded regardless of query: `ARCS` (11-arc Chainsaw Man placeholder list), `CHARACTERS`, `TOP_CONTENT`, `FILTERS`, `ALSO_FOUND`, `RESULTS_SUMMARY`.
 - **`/series/[slug]`** — Real: everything about the series itself (title, description, genres, score, format/year/episodes/status, banner/poster) and the top-10 character cast, both keyed directly by the numeric AniList id in the URL — the first (and still only) page where the URL's dynamic segment drives every real value shown. Hardcoded: `ARCS` (same placeholder list as the search page, duplicated not shared).
-- **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms after typing stops), step 2's beat selector (real `beats` rows for the Shibuya arc, fetched via `getArcBeats` on mount), and the final submission (a real `content_items` insert). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`.
+- **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms after typing stops), step 2's beat selector (real `beats` rows for the Shibuya arc, fetched via `getArcBeats` on mount), and the final submission (a real `content_items` insert). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`. **Still not real, as of Session 13**: `submitted_by` stays hardcoded to `"anonymous"` even for a user who's genuinely signed in — nothing on this page reads the session yet (see "Suggested next phase").
+- **`/auth`** (Session 13) — Real end to end: submitting an email calls the real `signInWithOtp`, with genuine loading/success/error states (error state is real, not simulated — this sandbox's network block on `*.supabase.co` reliably exercises it; success state verified against a mocked response, see the Session 13 notes below).
+- **`/auth/callback`** (Session 13) — Real: exchanges the URL's `code` for a session via `exchangeCodeForSession`, or falls back to checking for an already-set session (implicit-flow magic links resolve via the URL hash instead), then redirects to `/` or shows an error. Not exercised against a real magic-link email in this project yet (see "Partially working" below).
+- **Nav (all pages except `/submit`)** (Session 13) — Real: `NavAuth` reads the actual Supabase session client-side and shows "Sign in" (linking to `/auth`) when signed out, or the real signed-in email + a working "Sign out" button when signed in. `/submit`'s nav has never had a Sign in button (see its own compact nav in the Session 5 notes) and wasn't touched.
 
 ### Fully working end-to-end (verified this session and in prior sessions)
 
@@ -175,6 +192,7 @@ have ever been seeded.
 4. `/arc/shibuya-incident-arc` → real AniList series description/characters + real Supabase beats/intensity chart/content cards, with real submitted items appearing under their correct beat.
 5. Any other `/arc/<slug>` → clean fallback to the original hardcoded Shibuya mockup, no crash, no partial/mixed state.
 6. `/submit` full wizard: paste a URL → real title/thumbnail/platform/creator auto-detected (TikTok/X/Instagram/Reddit via HTML scraping, YouTube via oEmbed) → pick a real story beat → review (real `ContentCard` preview, correct thumbnail rendering) → submit → real row lands in `content_items` → visible on the arc page under the correct beat on the next load (no caching in the way).
+7. (Session 13) Every page's nav "Sign in" link genuinely navigates to `/auth` (confirmed by reading the rendered `href` directly on the home, arc, search, and series pages, not just visually). `/auth`'s form correctly shows the loading state, then either the real error banner (a genuine "Failed to fetch" from this sandbox's `*.supabase.co` network block — real proof the error path is wired, not simulated) or, with the OTP request mocked to succeed, the green "Check your email — we sent a magic link to `<email>`" success state with the real typed address interpolated. With a fake session injected into `localStorage` under Supabase's own storage-key convention, the nav correctly swaps to showing that session's email + a working "Sign out" button across a full page reload — proving `NavAuth`/`getSession` genuinely read persisted session state, not just in-memory state from the sign-in form.
 
 ### Partially working / needs attention
 
@@ -182,6 +200,8 @@ have ever been seeded.
 - **`/submit`'s auto-detection can fail or be slow**, and the wizard is designed to let the user proceed anyway with honest placeholders (`"Untitled link"`, a generic gradient, `platform: "other"`, `"Unknown creator"`) rather than block — but there's no way for the user to *manually* correct a wrong or missing title/creator/thumbnail. It's proceed-with-placeholder, not proceed-with-editing.
 - **YouTube's oEmbed integration depends on YouTube's public endpoint staying free/unauthenticated** — it currently is, but this is an external dependency this project doesn't control.
 - **`character_tags`/character detection on `/submit`** never reflects the real pasted content — always the one hardcoded Gojo Satoru chip, regardless of what's actually in the video/post.
+- **Auth (Session 13) has never completed a real magic-link round trip.** Every piece was verified individually — the real `signInWithOtp` call (proven by its real network failure in this sandbox), `exchangeCodeForSession`/redirect logic (code-reviewed and exercised for the "no code, no session" error path, but never against a real Supabase-issued `code`), and the signed-in nav state (verified with an injected fake session, not a session Supabase itself issued) — but no session has actually clicked a real emailed magic link end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, click the link that arrives, and confirm it lands on `/auth/callback` and then `/` with the nav showing the signed-in state.
+- **Nothing gates on being signed in yet.** `/submit` still writes `submitted_by: "anonymous"` regardless of whether the submitter has a real session (see "What's real vs. hardcoded, per page" above) — Session 13 built sign-in/sign-out itself, not anything that *uses* the signed-in identity.
 
 ### Known issues / cleanup needed
 
@@ -196,7 +216,7 @@ have ever been seeded.
 
 ### Explicitly not built
 
-- **No auth/login** — "Sign in" buttons are inert everywhere; `submitted_by` is hardcoded to the literal string `"anonymous"`.
+- **Auth — partially resolved in Session 13.** "Sign in" now genuinely links to `/auth`, which sends a real Supabase magic-link email and, once clicked, signs the user in (see "Fully working end-to-end" and "Partially working" above for what is and isn't verified yet). Still not built: `submitted_by` is still hardcoded to the literal string `"anonymous"` even for a signed-in user — nothing yet reads the session on `/submit` or anywhere else, so signing in doesn't currently change any app behavior beyond the nav itself.
 - **No moderation workflow** — `content_items.status` defaults to `'pending'` and nothing in the app ever changes it, reads it for a moderation queue, or distinguishes `'pending'` from `'confirmed'` visually (the arc page shows both identically). `confirmation_count` is written as `0` and never incremented anywhere.
 - **No tab/filter-pill filtering** on any page — clicking "Edits & Video," "Fan Art," an arc's content-type filter, etc. does nothing.
 - **No pagination or "+N more" expansion** — every "+N more" affordance is static text.
@@ -213,7 +233,7 @@ Roughly in order of "unblocks the most other things":
 3. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
 4. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
 5. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
-6. **Auth** — even something minimal (magic-link or OAuth via Supabase Auth, which is already the platform in use) would unlock real `submitted_by` values and be a prerequisite for any moderation permissions model.
+6. **Use the real signed-in identity now that auth (Session 13) exists** — wire `/submit`'s `submitted_by` to the real session's user id/email instead of the literal string `"anonymous"` (falling back to `"anonymous"` only when genuinely signed out), and confirm a real magic-link round trip against the live Supabase project from outside this sandbox (see the Session 13 "Partially working" note above) — this is the natural prerequisite for any moderation permissions model, not a fresh "add auth" task anymore.
 7. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
 8. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
 
@@ -1719,6 +1739,175 @@ exactly what the previous follow-up predicted needed checking.
   `backgroundImage: url("https://i.ytimg.com/...")` — the fix genuinely
   applies in both places, not just the one the task named.
 
+## Session 13
+
+Built real magic-link email authentication using Supabase Auth — no new
+dependency needed, since `supabase.auth` has been available through the
+existing `@supabase/supabase-js` client since Session 9. Three parts, all
+in one session: the auth utility functions, the sign-in/callback UI, and
+wiring the nav to reflect signed-in/signed-out state.
+
+- **`lib/auth.js`** (new) — three thin wrappers around the shared
+  `supabase` client's own `auth` namespace, matching this project's
+  established "small lib module, one function per operation" pattern
+  (`lib/anilist.js`, `lib/supabase.js`):
+  - `signInWithEmail(email)` — calls
+    `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo:
+    window.location.origin + '/auth/callback' } })` and throws on error, so
+    the caller (the `/auth` page) can show a real inline error rather than
+    fail silently. `window.location.origin` is read inside the function
+    body, not at module scope, so importing this module from a page that
+    also happens to render server-side (none currently do, but the
+    established pattern elsewhere in this codebase is to keep browser-only
+    reads inside the function that's actually only ever called client-side)
+    never touches `window` before it exists.
+  - `signOut()` — calls `supabase.auth.signOut()`, throws on error.
+  - `getSession()` — calls `supabase.auth.getSession()` and returns
+    `data.session` or `null`. Deliberately swallows (logs, doesn't throw)
+    the error case, unlike the other two functions — every current caller
+    just wants "is someone signed in right now," and a transient session
+    read failure should read as "signed out" rather than crash whatever
+    component asked, the same reasoning already applied to
+    `getArcBeats`/`getArcContent`'s null-on-not-found contract in
+    `lib/supabase.js`.
+- **`app/auth/page.jsx`** (new) + **`app/auth/auth.module.css`** (new) — a
+  centered card, styled with the same `--surface`/`--border`/`--accent`/
+  `--t1`/`--t2`/`--t3` custom properties already defined in `globals.css`
+  (no new CSS variables introduced, aside from two literal colors for the
+  success state — see below). Client component (`"use client"`), owning
+  `email` and a `status` state machine (`idle` → `loading` → `success` or
+  `error`):
+  - Idle: the `aniindex` logo (linking home, same `logo` global class +
+    `text-decoration: none` pattern used by `SearchNav`/the submit page's
+    nav), the heading "Sign in to contribute," the subheading, an email
+    input (native `type="email"` + `required`, so the browser's own
+    validation catches an obviously malformed address before a request is
+    even sent), and the "Send magic link" button.
+  - Loading: the input and button both disable, the button's label swaps
+    to "Sending…" — the same disabled-button-during-request pattern
+    `/submit`'s step 3 "Add to aniindex" button already established in
+    Session 10.
+  - Success: the form is replaced entirely (not just hidden behind a
+    banner) by a green checkmark and "Check your email — we sent a magic
+    link to **`<email>`**," the typed address interpolated directly, per
+    the task.
+  - Error: an inline red banner above the button (reusing the same
+    `rgba(240,112,106,0.1)` background / `rgba(240,112,106,0.3)` border /
+    `var(--red)` text look as `/submit`'s `.submitErrorMsg`), showing the
+    real thrown error's `message` — never a generic "something went
+    wrong" — and the form stays interactive so the user can retry.
+  - **One deliberate deviation from blindly reusing existing tokens**: the
+    success checkmark uses a literal `#6af0a8` / `rgba(106,240,168,...)`
+    green rather than `var(--green)`/`var(--green-soft)`, even though
+    `submit.module.css` already references those exact variable names
+    (and uses that exact color as literal RGB in a couple of its own
+    border rules). Checked first: **`--green`/`--green-soft` are never
+    actually defined in `globals.css`'s `:root`** — every existing
+    `var(--green)`/`var(--green-soft)` reference in `submit.module.css`
+    has silently been resolving to nothing (the browser drops the
+    declaration, same failure mode as the Session 12 thumbnail-CSS bug)
+    since whichever session first wrote them. This is a real, pre-existing
+    latent bug, confirmed by `grep`, not fixed here — out of scope for an
+    auth task, and touching shared `submit.module.css` styling wasn't part
+    of what was asked. Flagging it explicitly rather than silently
+    reproducing it: a future session fixing it should add
+    `--green`/`--green-soft` to `globals.css`'s `:root` (the color already
+    in consistent use everywhere is `rgb(106,240,168)` /
+    `rgba(106,240,168,0.14)`), which would then apply to `submit.module.css`
+    *and* this page's success state identically without either needing a
+    literal value.
+- **`app/auth/callback/page.jsx`** (new) — client component, wrapped in
+  `<Suspense>` (required for `useSearchParams` in a statically-rendered
+  Next 14 App Router page — confirmed by building without it first and
+  seeing Next's static-bailout warning, then adding the boundary and
+  confirming a clean build). On mount:
+  - If the URL has a `code` param (PKCE-flow magic links), calls
+    `supabase.auth.exchangeCodeForSession(code)`; redirects to `/`
+    (`router.replace`, not `push`, so the callback URL doesn't sit in
+    browser history) on success, or shows the real error message on
+    failure.
+  - If there's no `code` (implicit-flow magic links carry the session in
+    the URL's hash fragment instead, which `supabase-js`'s client already
+    auto-parses on load via its default `detectSessionInUrl` behavior),
+    falls back to `supabase.auth.getSession()` — a session already being
+    present means the link was valid and just used the other flow;
+    redirects the same way. No session and no error either means the link
+    itself was invalid/expired, so that's shown as an explicit message
+    rather than silently redirecting anyway. This fallback wasn't
+    explicitly named in the task, but was added because the task's own
+    spec ("call exchangeCodeForSession if a code param is present") already
+    implies there's a real "no code param" case to handle, and leaving it
+    as an unconditional error would incorrectly fail every implicit-flow
+    link, which is Supabase's default flow type unless a project has PKCE
+    specifically configured.
+  - Reuses `auth.module.css` (relative import, `../auth.module.css`) for
+    the same card chrome as `/auth`, so a user bouncing through this page
+    sees visually the same surface, not a jarring unstyled flash.
+- **`components/NavAuth.jsx`** (new) — the auth-aware slice of a page's
+  `nav-right`, since every page's nav is inlined per-page rather than a
+  shared `Nav` component (per this project's established layout, see
+  "File layout"). Client component; on mount, calls `getSession()` once
+  and also subscribes to `supabase.auth.onAuthStateChange`, so the nav
+  updates live after a sign-in (from `/auth/callback`'s redirect back to a
+  page holding this component) or a sign-out, without needing a manual
+  page reload — unsubscribes on unmount. Renders nothing until the initial
+  check resolves (avoids a "Sign in" flash before swapping to the real
+  signed-in state a moment later), then either:
+  - Signed out: a `next/link` to `/auth` reading "Sign in," styled via a
+    `signInClassName` prop (defaults to `"btn btn-ghost"`, matching the
+    home page's and `SearchNav`'s existing Sign in button; the arc page
+    passes `"btn btn-primary"` to match what was already there — this
+    project already had two different visual treatments for the same
+    "Sign in" button across pages, Session 13 preserved both rather than
+    silently unifying them, since that wasn't asked for).
+  - Signed in: the real session's email (`.nav-auth-email` — new, small,
+    `var(--t2)`, truncates with an ellipsis past 180px so a long email
+    can't blow out the nav layout — added to `globals.css` next to the
+    existing `.nav-right`/`.btn*` rules) and a "Sign out" button
+    (`.btn.btn-ghost`, same class as everywhere else) that calls
+    `signOut()`, showing "Signing out…" while in flight.
+  - Wired into the three nav locations that had a "Sign in" button:
+    `app/page.jsx` (home), `app/arc/[slug]/page.jsx` (arc page), and
+    `components/SearchNav.jsx` (shared by the search and series pages).
+    `/submit`'s nav never had a Sign in button (it's the compact
+    logo+Cancel nav from Session 5) and wasn't touched.
+- **Verified with a real production build and a real browser, not just
+  code review**, following this project's established Playwright-based
+  verification pattern (this sandbox still can't reach `*.supabase.co`,
+  same restriction as every Supabase-touching session since Session 9):
+  - `next build` succeeds cleanly with `/auth` and `/auth/callback` both
+    prerendered as static routes (confirmed the `<Suspense>` boundary
+    around `useSearchParams` was actually necessary — removing it
+    reproduces Next's static-bailout error).
+  - Screenshotted `/auth` idle (matches the task's spec: logo, "Sign in to
+    contribute," the subheading, email input, "Send magic link" button).
+  - Clicked submit with no mocking: the request genuinely leaves the
+    browser, this sandbox's network policy kills it, and the real "Failed
+    to fetch" error correctly renders in the inline red banner — real
+    proof the error path works, the same class of test Session 10 used to
+    verify `/submit`'s error handling from this same sandbox.
+  - Mocked the `signInWithOtp` network call (`**/auth/v1/otp**`) to
+    return success: confirmed the success state renders with the actually-
+    typed email address interpolated correctly.
+  - Confirmed via the rendered DOM (not just a screenshot) that the "Sign
+    in" link's `href` is exactly `/auth` on the home page, the arc page,
+    and the search page (which also proves the series page, since it
+    shares `SearchNav`).
+  - Injected a fake session into `localStorage` under Supabase's own
+    default storage-key convention (`sb-<project-ref>-auth-token` — this
+    sandbox's placeholder Supabase URL gives `sb-placeholder-auth-token`,
+    confirmed by reading the key `supabase-js` actually created) and
+    reloaded the home page: the nav correctly rendered the injected
+    session's email and a working "Sign out" button instead of "Sign in,"
+    proving `NavAuth`/`getSession` genuinely read persisted session state
+    on mount rather than only reacting to the in-memory result of a sign-in
+    that happened in the same page load.
+  - **Not verified**: a real magic-link email actually being sent and
+    clicked, since this sandbox has no route to Supabase or to any real
+    inbox. See the "Partially working" note in the Current State section
+    above for what a future session (or the user, from a real browser)
+    should check to close this gap.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -1868,6 +2057,15 @@ where arcs.slug = 'shibuya-incident-arc';
   and confirmed live in the Supabase project, but empty — no page
   reads/writes Supabase data yet, and every page is still on its
   Session 1–8 hardcoded data / AniList calls.
+  (**Note**: this paragraph describes Session 9's original state and is
+  stale — by Session 10/11 the tables are genuinely read/written; see the
+  "Current State — Handoff Audit" section at the top of this file for
+  what's actually true today.)
+- **Supabase Auth** (Session 13) — magic-link email sign-in, using the same
+  `@supabase/supabase-js` client's `auth` namespace (no separate package).
+  `lib/auth.js` exports `signInWithEmail`/`signOut`/`getSession`; see the
+  Session 13 notes above for the full `/auth` + `/auth/callback` + nav
+  wiring.
 
 ## File layout
 
@@ -1885,9 +2083,13 @@ app/
   series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
   series/[slug]/series.module.css  Styles unique to the series page
   api/og-fetch/route.js  POST route: fetches a pasted URL server-side and extracts Open Graph metadata + platform/creator (see Session 12 notes above)
+  auth/page.jsx           (Session 13) Magic-link sign-in card, client component
+  auth/auth.module.css    (Session 13) Styles shared by auth/page.jsx and auth/callback/page.jsx
+  auth/callback/page.jsx  (Session 13) Magic-link redirect handler, client component
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
   supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11)
+  auth.js                 (Session 13) signInWithEmail / signOut / getSession — wraps the shared client's supabase.auth namespace
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
@@ -1899,9 +2101,10 @@ components/
   Sparkline.jsx        A small intensity sparkline (5 bars on the search page, 9 on the home page)
   Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
   HeroSearch.jsx       Client component: home page's hero search input + quick-search chips
-  SearchNav.jsx        Client component: search page's nav — logo link, functional search input/icon/clear
+  SearchNav.jsx        Client component: search page's nav — logo link, functional search input/icon/clear. (Session 13) Also renders NavAuth.
   CharacterChips.jsx   Character chip list (photo or colored-initials fallback, optional mention count) — used by ArcHero and the series page
   ArcList.jsx          Arc-row list with sparklines (imports search.module.css) — used by the search page and the series page
+  NavAuth.jsx           (Session 13) Client component: the signed-in/signed-out slice of a page's nav — used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 
@@ -1909,7 +2112,11 @@ The top site nav bar (logo, search bar/links, Sign in/Submit content
 buttons) and the footer/feature-pill content are rendered directly in
 each page file rather than split into extra shared components, since nav
 contents differ meaningfully between the arc, search, and home pages
-(different links, different search UI).
+(different links, different search UI). **One exception, since Session
+13**: the Sign in/Sign out slice specifically is shared via `NavAuth`,
+since that piece — unlike the rest of each nav — needs identical
+client-side session logic everywhere it appears, not just similar-looking
+markup.
 
 ## What each component does
 
@@ -1993,6 +2200,14 @@ contents differ meaningfully between the arc, search, and home pages
   "+N more" row. Each row is a `next/link` to `/arc/${arc.slug}`.
   Extracted from the search page in Session 8; also used by the series
   page.
+- **NavAuth** (Session 13) — client component; the signed-in/signed-out
+  slice of a page's `nav-right`. Reads the session via `lib/auth`'s
+  `getSession()` on mount and subscribes to `supabase.auth.onAuthStateChange`
+  to stay live. Renders a `next/link` to `/auth` reading "Sign in" (its
+  class is a `signInClassName` prop, default `"btn btn-ghost"`) when
+  signed out, or the session's email (`.nav-auth-email`) + a "Sign out"
+  button when signed in. Used by `app/page.jsx`, `app/arc/[slug]/page.jsx`,
+  and `SearchNav` (so the search and series pages get it too).
 
 ## Hardcoded data (in `app/page.jsx`)
 
@@ -2174,6 +2389,16 @@ database/API:
   system behind `submitted_by` (hardcoded to the string `"anonymous"`),
   and no moderation UI reads/changes a `content_items` row's `status`
   beyond the hardcoded `'pending'` every submission is written with.
+  **Further resolved in Session 13**: the nav's "Sign in" button now
+  genuinely links to `/auth`, which sends a real Supabase magic-link email
+  and signs the user in on click-through; the nav reflects real
+  signed-in/signed-out state (email + Sign out button vs. Sign in link).
+  Character chip links are still inert (unrelated to auth — no character
+  detail/filter page exists). `submitted_by` is still hardcoded to
+  `"anonymous"` even for a signed-in user, and there's still no moderation
+  UI — Session 13 built the identity layer itself, not anything that
+  consumes it yet (see "Suggested next phase" in the Current State section
+  above).
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
 - No real series/arc/character *detection* on `/submit` —

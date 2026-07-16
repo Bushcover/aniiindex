@@ -4,6 +4,7 @@ import ArcHero from "@/components/ArcHero";
 import ContentTabs from "@/components/ContentTabs";
 import IntensityChart from "@/components/IntensityChart";
 import BeatSection from "@/components/BeatSection";
+import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent } from "@/lib/supabase";
 
@@ -293,7 +294,7 @@ export default async function ArcPage({ params }) {
         </div>
         <div className="nav-right">
           <button className="btn btn-ghost">Browse</button>
-          <button className="btn btn-primary">Sign in</button>
+          <NavAuth signInClassName="btn btn-primary" />
         </div>
       </nav>
 
