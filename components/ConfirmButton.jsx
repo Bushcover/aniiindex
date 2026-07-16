@@ -10,7 +10,7 @@ import { useState } from "react";
 // The card's own <a> wraps this button (the whole card links to
 // sourceUrl), so every handler here must stop the click from bubbling up
 // into that link.
-export default function ConfirmButton({ id }) {
+export default function ConfirmButton({ id, onConfirmed }) {
   const [state, setState] = useState("idle"); // idle | loading | done | error
 
   async function handleClick(e) {
@@ -26,6 +26,14 @@ export default function ConfirmButton({ id }) {
       });
       if (!res.ok) throw new Error("Confirm failed");
       setState("done");
+      // Session 20: tells ContentCard to flip its local status
+      // optimistically, hiding the pending badge and this button
+      // immediately — ContentCard re-renders with isPending false before
+      // this component's own "done" branch below ever gets painted, so in
+      // practice this button disappears rather than showing "✓ Confirmed".
+      // That branch stays as a defensive fallback for any future caller
+      // that doesn't wire up onConfirmed.
+      onConfirmed?.();
     } catch {
       setState("error");
     }

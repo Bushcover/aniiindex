@@ -3,14 +3,14 @@
 import { useState } from "react";
 
 // Nested inside ContentCard's default (arc-page) render path, on any card
-// with a real content_items id. Flagging doesn't remove the card from the
-// page the visitor is currently looking at (this app has no client-side
-// data refetch/removal wiring elsewhere either — see PROJECT.md) — it just
-// records the flag; the item stops appearing on the *next* load, once
-// getArcContent's status allowlist excludes it. Nested inside the card's
-// own <a>, so its click handler must stop the click from bubbling into
-// that link.
-export default function FlagButton({ id }) {
+// with a real content_items id. Session 20: on success, calls onFlagged(id)
+// so BeatSection (which owns the actual list of rendered cards) can filter
+// this item out immediately — this component can hide itself, but it can't
+// remove its own sibling cards' layout gap or update the beat's item count,
+// so the real removal is lifted up rather than handled locally. Nested
+// inside the card's own <a>, so its click handler must stop the click from
+// bubbling into that link.
+export default function FlagButton({ id, onFlagged }) {
   const [state, setState] = useState("idle"); // idle | loading | done | error
 
   async function handleClick(e) {
@@ -26,11 +26,16 @@ export default function FlagButton({ id }) {
       });
       if (!res.ok) throw new Error("Flag failed");
       setState("done");
+      onFlagged?.(id);
     } catch {
       setState("error");
     }
   }
 
+  // In practice, on the arc page this branch is unreachable — BeatSection
+  // unmounts the whole card the instant onFlagged fires above, before this
+  // re-render would ever paint. Kept as a defensive fallback for any
+  // future caller that renders FlagButton without wiring up onFlagged.
   if (state === "done") {
     return (
       <span className="flag-btn flag-btn-done" aria-label="Flagged">

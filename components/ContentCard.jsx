@@ -1,3 +1,15 @@
+"use client";
+
+// Session 20: this became a client component so it can own local `status`
+// state — confirming needs to hide the pending badge and confirm button
+// instantly, without waiting for a full page reload, and that state has
+// to be shared between the badge (rendered in .thumb) and the button
+// (rendered in .cbody), both part of this same component's tree. Safe to
+// convert: this was already imported directly by app/submit/page.jsx (a
+// client component) and app/search/page.jsx (a server component) — a
+// Server Component rendering a Client Component descendant is normal,
+// supported App Router behavior, not a boundary violation.
+import { useState } from "react";
 import YoursBadge from "@/components/YoursBadge";
 import ConfirmButton from "@/components/ConfirmButton";
 import FlagButton from "@/components/FlagButton";
@@ -67,7 +79,15 @@ export default function ContentCard({
   compact = false,
   submittedBy,
   status,
+  onFlagged,
 }) {
+  // Seeded once from the server-rendered `status` prop, then owned
+  // entirely client-side from here — confirming flips this locally
+  // (optimistically) the instant the API call succeeds, rather than
+  // waiting for the arc page's next full server render. See
+  // handleConfirmed below and ConfirmButton's onConfirmed call.
+  const [localStatus, setLocalStatus] = useState(status);
+
   const meta = PLATFORM_META[platform] || DEFAULT_PLATFORM_META;
   const genTags = [].concat(contentType ?? []);
   const charTags = [].concat(characterTags ?? []);
@@ -77,7 +97,19 @@ export default function ContentCard({
   // badge and the confirm/flag controls simply never render there, the
   // same "omit rather than fabricate" convention this project already uses
   // for the Yours badge.
-  const isPending = Boolean(id) && status === "pending";
+  const isPending = Boolean(id) && localStatus === "pending";
+
+  // Optimistic by design (Session 20): this flips the instant *this*
+  // browser's own confirm click succeeds, regardless of whether the real
+  // content_items row actually reached the 2-confirmation threshold yet
+  // (a first confirmation leaves the DB status genuinely 'pending', still
+  // waiting on a second contributor). The pending badge/confirm button
+  // disappearing here is "you confirmed it," not "it's now fully
+  // confirmed" — matches the task's explicit request to hide both
+  // instantly rather than reflect the precise server-side count.
+  function handleConfirmed() {
+    setLocalStatus("confirmed");
+  }
 
   if (compact) {
     return (
@@ -143,8 +175,8 @@ export default function ContentCard({
         </div>
         {id && (
           <div className="card-actions">
-            {isPending && <ConfirmButton id={id} />}
-            <FlagButton id={id} />
+            {isPending && <ConfirmButton id={id} onConfirmed={handleConfirmed} />}
+            <FlagButton id={id} onFlagged={onFlagged} />
           </div>
         )}
       </div>
