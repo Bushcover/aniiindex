@@ -2,19 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { signInWithEmail, verifyOtp } from "@/lib/auth";
+import { signInWithEmail } from "@/lib/auth";
 import styles from "./auth.module.css";
 
 export default function AuthPage() {
-  const router = useRouter();
-  const [step, setStep] = useState("email"); // email | code
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [status, setStatus] = useState("idle"); // idle | loading | error
+  const [status, setStatus] = useState("idle"); // idle | loading | success | error
   const [error, setError] = useState("");
 
-  async function handleSendCode(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) return;
@@ -23,36 +19,11 @@ export default function AuthPage() {
     setError("");
     try {
       await signInWithEmail(trimmed);
-      setCode("");
-      setStatus("idle");
-      setStep("code");
+      setStatus("success");
     } catch (err) {
-      setError(err.message || "Couldn't send the code. Please try again.");
+      setError(err.message || "Couldn't send the sign in link. Please try again.");
       setStatus("error");
     }
-  }
-
-  async function handleVerifyCode(e) {
-    e.preventDefault();
-    const trimmed = code.trim();
-    if (!trimmed) return;
-
-    setStatus("loading");
-    setError("");
-    try {
-      await verifyOtp(email.trim(), trimmed);
-      router.replace("/");
-    } catch (err) {
-      setError(err.message || "That code didn't work. Please try again.");
-      setStatus("error");
-    }
-  }
-
-  function handleUseDifferentEmail() {
-    setStep("email");
-    setCode("");
-    setStatus("idle");
-    setError("");
   }
 
   return (
@@ -62,13 +33,26 @@ export default function AuthPage() {
           ani<span>index</span>
         </Link>
 
-        {step === "email" ? (
+        {status === "success" ? (
+          <div className={styles.success}>
+            <div className={styles.successIcon}>✓</div>
+            <p className={styles.successText}>Check your email — we sent you a sign in link</p>
+            <p className={styles.successNote}>
+              Open the link on this device to sign in — magic links don&rsquo;t
+              transfer your session to a different device or browser, so
+              opening it on your phone won&rsquo;t sign you in here.
+            </p>
+            <Link href="/" className={styles.secondaryAction}>
+              ← Back to home
+            </Link>
+          </div>
+        ) : (
           <>
             <h1 className={styles.heading}>Sign in to contribute</h1>
             <p className={styles.subheading}>
-              We will send a 6-digit code to your email — no password needed
+              We will send a magic link to your email — no password needed
             </p>
-            <form className={styles.form} onSubmit={handleSendCode}>
+            <form className={styles.form} onSubmit={handleSubmit}>
               <input
                 type="email"
                 required
@@ -80,42 +64,9 @@ export default function AuthPage() {
               />
               {status === "error" && <div className={styles.error}>{error}</div>}
               <button type="submit" className={styles.button} disabled={status === "loading"}>
-                {status === "loading" ? "Sending…" : "Send code"}
+                {status === "loading" ? "Sending…" : "Send magic link"}
               </button>
             </form>
-          </>
-        ) : (
-          <>
-            <h1 className={styles.heading}>Enter your code</h1>
-            <p className={styles.subheading}>
-              We sent a 6-digit code to <strong>{email}</strong>
-            </p>
-            <form className={styles.form} onSubmit={handleVerifyCode}>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="one-time-code"
-                maxLength={6}
-                required
-                placeholder="123456"
-                className={`${styles.input} ${styles.codeInput}`}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                disabled={status === "loading"}
-              />
-              {status === "error" && <div className={styles.error}>{error}</div>}
-              <button
-                type="submit"
-                className={styles.button}
-                disabled={status === "loading" || code.length !== 6}
-              >
-                {status === "loading" ? "Verifying…" : "Verify code"}
-              </button>
-            </form>
-            <button type="button" className={styles.secondaryAction} onClick={handleUseDifferentEmail}>
-              ← Use a different email
-            </button>
           </>
         )}
       </div>

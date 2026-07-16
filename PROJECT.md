@@ -1,17 +1,19 @@
 # aniindex
 
 A fan content index for anime series. Started as a single hardcoded
-mockup page; as of Session 15 it has a real Next.js App Router
+mockup page; as of Session 16 it has a real Next.js App Router
 structure, real AniList GraphQL data on several pages, a real
 Supabase database with a working (if narrowly-scoped) submission
-pipeline, real Supabase Auth email-OTP sign-in (a 6-digit code, not a
-magic link — see the Session 15 notes for why that changed), and
+pipeline, real Supabase Auth magic-link sign-in (a 6-digit-code
+variant was tried in Session 15 and reverted in Session 16 — the
+Supabase free plan doesn't allow the email template edit that a code
+requires; see the Session 16 notes for the full story), and
 submissions that are now genuinely tied to the signed-in user who made
 them. See "Current State — Handoff Audit" immediately below for a
 full, current snapshot; the session-by-session log after it is the
 historical record of how each piece got built.
 
-## Current State — Handoff Audit (as of Session 15)
+## Current State — Handoff Audit (as of Session 16)
 
 This section is a complete, current-state snapshot of the project, written
 as a handoff for whichever session picks this up next. The session-by-
@@ -45,12 +47,19 @@ mockups into Next.js pages/components with 100% hardcoded data. Phase 2
 series pages. Phase 3 (Sessions 9–12) added Supabase as a real database —
 schema, seeding, the submit form's real write path, the arc page's real
 read path, real Open Graph/oEmbed link detection, and the bug fixes that
-followed each of those. Phase 4 (Sessions 13–15) built out auth end to
-end: real Supabase Auth sign-in, first as a magic link (Session 13), then
-a small UX fix for that flow's dead-end success screen, then replaced
-entirely with a two-step email-OTP (6-digit code) flow (Session 15 — see
-those notes for why); in between, Session 14 wired the signed-in user's
-identity into actual app behavior, which the OTP swap didn't disturb:
+followed each of those. Phase 4 (Sessions 13–16) built out auth, with a
+round trip back to where it started: real Supabase Auth sign-in as a
+magic link (Session 13), a small UX fix for that flow's dead-end success
+screen, replaced entirely with a two-step email-OTP (6-digit code) flow
+(Session 15), then **reverted back to the magic link** (Session 16) once
+it turned out the OTP approach needs a Supabase-project email-template
+edit that the free plan doesn't allow — see the Session 15/16 notes for
+the full story, since it's a genuinely useful lesson for this project
+specifically (this sandbox can't reach the Supabase dashboard to have
+caught this ahead of time). Sessions 13 and 16's UX fix (the "no dead end"
+success screen) both carried forward through the OTP detour and are still
+in place. In between, Session 14 wired the signed-in user's identity into
+actual app behavior, unaffected by any of the sign-in-method churn above:
 submissions still save the real `auth.uid()`-shaped user id instead of the
 literal string `"anonymous"`, and the arc page's content cards still show
 a "Yours" badge on a submission that matches the current session's user
@@ -74,13 +83,13 @@ app/
   series/[slug]/page.jsx          Series page — [slug] is an AniList numeric id; real series + characters, hardcoded arc list
   series/[slug]/series.module.css Series-page-only styles
   api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed for YouTube; basic SSRF guard + 8s timeout
-  auth/page.jsx                   (Session 13, rebuilt Session 15) Two-step email-OTP sign-in card — client component; step 1 calls signInWithEmail to send a 6-digit code, step 2 calls verifyOtp to redeem it and redirects home on success. See "Known issues" — none currently, this replaced the prior magic-link flow's dead-end success screen entirely rather than patching it.
-  auth/auth.module.css            (Session 13, updated Session 15) Styles for the sign-in card (both its steps) and the callback page (imported by both) — the old magic-link "success" state's classes were removed as dead CSS once Session 15 replaced that screen.
-  auth/callback/page.jsx          (Session 13) Magic-link redirect handler — client component; exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error. **Unchanged by Session 15 on purpose** (explicitly out of scope for that task) — now effectively unused by the OTP flow (verifyOtp establishes the session directly, no redirect/callback needed), but left in place rather than deleted; see the Session 15 notes for why.
+  auth/page.jsx                   (Session 13; OTP two-step Session 15; reverted to magic link Session 16) Single-step magic-link sign-in card — client component; email input → "Send magic link" → success screen ("Check your email — we sent you a sign in link"), a same-device note, and a "← Back to home" link so the success screen is never a dead end.
+  auth/auth.module.css            (Session 13; updated Session 15/16) Styles for the sign-in card and the callback page (imported by both). The success-state classes (`.success`/`.successIcon`/`.successText`/`.successNote`) were removed in Session 15 when that screen was replaced, then restored in Session 16 when the screen came back; `.codeInput` (Session 15's 6-digit field styling) was removed again in Session 16 as dead code.
+  auth/callback/page.jsx          (Session 13) Magic-link redirect handler — client component; exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error. **Never touched by Sessions 15 or 16** (out of scope both times) — briefly unused during Session 15's OTP detour, genuinely load-bearing again as of Session 16's revert.
 lib/
   anilist.js                    searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — real AniList GraphQL calls, each cached via Next's fetch cache (next: { revalidate: 3600 })
   supabase.js                   Exports the shared `supabase` client (fetch explicitly opted out of Next's cache) + getArcBeats / getArcContent. (Session 14) getArcContent's select list now includes submitted_by.
-  auth.js                       (Session 13, updated Session 15) signInWithEmail / verifyOtp / signOut / getSession — thin wrappers around supabase.auth.{signInWithOtp,verifyOtp,signOut,getSession}. signInWithEmail now sends a 6-digit code (options: { shouldCreateUser: true }, no emailRedirectTo) rather than a magic link; verifyOtp (new in Session 15) redeems it (type: "email").
+  auth.js                       (Session 13; changed Session 15, reverted Session 16) signInWithEmail / signOut / getSession — thin wrappers around supabase.auth.{signInWithOtp,signOut,getSession}. signInWithEmail is back to sending a magic link (options: { emailRedirectTo }) as of Session 16; Session 15's shouldCreateUser-only variant and its verifyOtp export are both gone (verifyOtp had no other caller once the code step was removed).
 components/
   ArcNav.jsx                   Horizontal arc-chip strip. Props: { arcs: [{ slug, name, count, active? }] }
   ArcHero.jsx                  Breadcrumb/title/meta/badges/description/characters/stats block. Props: { arc: { breadcrumb[], name, episodes, seasonPart, dateRange, badges[{type,label}], description, characters[], stats[{value,label}] } }
@@ -221,8 +230,8 @@ have ever been seeded.
 - **`/search`** — Real: the series panel (title, format, genres, score, popularity, episodes, poster), driven by `?q=`. Hardcoded regardless of query: `ARCS` (11-arc Chainsaw Man placeholder list), `CHARACTERS`, `TOP_CONTENT`, `FILTERS`, `ALSO_FOUND`, `RESULTS_SUMMARY`.
 - **`/series/[slug]`** — Real: everything about the series itself (title, description, genres, score, format/year/episodes/status, banner/poster) and the top-10 character cast, both keyed directly by the numeric AniList id in the URL — the first (and still only) page where the URL's dynamic segment drives every real value shown. Hardcoded: `ARCS` (same placeholder list as the search page, duplicated not shared).
 - **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms after typing stops), step 2's beat selector (real `beats` rows for the Shibuya arc, fetched via `getArcBeats` on mount), and the final submission (a real `content_items` insert). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`. **Real as of Session 14**: `submitted_by` now saves the real signed-in user's id (`session.user.id`, read via `supabase.auth.getSession()` on mount) when one exists, falling back to the literal string `"anonymous"` only when genuinely signed out — see the Session 14 notes below.
-- **`/auth`** (Session 13, rebuilt Session 15) — Real end to end, now a two-step flow: step 1 (email) calls the real `signInWithOtp` (`shouldCreateUser: true`, no `emailRedirectTo` — this flow doesn't use a redirect link at all) to send a 6-digit code; step 2 (code) calls the real `verifyOtp` (`type: "email"`) to redeem it, redirecting to `/` on success. Both steps have genuine loading/error states (error states are real, not simulated — see the Session 15 notes for exactly what was verified with mocked Supabase responses, since this sandbox can't reach `*.supabase.co` for a live round trip). A "← Use a different email" control on step 2 lets the user back out and retry with a different address.
-- **`/auth/callback`** (Session 13) — Still real, unchanged code (Session 15 explicitly left it alone), but **effectively unused as of Session 15** — `verifyOtp` establishes the session directly in the browser tab that requested it, with no redirect step. Kept in place rather than deleted since removing it wasn't asked for and it's harmless dead code, not a bug; a future session could reasonably delete it once its unused status is deliberately decided rather than assumed.
+- **`/auth`** (Session 13; briefly a two-step OTP flow in Session 15; back to this in Session 16) — Real end to end, single-step: email input → `signInWithOtp` (`emailRedirectTo` pointed at `/auth/callback`) → success screen ("Check your email — we sent you a sign in link"), a same-device note, and a "← Back to home" link. Loading/error states are real, not simulated (see the Session 16 notes for exactly what was verified with mocked Supabase responses, since this sandbox can't reach `*.supabase.co` for a live round trip).
+- **`/auth/callback`** (Session 13) — Real and, as of Session 16, load-bearing again: exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error. Was briefly unused during Session 15's OTP detour; never modified either time.
 - **Nav (all pages except `/submit`)** (Session 13) — Real: `NavAuth` reads the actual Supabase session client-side and shows "Sign in" (linking to `/auth`) when signed out, or the real signed-in email + a working "Sign out" button when signed in. `/submit`'s nav has never had a Sign in button (see its own compact nav in the Session 5 notes) and wasn't touched.
 - **`/arc/[slug]`'s content cards** (Session 14) — Real, additionally: a card whose real `content_items.submitted_by` matches the current browser session's signed-in user id now shows a small "✦ Yours" badge (`components/YoursBadge.jsx`, nested inside `ContentCard`). Only real Supabase-backed cards can ever carry this — hardcoded fallback data has no `submittedBy` value, so the badge simply never renders there, the same "omit rather than fabricate" convention this project has used since Session 6.
 
@@ -236,7 +245,8 @@ have ever been seeded.
 6. `/submit` full wizard: paste a URL → real title/thumbnail/platform/creator auto-detected (TikTok/X/Instagram/Reddit via HTML scraping, YouTube via oEmbed) → pick a real story beat → review (real `ContentCard` preview, correct thumbnail rendering) → submit → real row lands in `content_items` → visible on the arc page under the correct beat on the next load (no caching in the way).
 7. (Session 13) Every page's nav "Sign in" link genuinely navigates to `/auth` (confirmed by reading the rendered `href` directly on the home, arc, search, and series pages, not just visually). With a fake session injected into `localStorage` under Supabase's own storage-key convention, the nav correctly swaps to showing that session's email + a working "Sign out" button across a full page reload — proving `NavAuth`/`getSession` genuinely read persisted session state, not just in-memory state from the sign-in form.
 8. (Session 14) With a fake session injected into `localStorage`, driving `/submit`'s full wizard end to end (URL → beat → review → submit, all three of `arcs`/`beats`/`content_items` mocked at the browser network level) produced a `content_items` insert whose `submitted_by` field was exactly that session's `user.id` — not `"anonymous"`. Repeating the same flow with no session present produced `submitted_by: "anonymous"`, confirming the fallback still works for signed-out users. Separately, with a local mock PostgREST server standing in for the arc page's *server-side* Supabase calls (browser-level request mocking can't reach those, since they run in the Next.js server process — see the Session 14 notes below for why this needed its own verification approach) seeded with two `content_items` rows — one with `submitted_by` matching an injected session, one not — `/arc/shibuya-incident-arc` rendered the "✦ Yours" badge on exactly the matching card and not the other one.
-9. (Session 15) `/auth`'s full two-step flow, driven with mocked `**/auth/v1/otp**` and `**/auth/v1/verify**` responses: submitting an email transitions to the code step with the real typed address shown; submitting a deliberately wrong code (mocked 403) shows the real Supabase error message inline and stays on the code step, letting the user retry without losing their place; "← Use a different email" returns cleanly to the email step; submitting a valid code (mocked 200 with a real-shaped session payload) redirects to `/` — confirmed via `page.waitForURL`, not just that no error appeared. Also confirmed the wire-level request bodies directly: the OTP-send request carries `"create_user": true` (the network representation of `shouldCreateUser: true`), and the verify request carries `"type": "email"` — both exactly matching what the task specified, not just what the UI appears to do.
+9. (Session 15, superseded by Session 16 — see that entry) `/auth`'s two-step OTP flow was verified working exactly as built, but the flow itself no longer exists; see the Session 15 log entry for what was true about it at the time.
+10. (Session 16) `/auth`'s single-step flow, driven with a mocked `**/auth/v1/otp**` response: submitting an email produces the exact success message "Check your email — we sent you a sign in link" (confirmed via the rendered text, not just that *a* success state appeared), with no code input present anywhere on the page (confirmed by asserting zero matches for the numeric-input selector the old code step used) and the "← Back to home" link present with `href="/"`. Confirmed the real request body sent for the sign-in call, not just the response: `shouldCreateUser` isn't set explicitly anymore (reverted along with everything else Session 15 added to this call), and the wire body correctly shows `"create_user": true` regardless — `@supabase/auth-js` defaults `shouldCreateUser` to `true` when omitted, confirmed directly from its source, so this matches Session 13's original behavior exactly, not a behavior change disguised as a revert.
 
 ### Partially working / needs attention
 
@@ -244,8 +254,8 @@ have ever been seeded.
 - **`/submit`'s auto-detection can fail or be slow**, and the wizard is designed to let the user proceed anyway with honest placeholders (`"Untitled link"`, a generic gradient, `platform: "other"`, `"Unknown creator"`) rather than block — but there's no way for the user to *manually* correct a wrong or missing title/creator/thumbnail. It's proceed-with-placeholder, not proceed-with-editing.
 - **YouTube's oEmbed integration depends on YouTube's public endpoint staying free/unauthenticated** — it currently is, but this is an external dependency this project doesn't control.
 - **`character_tags`/character detection on `/submit`** never reflects the real pasted content — always the one hardcoded Gojo Satoru chip, regardless of what's actually in the video/post.
-- **Auth (Sessions 13/15) has never completed a real email round trip.** Every piece was verified individually against mocked Supabase responses (see "Fully working end-to-end" above) — the real `signInWithOtp`/`verifyOtp` calls, the code-step error/retry path, the redirect on success, and the signed-in nav state (verified with an injected fake session, not a session Supabase itself issued) — but no session has actually received and typed in a real emailed 6-digit code end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, enter the code that arrives, and confirm it redirects to `/` with the nav showing the signed-in state. **This is also the one remaining gap for Session 14's own work** — signing in for real and then submitting through `/submit` is the only way to see a genuine (not mocked/injected) `auth.uid()`-shaped UUID land in `content_items.submitted_by` and confirm the "Yours" badge against it.
-- **Whether a real user actually receives a 6-digit code or a clickable link depends entirely on a Supabase-project-level setting this app's code has no control over** — the Magic Link email template in the Supabase dashboard needs `{{ .Token }}` in it (not the default `{{ .ConfirmationURL }}`). This isn't a code bug and can't be fixed by editing `app/auth/page.jsx` or `lib/auth.js` — see the Session 15 follow-up notes below for the exact dashboard steps and the source-level confirmation that `signInWithOtp` has no client-side option for this.
+- **Auth (Sessions 13/16) has never completed a real magic-link round trip.** Every piece was verified individually against mocked Supabase responses (see "Fully working end-to-end" above) — the real `signInWithOtp` call, the error/retry path, and the signed-in nav state (verified with an injected fake session, not a session Supabase itself issued) — but no session has actually clicked a real emailed magic link end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, click the link that arrives, and confirm it lands on `/auth/callback` and then `/` with the nav showing the signed-in state. **This is also the one remaining gap for Session 14's own work** — signing in for real and then submitting through `/submit` is the only way to see a genuine (not mocked/injected) `auth.uid()`-shaped UUID land in `content_items.submitted_by` and confirm the "Yours" badge against it.
+- **A 6-digit-code sign-in email was tried (Session 15) and reverted (Session 16) — it needs a Supabase-project setting this app's code has no control over and this project's plan doesn't allow.** Sending a code instead of a link isn't a `signInWithOtp` option; it requires editing the Magic Link email template in the Supabase dashboard to use `{{ .Token }}` instead of `{{ .ConfirmationURL }}`, and that template editor is a paid-plan feature (or requires custom SMTP) that this project's free-tier Supabase project doesn't have access to. See the Session 15 follow-up and Session 16 notes below for the full investigation and the revert. If this project ever moves to a paid plan or sets up custom SMTP, revisit Session 15's approach — the application code for it (now removed) is preserved in git history, not lost.
 - **Session 14's new RLS policy (`"Users can read their own submissions"`) hasn't been run against the live Supabase project yet** — it's new SQL from this session, handed to the user per this project's established convention (see "Not run yet" in the Supabase schema section above). Until it's run, a signed-in user's own non-`pending`/`confirmed` rows (none exist today, since nothing writes any other status — see "No moderation workflow" below) wouldn't be visible to them; today's behavior is unaffected either way, since every row is currently `'pending'` and already covered by the existing public policy.
 - **Still nothing beyond `/submit` and the arc page's cards reads/uses the signed-in identity.** There's no "my submissions" list, no way to edit or delete your own submission, and no moderation view of any kind — Session 14 wired the identity through to exactly two places (the insert, and the badge), not a general-purpose ownership feature.
 
@@ -262,7 +272,7 @@ have ever been seeded.
 
 ### Explicitly not built
 
-- **Auth — resolved in Session 13, extended in Session 14, reworked in Session 15.** "Sign in" now genuinely links to `/auth`, which sends a real Supabase email code and, once entered, signs the user in (originally a magic link, replaced with a 6-digit code in Session 15 — see those notes for why; see "Fully working end-to-end" and "Partially working" above for what is and isn't verified yet). As of Session 14, signing in actually changes app behavior beyond the nav: `/submit` saves the real signed-in user's id as `submitted_by` instead of `"anonymous"`, and the arc page's cards show a "Yours" badge on a matching submission. Still not built: no "my submissions" view, no way to edit/delete your own submission, and no moderation workflow of any kind (see below) — the identity is now real and saved, but nothing yet lets a user *act* on "this is mine" beyond seeing the badge.
+- **Auth — resolved in Session 13, extended in Session 14, briefly reworked in Session 15, reverted in Session 16.** "Sign in" now genuinely links to `/auth`, which sends a real Supabase magic-link email and, once clicked, signs the user in (Session 15 tried a 6-digit code instead; reverted in Session 16 once it turned out that needs a paid-plan-only dashboard setting — see "Partially working" above). As of Session 14, signing in actually changes app behavior beyond the nav: `/submit` saves the real signed-in user's id as `submitted_by` instead of `"anonymous"`, and the arc page's cards show a "Yours" badge on a matching submission — this was never affected by the sign-in-method churn in Sessions 15–16. Still not built: no "my submissions" view, no way to edit/delete your own submission, and no moderation workflow of any kind (see below) — the identity is now real and saved, but nothing yet lets a user *act* on "this is mine" beyond seeing the badge.
 - **No moderation workflow** — `content_items.status` defaults to `'pending'` and nothing in the app ever changes it, reads it for a moderation queue, or distinguishes `'pending'` from `'confirmed'` visually (the arc page shows both identically). `confirmation_count` is written as `0` and never incremented anywhere.
 - **No tab/filter-pill filtering** on any page — clicking "Edits & Video," "Fan Art," an arc's content-type filter, etc. does nothing.
 - **No pagination or "+N more" expansion** — every "+N more" affordance is static text.
@@ -280,8 +290,8 @@ Roughly in order of "unblocks the most other things":
 4. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
 5. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
 6. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
-7. **Confirm a real email-OTP round trip against the live Supabase project** from outside this sandbox (see "Partially working" above) — still the one piece of the auth/identity chain (Sessions 13–15 combined) that's never been verified against anything other than a mock or an injected session.
-8. **Decide what to do with `app/auth/callback/page.jsx`**, now that Session 15's OTP flow doesn't redirect through it — either delete it as dead code, or repurpose it if a future session adds back an OAuth/magic-link option alongside OTP (both would need a redirect handler; OTP alone doesn't).
+7. **Confirm a real magic-link round trip against the live Supabase project** from outside this sandbox (see "Partially working" above) — still the one piece of the auth/identity chain (Sessions 13–16 combined) that's never been verified against anything other than a mock or an injected session.
+8. **If this project ever moves off the Supabase free plan (or sets up custom SMTP), revisit the email-OTP flow** — Session 15's application code for it is straightforward to reconstruct from git history (`lib/auth.js`'s `verifyOtp`, `app/auth/page.jsx`'s two-step version), the only blocker was ever the dashboard-side email template, not the app code. Not worth attempting again on the free plan.
 9. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
 10. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
 
@@ -2271,6 +2281,95 @@ session since Session 9) — worth double-checking first if a future report
 of "getting a link instead of a code" comes in again, before assuming it's
 a regression in `app/auth/page.jsx` or `lib/auth.js`.
 
+## Session 16
+
+Reverted Session 15's email-OTP flow back to the original magic link.
+Turned out the Session 15 follow-up's diagnosis was right about the
+*mechanism* (link vs. code is a Supabase email-template setting, not a
+`signInWithOtp` option) but the actual constraint runs deeper than "go
+edit the template" — **this project's Supabase project is on the free
+plan without custom SMTP, and free-plan projects can't edit email
+templates at all** (that editor is gated behind a paid plan, or requires
+bringing your own SMTP provider so Supabase isn't the one sending the
+email). So the dashboard fix documented in the Session 15 follow-up isn't
+actually available to this project right now — the only sign-in email
+Supabase can currently send here is whatever the default, unmodifiable
+Magic Link template produces, which is a link. Reverting to match that
+constraint, rather than continuing to build UI around an email shape this
+project's Supabase plan can't produce, was the only option that leaves
+the app actually working end to end for a real user today.
+
+- **`lib/auth.js`**: `signInWithEmail` reverted to
+  `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo:
+  \`${window.location.origin}/auth/callback\` } })` — back to exactly
+  Session 13's original call shape (Session 15's `shouldCreateUser: true`
+  was dropped along with `emailRedirectTo`'s removal; `shouldCreateUser`
+  defaults to `true` when omitted per `@supabase/auth-js`'s own source, so
+  this is behaviorally identical to Session 13, not just visually
+  similar — confirmed directly, not assumed, see "Fully working end-to-
+  end" above). Removed the `verifyOtp` export entirely — Session 15 added
+  it for the code step's verification call, and nothing calls it anymore
+  once that step is gone; left as dead code it would only invite a future
+  session to wonder whether it's still wired to something.
+- **`app/auth/page.jsx`**: rebuilt back to a single `status` state
+  (`idle`/`loading`/`success`/`error`) instead of Session 15's `step`
+  state — the `"code"` branch, the 6-digit input, `handleVerifyCode`,
+  `handleUseDifferentEmail`, and the `useRouter` import (only needed for
+  the code step's post-verify redirect) are all gone. The email step's
+  copy reverted to "We will send a magic link to your email" and "Send
+  magic link" (from Session 15's "6-digit code"/"Send code" wording).
+  - **The success screen intentionally did not revert to Session 13's
+    original bare-bones version.** Between Session 15 and this session, an
+    intermediate fix (documented in this file as the "Session 14
+    follow-up") had added a "← Back to home" link and a same-device note
+    to that exact screen, specifically because the original had no way
+    out. Session 15 removed that screen entirely (replaced by the code
+    step), so reverting *to* Session 15 naturally means reverting *past*
+    that fix too unless it's deliberately re-added — which it was, here,
+    since simply restoring Session 13's version verbatim would silently
+    reintroduce a dead end that a previous task explicitly asked to be
+    fixed. This wasn't asked for explicitly this time, but dropping a
+    previously-requested, still-relevant fix as an unannounced side effect
+    of an unrelated revert would have been a worse outcome than keeping
+    it — flagged here, and to the user directly, rather than done
+    silently.
+  - The success message itself is exactly what was specified: "Check your
+    email — we sent you a sign in link," not the old "...a magic link to
+    `<email>`" wording — the email address is no longer echoed back in
+    the success copy (a small, deliberate difference from Session 13's
+    original; the task's quoted message didn't include a place for it,
+    and the message reads completely without it).
+- **`app/auth/auth.module.css`**: removed `.codeInput` (Session 15's
+  6-digit field styling, unused now) as dead CSS. Restored `.success`,
+  `.successIcon`, and `.successText` (removed as dead code in Session 15,
+  needed again now) — `.successNote` and `.secondaryAction` had never
+  actually been removed (the "back to home"/same-device fix they style
+  survived, conceptually, through the Session 14-follow-up → Session 15 →
+  Session 16 chain even though the screen itself was deleted and rebuilt
+  twice in between), so those two just needed to be referenced by the
+  restored JSX again, not recreated.
+- **`app/auth/callback/page.jsx` was not touched**, per the task —
+  confirmed with `git diff --stat` on that one file showing no changes,
+  same check performed (and passed) in Session 15 for the same file.
+- **Verified with a real production build and browser**, same established
+  pattern as every prior auth-related session:
+  - `next build` succeeds with no new errors.
+  - Mocked `**/auth/v1/otp**` to succeed: submitting an email produces the
+    exact success text "Check your email — we sent you a sign in link"
+    (asserted on the literal rendered string), with zero code-input
+    elements present anywhere on the page (asserted a `0` count for the
+    numeric-input selector Session 15's code step used, not just "it
+    looks like the code step is gone").
+  - Confirmed the "← Back to home" link's `href` is `/`.
+  - Confirmed the actual outgoing request body for the sign-in call:
+    `shouldCreateUser` isn't explicitly set in this codebase anymore, and
+    the real wire body still shows `"create_user": true` — matching
+    `@supabase/auth-js`'s documented default, confirming the revert is a
+    genuine behavioral match to Session 13, not merely a visual one.
+  - Confirmed `app/auth/callback/page.jsx`'s diff is empty before
+    committing.
+  - Stopped the test server afterward, no processes left running.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -2430,13 +2529,15 @@ where arcs.slug = 'shibuya-incident-arc';
   stale — by Session 10/11 the tables are genuinely read/written; see the
   "Current State — Handoff Audit" section at the top of this file for
   what's actually true today.)
-- **Supabase Auth** (Session 13, sign-in method changed Session 15) —
-  email sign-in, using the same `@supabase/supabase-js` client's `auth`
-  namespace (no separate package). Originally a magic link; **as of
-  Session 15, a two-step 6-digit email-OTP code** instead (see those
-  notes for why). `lib/auth.js` exports
-  `signInWithEmail`/`verifyOtp`/`signOut`/`getSession`; see the Session
-  13/15 notes above for the full `/auth` + nav wiring.
+- **Supabase Auth** (Session 13; briefly a 6-digit code in Session 15;
+  back to a magic link in Session 16) — email sign-in, using the same
+  `@supabase/supabase-js` client's `auth` namespace (no separate package).
+  Session 15's email-OTP code needs a Supabase email-template edit that
+  this project's free-tier plan doesn't allow, so Session 16 reverted to
+  Session 13's original magic link (see the Session 15 follow-up and
+  Session 16 notes for the full story). `lib/auth.js` exports
+  `signInWithEmail`/`signOut`/`getSession`; see the Session 13/16 notes
+  above for the full `/auth` + nav wiring.
 
 ## File layout
 
@@ -2454,13 +2555,13 @@ app/
   series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
   series/[slug]/series.module.css  Styles unique to the series page
   api/og-fetch/route.js  POST route: fetches a pasted URL server-side and extracts Open Graph metadata + platform/creator (see Session 12 notes above)
-  auth/page.jsx           (Session 13, rebuilt Session 15) Two-step email-OTP sign-in card, client component — email step then 6-digit code step
-  auth/auth.module.css    (Session 13, updated Session 15) Styles shared by auth/page.jsx's two steps and auth/callback/page.jsx
-  auth/callback/page.jsx  (Session 13) Magic-link redirect handler, client component. Unchanged and effectively unused as of Session 15 — the OTP flow verifies and signs in directly, no redirect needed
+  auth/page.jsx           (Session 13; OTP two-step Session 15; reverted Session 16) Single-step magic-link sign-in card, client component — email input, success screen with a same-device note and a "Back to home" link
+  auth/auth.module.css    (Session 13; churned Session 15/16) Styles for auth/page.jsx and auth/callback/page.jsx
+  auth/callback/page.jsx  (Session 13) Magic-link redirect handler, client component. Never modified by Sessions 15 or 16; load-bearing again as of Session 16's revert
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
   supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11). (Session 14) getArcContent's select list now includes submitted_by.
-  auth.js                 (Session 13, updated Session 15) signInWithEmail / verifyOtp / signOut / getSession — wraps the shared client's supabase.auth namespace. signInWithEmail sends a 6-digit code as of Session 15 (shouldCreateUser: true, no emailRedirectTo); verifyOtp (new) redeems it.
+  auth.js                 (Session 13; changed Session 15, reverted Session 16) signInWithEmail / signOut / getSession — wraps the shared client's supabase.auth namespace. Back to sending a magic link (emailRedirectTo) as of Session 16; Session 15's verifyOtp export is gone, no longer called from anywhere.
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
   ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
@@ -2779,11 +2880,14 @@ database/API:
   literal string `"anonymous"` (still falls back to `"anonymous"` when
   genuinely signed out), and the arc page's content cards show a "Yours"
   badge on a submission that matches the current session. **Sign-in method
-  changed in Session 15**: originally a magic link, now a two-step
-  6-digit email code (see the Session 15 notes) — the underlying identity
-  behavior from Sessions 13–14 is unaffected. Still no moderation UI, no
+  churned in Sessions 15–16**: briefly a two-step 6-digit email code
+  (Session 15), reverted back to the original magic link (Session 16)
+  once it turned out the code approach needs a Supabase dashboard setting
+  this project's free plan doesn't allow — see the Session 15 follow-up
+  and Session 16 notes. The underlying identity behavior from Sessions
+  13–14 was unaffected by any of this churn. Still no moderation UI, no
   "my submissions" list, and no way to edit/delete a submission — Sessions
-  13–15 together built and wired up the identity layer, not a full
+  13–16 together built and wired up the identity layer, not a full
   ownership feature set on top of it (see "Suggested
   next phase" in the Current State section above).
 - No pagination/infinite scroll for the card grids, and no real
