@@ -214,6 +214,7 @@ function buildBeatSections(beats, content) {
       count: items.length,
       peakLabel: beat.is_peak ? "Peak moment" : null,
       items: items.map((item) => ({
+        id: item.id,
         platform: item.platform,
         thumbnailUrl: item.thumbnail_url,
         title: item.title,
@@ -222,6 +223,7 @@ function buildBeatSections(beats, content) {
         characterTags: item.character_tags,
         sourceUrl: item.source_url,
         submittedBy: item.submitted_by,
+        status: item.status,
       })),
     };
   });
@@ -255,20 +257,6 @@ export default async function ArcPage({ params }) {
   // `params.slug` doesn't match a seeded arc — treated as one signal so the
   // page never mixes real beats with hardcoded content or vice versa.
   const arcFoundInDb = realArcBeats !== null && realArcContent !== null;
-
-  // TEMPORARY diagnostic — remove once the "still showing hardcoded
-  // content" issue is confirmed fixed. Runs server-side; check Vercel's
-  // function logs for this route.
-  console.log("[arc/[slug]] diagnostic:", {
-    slug: params.slug,
-    beatsStatus: beatsResult.status,
-    beatsValue: beatsResult.status === "fulfilled" ? realArcBeats : undefined,
-    beatsError: beatsResult.status === "rejected" ? beatsResult.reason?.message : undefined,
-    contentStatus: contentResult.status,
-    contentValue: contentResult.status === "fulfilled" ? realArcContent : undefined,
-    contentError: contentResult.status === "rejected" ? contentResult.reason?.message : undefined,
-    arcFoundInDb,
-  });
 
   const intensityBeats = arcFoundInDb
     ? realArcBeats.map((beat) => ({

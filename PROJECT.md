@@ -1,19 +1,30 @@
 # aniindex
 
 A fan content index for anime series. Started as a single hardcoded
-mockup page; as of Session 16 it has a real Next.js App Router
+mockup page; as of Session 18 it has a real Next.js App Router
 structure, real AniList GraphQL data on several pages, a real
 Supabase database with a working (if narrowly-scoped) submission
 pipeline, real Supabase Auth magic-link sign-in (a 6-digit-code
 variant was tried in Session 15 and reverted in Session 16 — the
 Supabase free plan doesn't allow the email template edit that a code
-requires; see the Session 16 notes for the full story), and
-submissions that are now genuinely tied to the signed-in user who made
-them. See "Current State — Handoff Audit" immediately below for a
-full, current snapshot; the session-by-session log after it is the
-historical record of how each piece got built.
+requires; see the Session 16 notes for the full story), submissions
+that are genuinely tied to the signed-in user who made them, and now
+a first pass at a no-auth community quality-control layer (Session
+18) — pending items are visibly marked, any viewer can confirm a
+pending placement (two confirmations promote it to `confirmed`) or
+flag an item outright (removing it from the arc page). See "Current
+State — Handoff Audit" immediately below for a full, current
+snapshot; the session-by-session log after it is the historical
+record of how each piece got built.
 
-## Current State — Handoff Audit (as of Session 17, full project audit)
+**A note on session numbering**: this task was framed as "Session 15,"
+but that number was already used (see the Session 15 log entry below —
+the email-OTP detour). The project's own history already runs through
+Session 17 (a full audit) as of this file's prior state, so this work is
+logged as **Session 18** to keep the log continuous and unambiguous;
+nothing from the real Session 15 was touched or overwritten.
+
+## Current State — Handoff Audit (as of Session 18)
 
 This section is a complete, current-state snapshot of the project, written
 as a handoff for whichever session picks this up next. The session-by-
@@ -22,13 +33,18 @@ project got here and *why* specific decisions were made — read this section
 first for orientation, then the log for the reasoning behind any specific
 piece of code.
 
-**Session 17 was a full audit, not a feature session** — every file listed
-below was re-read directly from disk (not reconstructed from memory of
-prior sessions' notes) to confirm this section is accurate before Phase 4
-is considered closed. Nothing in the application code changed; this was a
-documentation-only pass. Where this section disagrees with something a
-session log below says, this section is the current truth — the logs are
-history, not a live source.
+**Session 17 was a full audit** — every file was re-read directly from
+disk to confirm the "Current State" section was accurate before Phase 4
+was considered closed; nothing in the application code changed that
+session. **Session 18 is the first Phase 5 feature session**: it acted on
+two items Session 17's audit had flagged (the leftover debug logs, the
+missing `--green`/`--green-soft` tokens) and built the first slice of a
+no-auth quality-control layer on top of `content_items.status` /
+`confirmation_count` — a "pending review" badge, a "confirm placement"
+button, and a flag button, all on the arc page's content cards. This
+section has been patched (not fully rewritten) to reflect that work; where
+it disagrees with something a session log below says, this section is the
+current truth — the logs are history, not a live source.
 
 **Stack**: Next.js 14.2.35 (App Router), plain JavaScript/JSX (no
 TypeScript), no CSS framework (global stylesheet ported 1:1 from the
@@ -58,7 +74,7 @@ after every session since Session 13. Always confirm with `git log
 - **Phase 3** (Sessions 9–12): added Supabase as a real database — schema,
   seeding, the submit form's real write path, the arc page's real read
   path, real Open Graph/oEmbed link detection.
-- **Phase 4 — auth (Sessions 13–17), now closed**: real Supabase Auth
+- **Phase 4 — auth (Sessions 13–17), closed**: real Supabase Auth
   sign-in (a magic link, Session 13); a UX fix so the sign-in success
   screen is never a dead end; a detour into a 6-digit email-OTP flow
   (Session 15) that was reverted back to the magic link (Session 16) once
@@ -66,15 +82,23 @@ after every session since Session 13. Always confirm with `git log
   plan doesn't allow (see the Session 15 follow-up and Session 16 notes —
   genuinely useful context if anyone considers trying OTP again); the
   signed-in user's identity wired into real app behavior (Session 14) —
-  `submitted_by` and the arc page's "Yours" badge; and this session
-  (17), a full audit confirming all of the above against the actual
-  current source rather than session notes. See "Phase 5+ roadmap" at the
-  end of this section for what's next.
+  `submitted_by` and the arc page's "Yours" badge; and Session 17, a full
+  audit confirming all of the above against the actual current source
+  rather than session notes.
+- **Phase 5 — quality control (Session 18–), in progress**: cleaned up the
+  two items Session 17's audit flagged (leftover debug `console.log`s, the
+  undefined `--green`/`--green-soft` tokens); added a no-auth "pending
+  review" badge, a "confirm placement" button (two confirmations promote a
+  `pending` item to `confirmed`), and a flag button (removes an item from
+  the arc page) to the arc page's content cards, backed by two new API
+  routes (`/api/confirm`, `/api/flag`). See "Phase 5+ roadmap" at the end
+  of this section for what's next.
 
 ### Complete file inventory
 
-Every file in `app/`, `components/`, and `lib/` as of Session 17, confirmed
-by reading each one directly (not carried forward from older notes):
+Every file in `app/`, `components/`, and `lib/` as of Session 18 (Session
+17's inventory, patched for what Session 18 actually touched or added —
+not a from-scratch re-read of every file this time):
 
 ```
 app/
@@ -82,21 +106,23 @@ app/
   globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, etc.) used across every page — see "Design tokens" below for the full custom-property list.
   page.jsx                        Home page (`/`) — server component, 100% hardcoded data (NAV_LINKS, HERO_STATS, TRENDING_ARCS, POPULAR_SERIES, TRENDING_MOMENTS, FEATURES), composes HeroSearch + Sparkline + NavAuth.
   page.module.css                 Home-page-only styles (hero, arc/series cards, trending moments list, feature pills).
-  arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). Real Supabase beats/content (keyed by params.slug) + real AniList series/characters (keyed by a hardcoded AniList id), both independently falling back to hardcoded data on failure. Still has one temporary diagnostic console.log (see "Known issues").
+  arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). Real Supabase beats/content (keyed by params.slug) + real AniList series/characters (keyed by a hardcoded AniList id), both independently falling back to hardcoded data on failure. `buildBeatSections` now also threads each real item's `id` and `status` through to ContentCard (Session 18 — see "Fully working end-to-end"). The Session 17 diagnostic console.log is gone (Session 18 cleanup).
   search/page.jsx                 Search page (`/search`) — async server component. Real AniList series panel (keyed by ?q=), everything else (ARCS, CHARACTERS, TOP_CONTENT, FILTERS, ALSO_FOUND, RESULTS_SUMMARY) hardcoded.
   search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module).
-  submit/page.jsx                 3-step submission wizard (`/submit`) — client component, owns all wizard state. Real: step 1's /api/og-fetch link detection, step 2's real beat selector (getArcBeats), step 3's real content_items insert with a real submitted_by (session.user.id, or "anonymous" when signed out). Hardcoded: SERIES_DETECTED, ARC_DETECTED, INITIAL_CHARACTERS, CONTENT_TYPE_OPTIONS. Still has 3 debug console.logs in handleSubmit (see "Known issues").
-  submit/submit.module.css        Submit-page-only styles (step indicator, all 3 step cards, beat selector chart, character chips, quality checklist).
+  submit/page.jsx                 3-step submission wizard (`/submit`) — client component, owns all wizard state. Real: step 1's /api/og-fetch link detection, step 2's real beat selector (getArcBeats), step 3's real content_items insert with a real submitted_by (session.user.id, or "anonymous" when signed out). Hardcoded: SERIES_DETECTED, ARC_DETECTED, INITIAL_CHARACTERS, CONTENT_TYPE_OPTIONS. The 3 debug console.logs formerly in handleSubmit are gone (Session 18 cleanup).
+  submit/submit.module.css        Submit-page-only styles (step indicator, all 3 step cards, beat selector chart, character chips, quality checklist). Its 13 `var(--green)`/`var(--green-soft)` call sites now resolve to a real color (Session 18 added both tokens to globals.css's `:root` — see "Design tokens").
   series/[slug]/page.jsx          Series page (`/series/[slug]`) — async server component, `[slug]` is an AniList numeric id (not an aniindex slug). Real: everything about the series itself + top-10 cast. Hardcoded: ARCS (same placeholder list as the search page, duplicated not shared).
   series/[slug]/series.module.css Series-page-only styles (banner hero, genre pills, score row).
   submit/page.jsx and series/[slug]/page.jsx share no code beyond components — noted since they're easy to conflate by name similarity.
   api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no HTML-parsing dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed (a separate code path, no scraping) for YouTube. Basic hostname-literal SSRF guard + 8s timeout on every upstream fetch. No response-size cap (see "Known issues").
+  api/confirm/route.js            (Session 18) POST route, body `{ id }`. Calls lib/supabase.js's confirmContentItem(id) and returns its result as JSON, or a 400/500 with `{ error }` on a missing id / thrown error. No auth check — matches the task's "any viewer can confirm" requirement.
+  api/flag/route.js               (Session 18) POST route, body `{ id }`. Calls lib/supabase.js's flagContentItem(id) and returns its result as JSON, or a 400/500 with `{ error }`. No auth check.
   auth/page.jsx                   Sign-in card (`/auth`) — client component, single step. Email input → "Send magic link" (calls signInWithEmail) → success screen ("Check your email — we sent you a sign in link" + a same-device note + a "← Back to home" link, so the screen is never a dead end). Real error states, not simulated.
   auth/auth.module.css            Styles for auth/page.jsx and auth/callback/page.jsx (imported by both).
   auth/callback/page.jsx          Magic-link redirect handler (`/auth/callback`) — client component, wrapped in <Suspense> (required for useSearchParams in a statically-rendered page). Exchanges the URL's `code` for a session via exchangeCodeForSession, or falls back to checking for an already-parsed hash-based session (implicit-flow links), then redirects to `/` or shows an error. Genuinely load-bearing — every real magic-link click passes through this page.
 lib/
   anilist.js                      searchSeries(query, {perPage}) / getSeriesById(id) / getSeriesCharacters(id, {perPage}) / getSeriesWithRelations(id) — real AniList GraphQL calls via a shared postToAniList() helper, each cached via Next's fetch cache (next: { revalidate: 3600 }). All four throw on request/GraphQL failure; getSeriesById/getSeriesWithRelations strip AniList's HTML markup out of `description` before returning.
-  supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcBeats(slug) and getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by). Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key).
+  supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcBeats(slug), getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by; its `.in('status', ['confirmed','pending'])` allowlist is also what excludes flagged items — see "Known issues" and Session 18 below), and (Session 18) confirmContentItem(id) / flagContentItem(id) — see "Fully working end-to-end" for exactly what each does. Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key).
   auth.js                         signInWithEmail(email) — supabase.auth.signInWithOtp with emailRedirectTo pointed at /auth/callback (a genuine magic link, see the Session 15/16 history for why not a code). signOut() and getSession() — thin wrappers, getSession() swallows its own error and returns null rather than throwing. All three exported; no other functions in this file.
 components/
   ArcNav.jsx                      Horizontal arc-chip strip (the row under the top nav on the arc page). Props: { arcs: [{ slug, name, count, active? }] }. No props default; `arcs` is required.
@@ -104,15 +130,17 @@ components/
   ArcList.jsx                     Arc-row list with sparklines; imports search.module.css directly (not its own CSS Module). Props: { arcs: [{ slug, num, name, count, peak, spark: [{heightPct, tier}], dividerAfter? }], moreLabel? }. Used by both the search and series pages. Each row is a next/link to /arc/${slug}.
   BeatSection.jsx                 One story-beat block: heading, item count, optional peak pill, and a grid of ContentCards. Props: { beat: { title, count, peakLabel, items: [...spread directly into ContentCard] } }. Has no markup/platform logic of its own — items pass straight through.
   CharacterChips.jsx              Character chip list (real photo via backgroundImage, or a colored-initials circle fallback; optional mention-count badge). Props: { characters: [{ id?, name, image?, color?, initials?, count? }] }. Used by ArcHero and the series page.
-  ContentCard.jsx                 Single fan-content link card — default tall mode (globals.css classes) or compact horizontal mode (its own CSS Module). Props: { title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact = false, submittedBy? }. Also exports the named function getThumbnailStyle(thumbnailUrl), used by this component and independently by app/submit/page.jsx's step-1 preview thumbnail. submittedBy is optional; when present, nests a YoursBadge in the thumbnail's top-left corner.
-  ContentCard.module.css          Colocated styles for ContentCard's compact mode only (the default/tall mode uses globals.css's shared .card/.thumb/.cbody/.tag-* classes). Includes .compactYours for the compact mode's own "Yours" badge position (top-left of the 80×52px thumbnail).
+  ConfirmButton.jsx               (Session 18) Client component nested inside ContentCard's default (tall) render path, shown only on a real, pending item (`id` present && `status === "pending"`). POSTs `{ id }` to /api/confirm on click, tracked via local `idle | loading | done | error` state; renders "✓ Confirmed" once done. Stops the click from bubbling into the card's own enclosing `<a>`.
+  ContentCard.jsx                 Single fan-content link card — default tall mode (globals.css classes) or compact horizontal mode (its own CSS Module). Props: { id?, title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact = false, submittedBy?, status? }. Also exports the named function getThumbnailStyle(thumbnailUrl), used by this component and independently by app/submit/page.jsx's step-1 preview thumbnail. Default (tall) mode only, Session 18: when `id` is set and `status === "pending"`, a "⏳ Pending review" badge renders in the Yours-badge slot instead of YoursBadge (no auth check — any viewer sees it on any pending item), and a `.card-actions` row appears under the tags with a ConfirmButton (pending items only) and a FlagButton (any item with an `id`). Compact mode and the submit wizard's live preview never pass an `id`, so none of this Session 18 UI renders there — same "omit rather than fabricate" convention as YoursBadge.
+  ContentCard.module.css          Colocated styles for ContentCard's compact mode only (the default/tall mode uses globals.css's shared .card/.thumb/.cbody/.tag-* classes). Includes .compactYours for the compact mode's own "Yours" badge position (top-left of the 80×52px thumbnail). Session 18's pending badge/confirm/flag styles are bare-tag globals.css classes (`.pending-badge`, `.card-actions`, `.confirm-btn`, `.flag-btn`), not added here, since only default mode uses them.
   ContentTabs.jsx                 Sticky tab bar (All / Edits & Video / Fan Art / Discussion / OST & Music on the arc page). Props: { tabs: [{ label, count, active? }] }.
+  FlagButton.jsx                  (Session 18) Client component nested inside ContentCard's default (tall) render path, shown on any real item (`id` present, any status). POSTs `{ id }` to /api/flag on click, same `idle | loading | done | error` local-state pattern as ConfirmButton; renders "🚩 Flagged" once done. Doesn't remove the card from the page currently being viewed — see "Known issues" for why that's an accepted gap, not a bug.
   HeroSearch.jsx                  Client component — home page's hero search input + "Try:" quick-search chips. No props; owns its own input state. Enter or a chip click navigates to /search?q=....
   IntensityChart.jsx              Ten-beat bar chart ("community response by story beat"). Props: { beats: [{ label, heightPct, tier: "normal"|"high"|"peak" }] }. Peak-tier bars get a small accent dot above them.
   NavAuth.jsx                     Client component — the signed-in/signed-out slice of a page's nav-right. Reads the session via lib/auth's getSession() on mount and subscribes to supabase.auth.onAuthStateChange to stay live; renders nothing until the initial check resolves (no flash of the wrong state). Props: { signInClassName? } (defaults to "btn btn-ghost"; the arc page passes "btn btn-primary" to match its own pre-existing button styling). Signed out: a next/link to /auth reading "Sign in". Signed in: the real email (.nav-auth-email, ellipsis-truncated past 180px) + a "Sign out" button that calls signOut(). Used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx (so the search and series pages get it too). NOT used by app/submit/page.jsx's nav, which has never had a Sign in button.
   SearchNav.jsx                   Client component — the search and series pages' shared nav (logo, search input, icon, clear button, NavAuth, "Submit content" link). Props: { query: string }. Seeded from `query`, remounted via `key={query}` on the search page so client-side re-searches re-sync the input.
   Sparkline.jsx                   Small bar-chart sparkline. Props: { bars: [{ heightPct, tier }], width = "34px", height = "20px", gap = "1.5px" }. Used at 34×20px/5-bar on the search page's arc list and 100%×36px/9-bar on the home page's trending arc cards.
-  YoursBadge.jsx                  Client component nested inside ContentCard. Props: { submittedBy, className }. Calls getSession() once on mount; renders a "✦ Yours" <span> (via the passed-in className) only if session.user.id === submittedBy, else renders null — including for the entire window before the check resolves, so it can never flash an incorrect badge. Exists specifically so ContentCard and the arc page (a server component with no access to the browser's session) don't need to become client-rendered just for this one id comparison.
+  YoursBadge.jsx                  Client component nested inside ContentCard. Props: { submittedBy, className }. Calls getSession() once on mount; renders a "✦ Yours" <span> (via the passed-in className) only if session.user.id === submittedBy, else renders null — including for the entire window before the check resolves, so it can never flash an incorrect badge. Exists specifically so ContentCard and the arc page (a server component with no access to the browser's session) don't need to become client-rendered just for this one id comparison. As of Session 18, ContentCard only renders this when the item isn't pending — a pending item shows the pending badge in this same slot instead, regardless of who submitted it.
 next.config.mjs                   images.remotePatterns allowlists i.ytimg.com and s4.anilist.co for next/image — configured but next/image isn't used anywhere in the codebase yet (see "Known issues"); every image renders via plain CSS background/backgroundImage or a raw <img> tag instead.
 jsconfig.json                     Configures the "@/*" import alias (maps to the repo root) used throughout app/components/lib.
 package.json                      Dependencies: next (14.2.35), react (^18.3.1), react-dom (^18.3.1), @supabase/supabase-js (^2.110.5). Scripts: dev/build/start/lint (all standard `next` CLI passthroughs).
@@ -135,18 +163,16 @@ revisited since, since nothing has changed about how env vars are handled.
 `--accent-soft` `rgba(123,108,246,0.14)`, `--red` `#F0706A`, `--amber`
 `#F0A96A`, `--t1`/`--t2`/`--t3` (text, high→low emphasis)
 `#EEEEF5`/`#8A8AA8`/`#50505E`, `--display` `'Syne', sans-serif`, `--body`
-`'Inter', sans-serif`, `--r` `10px`, `--r-sm` `6px`. **Confirmed still
-true, not fixed in this audit**: `--green`/`--green-soft` are referenced
-throughout `app/submit/submit.module.css` (e.g. `.completedCheck`,
-`.stepDotDone`, `.submitSuccess`) but **never actually defined in
-`:root`** — every one of those `var(--green)`/`var(--green-soft)` calls
-silently resolves to nothing (the browser drops the declaration), the same
-failure mode as the real Session 12 thumbnail-CSS bug. First flagged in
-Session 13 when choosing colors for the (now-removed) OTP success screen;
-still unfixed, still real, still worth a two-line fix (add both to
-`:root` using the literal color already in consistent informal use
-everywhere else, `rgb(106,240,168)` / `rgba(106,240,168,0.14)`) — see
-"Known issues" below.
+`'Inter', sans-serif`, `--r` `10px`, `--r-sm` `6px`, and (Session 18) `--green` `#6AF0A8` / `--green-soft`
+`rgba(106,240,168,0.14)`. **Fixed in Session 18**: `--green`/`--green-soft`
+are referenced 13 times throughout `app/submit/submit.module.css` (e.g.
+`.completedCheck`, `.stepDotDone`, `.submitSuccess`) and, from Session 13
+until this session, were never actually defined in `:root` — every one of
+those `var(--green)`/`var(--green-soft)` calls silently resolved to
+nothing (the browser drops the declaration), the same failure mode as the
+real Session 12 thumbnail-CSS bug. Both tokens now exist, using the exact
+literal color that was already in consistent informal use everywhere else
+in that file's own border rules.
 
 ### Supabase — full schema, RLS, and seed data (all confirmed live)
 
@@ -224,30 +250,71 @@ create policy "Users can read their own submissions"
   on content_items for select
   to authenticated
   using (submitted_by = auth.uid()::text);
+
+-- Session 18, not yet run in the live project (handed to the user, same
+-- convention as above). Lets app/api/confirm and app/api/flag's real
+-- writes (lib/supabase.js's confirmContentItem/flagContentItem) succeed
+-- for anon/public — until this runs, both routes fail with a Postgres
+-- "permission denied for column ..." error, since no UPDATE policy of any
+-- kind exists yet (see the paragraph below). Scoped as tightly as this
+-- project's tooling allows: RLS policies can't restrict *which columns* a
+-- statement touches, only *which rows* — the actual column restriction
+-- comes from the GRANT, which limits anon/authenticated to setting only
+-- confirmation_count and status, nothing else on the row.
+grant update (confirmation_count, status) on content_items to anon, authenticated;
+
+create policy "Public can confirm or flag content_items"
+  on content_items for update
+  using (true)
+  with check (true);
 ```
 
-**No `UPDATE`/`DELETE` policy exists on any table** — those operations are
-blocked for the anon/public role everywhere, by omission rather than an
-explicit deny rule (this is how Postgres RLS works: no matching policy =
-denied). None of the policies are scoped `to anon` specifically — they're
-`PUBLIC`, a deliberate choice made after troubleshooting whether the
-newer `sb_publishable_...`-format key maps to the `anon` role the same way
-a legacy anon JWT does (see the Session 10 "still failing" follow-up).
-**The one exception is Session 14's new policy above, which is deliberately
-scoped `to authenticated`** — unlike the earlier lesson, this one actually
-needs a real role check: `auth.uid()` returns `null` for an anonymous
-request, and `submitted_by = null::text` is never true (Postgres's `=`
-against `null` is always `null`, not `true`), so scoping this specific
-policy is what makes "only the actual owner" mean anything — a `PUBLIC`
-version would either do nothing extra (anon can't match) or, if written
-carelessly, accidentally widen access, neither of which is what a
-`to authenticated` + `auth.uid()` check is for. **Not run yet** — this
-policy is new SQL from Session 14 that hasn't been executed against the
-live Supabase project by this repo's own tooling (per the established
-convention, see "Database schema" below); the user needs to run it in the
-Supabase SQL editor before an authenticated user's own non-`pending`/
-`confirmed` rows (if any come to exist once a moderation workflow adds
-other status values) will actually be readable by them.
+**No `UPDATE`/`DELETE` policy existed on any table before Session 18** —
+those operations were blocked for the anon/public role everywhere, by
+omission rather than an explicit deny rule (this is how Postgres RLS
+works: no matching policy = denied). None of the pre-existing policies are
+scoped `to anon` specifically — they're `PUBLIC`, a deliberate choice made
+after troubleshooting whether the newer `sb_publishable_...`-format key
+maps to the `anon` role the same way a legacy anon JWT does (see the
+Session 10 "still failing" follow-up). **Session 14's own policy above is
+deliberately scoped `to authenticated`** — unlike the earlier lesson, that
+one actually needs a real role check: `auth.uid()` returns `null` for an
+anonymous request, and `submitted_by = null::text` is never true
+(Postgres's `=` against `null` is always `null`, not `true`), so scoping
+that specific policy is what makes "only the actual owner" mean anything.
+**Not run yet** — that policy is still new SQL from Session 14 that hasn't
+been executed against the live Supabase project by this repo's own
+tooling; the user needs to run it before an authenticated user's own
+non-`pending`/`confirmed` rows (if any come to exist once a moderation
+workflow adds other status values) are actually readable by them.
+
+**Session 18's `UPDATE` policy above is the first genuinely `PUBLIC`
+write path this project has ever added**, and is intentional, not an
+oversight of the same kind the earlier `PUBLIC`-vs-`anon` investigation
+was about — the task this session explicitly requires "does not require
+auth" for both confirming and flagging, so `using (true)` is the correct
+scope here, not a carelessly widened one. The actual safety net is the
+column-level `grant`, not the policy: even with `using (true)`, Postgres
+rejects any `UPDATE` statement that names a column outside
+`(confirmation_count, status)` before RLS is even evaluated, so this can't
+be used to rewrite a row's `title`/`source_url`/`submitted_by`/etc. **Not
+run yet** — same as Session 14's policy, this is new SQL handed to the
+user to run manually; until it's run, `/api/confirm` and `/api/flag` are
+wired correctly end-to-end (verified against a local mock — see "Fully
+working end-to-end" below) but will fail against the real Supabase
+project with a permission-denied error from Postgres.
+
+**`content_items.status` values** — `'pending'` (the insert default) and
+`'confirmed'` (Session 18: reached when `confirmation_count` hits 2 via
+`/api/confirm`) are both covered by the existing `select`/read-side
+allowlists above. **`'flagged'`** (Session 18: set by `/api/flag`, always
+unconditionally, no threshold) is a third real value now — it isn't in
+any read policy's allowlist and isn't in `getArcContent`'s own
+`.in('status', ['confirmed', 'pending'])` filter (`lib/supabase.js`), so a
+flagged row simply stops being returned to the arc page the moment it's
+set, with no separate deletion or extra filtering step needed. There's no
+`'rejected'`/other status value and no way to un-flag an item — see
+"Explicitly not built" below.
 
 **Seed data** — exactly one series/arc/beat set exists, seeded once:
 - `series`: 1 row — Jujutsu Kaisen (`anilist_id: 113415`, `slug: 'jujutsu-kaisen'`)
@@ -271,6 +338,7 @@ have ever been seeded.
 - **`/auth/callback`** (Session 13) — Real and, as of Session 16, load-bearing again: exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error. Was briefly unused during Session 15's OTP detour; never modified either time.
 - **Nav (all pages except `/submit`)** (Session 13) — Real: `NavAuth` reads the actual Supabase session client-side and shows "Sign in" (linking to `/auth`) when signed out, or the real signed-in email + a working "Sign out" button when signed in. `/submit`'s nav has never had a Sign in button (see its own compact nav in the Session 5 notes) and wasn't touched.
 - **`/arc/[slug]`'s content cards** (Session 14) — Real, additionally: a card whose real `content_items.submitted_by` matches the current browser session's signed-in user id now shows a small "✦ Yours" badge (`components/YoursBadge.jsx`, nested inside `ContentCard`). Only real Supabase-backed cards can ever carry this — hardcoded fallback data has no `submittedBy` value, so the badge simply never renders there, the same "omit rather than fabricate" convention this project has used since Session 6.
+- **`/arc/[slug]`'s content cards** (Session 18) — Real, additionally: a real card whose `status` is `'pending'` shows a "⏳ Pending review" badge (in the same slot the Yours badge would otherwise use, and independent of auth — any viewer sees it) plus a "Confirm placement" button; every real card (any status) shows a flag button. Both buttons genuinely call `/api/confirm`/`/api/flag`, which genuinely write to `content_items` — this isn't simulated. Same "omit rather than fabricate" scoping as the Yours badge: hardcoded fallback cards and the submit wizard's live preview have no `id`, so none of this Session 18 UI ever renders on them.
 
 ### Fully working end-to-end (verified this session and in prior sessions)
 
@@ -284,6 +352,7 @@ have ever been seeded.
 8. (Session 14) With a fake session injected into `localStorage`, driving `/submit`'s full wizard end to end (URL → beat → review → submit, all three of `arcs`/`beats`/`content_items` mocked at the browser network level) produced a `content_items` insert whose `submitted_by` field was exactly that session's `user.id` — not `"anonymous"`. Repeating the same flow with no session present produced `submitted_by: "anonymous"`, confirming the fallback still works for signed-out users. Separately, with a local mock PostgREST server standing in for the arc page's *server-side* Supabase calls (browser-level request mocking can't reach those, since they run in the Next.js server process — see the Session 14 notes below for why this needed its own verification approach) seeded with two `content_items` rows — one with `submitted_by` matching an injected session, one not — `/arc/shibuya-incident-arc` rendered the "✦ Yours" badge on exactly the matching card and not the other one.
 9. (Session 15, superseded by Session 16 — see that entry) `/auth`'s two-step OTP flow was verified working exactly as built, but the flow itself no longer exists; see the Session 15 log entry for what was true about it at the time.
 10. (Session 16) `/auth`'s single-step flow, driven with a mocked `**/auth/v1/otp**` response: submitting an email produces the exact success message "Check your email — we sent you a sign in link" (confirmed via the rendered text, not just that *a* success state appeared), with no code input present anywhere on the page (confirmed by asserting zero matches for the numeric-input selector the old code step used) and the "← Back to home" link present with `href="/"`. Confirmed the real request body sent for the sign-in call, not just the response: `shouldCreateUser` isn't set explicitly anymore (reverted along with everything else Session 15 added to this call), and the wire body correctly shows `"create_user": true` regardless — `@supabase/auth-js` defaults `shouldCreateUser` to `true` when omitted, confirmed directly from its source, so this matches Session 13's original behavior exactly, not a behavior change disguised as a revert.
+11. (Session 18) Built a fuller local mock PostgREST server than prior sessions' (covering `arcs`/`beats`/`content_items` GET with the actual filter/select shapes `lib/supabase.js` sends, plus `content_items` PATCH) and drove `/api/confirm`/`/api/flag` against it over real HTTP, through a real `next dev` server pointed at the mock via `NEXT_PUBLIC_SUPABASE_URL`. Seeded three rows: id 501 `pending`/`confirmation_count: 0`, id 502 `confirmed`, id 503 `flagged`. Confirmed, in order: (a) `/arc/shibuya-incident-arc`'s real render showed a "⏳ Pending review" badge, a "Confirm placement" button, and a flag button on card 501; no pending badge and no confirm button (but a flag button) on card 502; and card 503 ("Flagged mock item — should never render") did not appear in the rendered HTML at all, confirming `getArcContent`'s status allowlist excludes it. (b) `POST /api/confirm {id:501}` once → `{"confirmationCount":1,"status":"pending"}` (mock's `PATCH` log confirmed the write); a second call → `{"confirmationCount":2,"status":"confirmed"}`; a third call → identical response with no further `PATCH` logged (the "only act on a `pending` row" no-op guard in `confirmContentItem`). (c) Re-fetching the arc page after the second confirm showed zero remaining `pending-badge`/`confirm-btn` occurrences for card 501 — the UI genuinely reflects the DB write on the next load, not just the button's own optimistic state. (d) `POST /api/flag {id:502}` → `{"status":"flagged"}`, confirmed via the mock's own state. (e) `POST /api/confirm` with no `id` → `400 {"error":"An id field is required."}`. This is the same "verified against a faithful mock, not production" caveat as every other Supabase-backed feature in this project (see "Known issues") — the actual live-Supabase run still needs the Session 18 grant/policy SQL to have been executed first (see the Database schema section above).
 
 ### Partially working / needs attention
 
@@ -295,24 +364,24 @@ have ever been seeded.
 - **A 6-digit-code sign-in email was tried (Session 15) and reverted (Session 16) — it needs a Supabase-project setting this app's code has no control over and this project's plan doesn't allow.** Sending a code instead of a link isn't a `signInWithOtp` option; it requires editing the Magic Link email template in the Supabase dashboard to use `{{ .Token }}` instead of `{{ .ConfirmationURL }}`, and that template editor is a paid-plan feature (or requires custom SMTP) that this project's free-tier Supabase project doesn't have access to. See the Session 15 follow-up and Session 16 notes below for the full investigation and the revert. If this project ever moves to a paid plan or sets up custom SMTP, revisit Session 15's approach — the application code for it (now removed) is preserved in git history, not lost.
 - **Session 14's new RLS policy (`"Users can read their own submissions"`) hasn't been run against the live Supabase project yet** — it's new SQL from this session, handed to the user per this project's established convention (see "Not run yet" in the Supabase schema section above). Until it's run, a signed-in user's own non-`pending`/`confirmed` rows (none exist today, since nothing writes any other status — see "No moderation workflow" below) wouldn't be visible to them; today's behavior is unaffected either way, since every row is currently `'pending'` and already covered by the existing public policy.
 - **Still nothing beyond `/submit` and the arc page's cards reads/uses the signed-in identity.** There's no "my submissions" list, no way to edit or delete your own submission, and no moderation view of any kind — Session 14 wired the identity through to exactly two places (the insert, and the badge), not a general-purpose ownership feature.
+- **Session 18's confirm/flag grant + `UPDATE` policy haven't been run against the live Supabase project yet** — same "handed to the user" convention as every other schema change in this project (see the Database schema section above). Until it's run, `/api/confirm` and `/api/flag` are wired and verified correctly against a local mock (see "Fully working end-to-end" #11), but every real call against the live project fails with a Postgres permission-denied error on `confirmation_count`/`status`.
+- **Confirming isn't atomic and has no per-visitor ledger.** `confirmContentItem` does a plain select-then-update, not a single atomic SQL statement — two confirms landing on the exact same row at the exact same instant could both read the same starting count and undercount by one. More importantly, `content_items` has no table tracking *who* confirmed what, and confirming requires no auth by design (per the task), so nothing stops the same browser (or the same person, signed in or not) clicking "Confirm placement" twice and single-handedly promoting their own submission — or someone else's — to `confirmed`. Both are accepted, documented trade-offs for this first pass, not oversights; a real "one confirmation per distinct visitor" model would need either an auth requirement (contradicting this task) or a separate confirmations-ledger table (its own future piece of schema, not built here).
+- **Flagging is one-way with no moderation surface.** `/api/flag` always sets `status: 'flagged'` unconditionally, with no threshold, no auth, and no record of *who* flagged an item or *why*. Once flagged, an item is gone from the arc page for good — there's no admin/mod view listing flagged items, no way to review or reverse a flag, and (same gap as confirming) nothing stops one visitor flagging any item they don't like off the page entirely. `FlagButton` also doesn't remove the card from the page the flagging visitor is currently looking at — it just records the flag; the item stops appearing on the *next* load, once `getArcContent`'s allowlist excludes it (this app has no other client-side "refetch and remove from the DOM" wiring anywhere, so this isn't a special-cased gap).
 
 ### Known issues / cleanup needed
 
-- **Two leftover temporary diagnostic `console.log` blocks are still in the code**, added during earlier troubleshooting sessions and never removed once the underlying issues were fixed:
-  - `app/arc/[slug]/page.jsx` — a `[arc/[slug]] diagnostic:` log dumping `beatsResult`/`contentResult` status and values on every request.
-  - `app/submit/page.jsx`'s `handleSubmit` — three `[submit] ...` logs around the arc lookup and insert.
-  Both are genuinely harmless (server-side logs only, no secrets), but were explicitly marked "temporary" when added and should be removed as routine cleanup.
+- **Both of Session 17's flagged cleanup items are fixed as of Session 18.** The `app/arc/[slug]/page.jsx` diagnostic `console.log` and `app/submit/page.jsx`'s three `[submit] ...` logs in `handleSubmit` are removed; `--green`/`--green-soft` are now defined in `globals.css`'s `:root` (`#6AF0A8` / `rgba(106,240,168,0.14)`, the exact color that was already in informal use throughout `submit.module.css`'s own border rules), so all 13 `var(--green...)` call sites in that file now resolve to a real color instead of silently dropping.
 - **`next.config.mjs`'s `images.remotePatterns`** (Session 12 follow-up) allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere in the codebase — all images render via plain CSS `background`/`backgroundImage` (correctly, as of the Session 12 follow-up thumbnail fix). This config is inert until/unless a future session actually adopts `next/image`.
 - **`og-fetch`'s SSRF protection is a hostname-literal blocklist**, not DNS-resolution-aware — doesn't defend against a public domain that resolves to a private IP (DNS rebinding). Noted as an accepted, explicit trade-off when built, not an oversight.
 - **`og-fetch` has no response-size cap**, only an 8-second timeout — a fast-but-huge response could still consume meaningful memory within that window.
-- **`--green`/`--green-soft` are used throughout `app/submit/submit.module.css` (13 call sites: `.completedCheck`, `.stepDotDone`, `.stepLabelDone`, `.stepLineDone`, `.charChipConfirm`, `.submitSuccess`) but were never defined in `globals.css`'s `:root`.** Confirmed directly in this audit (`grep -n "var(--green" app/submit/submit.module.css` → 13 matches; `grep "^\s*--" app/globals.css` → no `--green` anywhere). Every one of those declarations is silently dropped by the browser — the same failure class as the real Session 12 thumbnail-CSS bug, just never actually fixed. First flagged in Session 13, still true as of this audit. Trivial fix: add `--green: #6AF0A8; --green-soft: rgba(106,240,168,0.14);` to `:root` (that's the exact color already in informal, consistent use as literal RGB throughout the same file's border rules) — nobody has done it yet because it's cosmetic (the affected elements just render without their intended green tint/border, not broken/invisible) and no task has asked for it specifically.
+- **Confirming/flagging have no rate-limiting, no per-visitor ledger, and no atomicity** — see "Partially working" above for the full detail. This is the same class of trade-off as `og-fetch`'s SSRF guard: accepted and documented, not an oversight, but a real gap a future moderation-focused session should revisit before this app has real, adversarial traffic.
 - **This sandbox cannot reach `*.supabase.co` or general internet hosts**, so no session working from this environment can run a true, unmocked end-to-end verification against the live Supabase project or real third-party URLs. Every Supabase/OG-fetch-related change this project has made was verified either via mocked local servers (Playwright route interception, a local mock PostgREST/oEmbed server) or via SQL handed to the user to run and report back. Keep doing this — it's been reliable — but remember it means "verified" in this file always means "verified against a faithful mock," not "confirmed against production," unless a session note says otherwise.
 - **`next lint` has never been run successfully in this repo** — no ESLint config exists yet; the command prompts for first-time setup (Strict/Base/Cancel) which no session has completed. `next build`'s own compile step is the only static check every session has actually relied on.
 
 ### Explicitly not built
 
 - **Auth — resolved in Session 13, extended in Session 14, briefly reworked in Session 15, reverted in Session 16.** "Sign in" now genuinely links to `/auth`, which sends a real Supabase magic-link email and, once clicked, signs the user in (Session 15 tried a 6-digit code instead; reverted in Session 16 once it turned out that needs a paid-plan-only dashboard setting — see "Partially working" above). As of Session 14, signing in actually changes app behavior beyond the nav: `/submit` saves the real signed-in user's id as `submitted_by` instead of `"anonymous"`, and the arc page's cards show a "Yours" badge on a matching submission — this was never affected by the sign-in-method churn in Sessions 15–16. Still not built: no "my submissions" view, no way to edit/delete your own submission, and no moderation workflow of any kind (see below) — the identity is now real and saved, but nothing yet lets a user *act* on "this is mine" beyond seeing the badge.
-- **No moderation workflow** — `content_items.status` defaults to `'pending'` and nothing in the app ever changes it, reads it for a moderation queue, or distinguishes `'pending'` from `'confirmed'` visually (the arc page shows both identically). `confirmation_count` is written as `0` and never incremented anywhere.
+- **No admin/moderation queue view, still — Session 18 added a community-driven quality signal, not moderation.** `content_items.status` now genuinely moves (`'pending'` → `'confirmed'` via two confirms, or → `'flagged'` via one flag — see "What's real vs. hardcoded" and the Database schema section above), and the arc page visually distinguishes `'pending'` from `'confirmed'` (the pending badge; `'flagged'` items don't render at all). What's still missing: no page lists `'flagged'` items for anyone to review or reverse, no permissions model for who (if anyone) should be trusted to moderate, and no way to un-flag or un-confirm anything once it happens — a mistaken flag is permanent today.
 - **No tab/filter-pill filtering** on any page — clicking "Edits & Video," "Fan Art," an arc's content-type filter, etc. does nothing.
 - **No pagination or "+N more" expansion** — every "+N more" affordance is static text.
 - **No real per-arc/per-series routing beyond the one seeded arc** — `ARC_NAV` (arc page), `ARCS` (search + series pages) are still fully hardcoded placeholder arc lists unrelated to whatever series/arc is actually being viewed.
@@ -321,14 +390,14 @@ have ever been seeded.
 
 ### Phase 5+ roadmap
 
-Phase 4 (auth, Sessions 13–17) is closed as of this audit — sign-in works,
-the identity is real and saved, and this file is confirmed accurate
-against actual source. Roughly in order of "unblocks the most other
-things" for whatever Phase 5 becomes:
+Phase 4 (auth, Sessions 13–17) is closed — sign-in works, the identity is
+real and saved. Phase 5 (quality control) is now under way: Session 18
+shipped the confirm/flag primitives on `content_items.status`. Roughly in
+order of "unblocks the most other things" for whatever comes next:
 
-1. **Remove the two leftover debug `console.log` blocks** (see "Known issues") — trivial, no reason to carry them further.
-2. **Add the two missing `--green`/`--green-soft` CSS custom properties** (see "Known issues") — a two-line fix, been known since Session 13.
-3. **A real moderation view** — even a minimal one (a `/admin` or `?status=pending` view listing `content_items` where `status = 'pending'`, with buttons to flip it to `'confirmed'` or delete) would make the `status` column's existence pay off; right now every submission is invisible-but-present forever in the same way. Now that Session 14 wired up real user ids, this is also where a permissions model (who's allowed to moderate) would first need to get decided.
+1. **Run Session 18's confirm/flag grant + `UPDATE` policy against the live Supabase project** (see the Database schema section above) — without it, `/api/confirm` and `/api/flag` are wired and locally verified but fail against the real database with a permission-denied error.
+2. **A real moderation/flagged-items view** — even a minimal one (a `/admin` or `?status=flagged` view listing `content_items` where `status = 'flagged'`, with a button to un-flag or genuinely delete) would close the biggest gap Session 18 left open: flagging is currently permanent and unreviewable. This is also where a permissions model (who's allowed to un-flag, or to see this view at all) would first need to get decided.
+3. **A per-visitor confirmation/flag ledger** (or, short of that, at least a same-visitor guard) — today nothing stops one browser confirming or flagging the same item repeatedly across separate button-disabled-state resets (e.g. a page reload), since `content_items` has no table tracking who acted on what. Worth revisiting once this app has real, potentially adversarial traffic.
 4. **A "my submissions" view** — now that `content_items.submitted_by` holds a real user id for a signed-in submitter (Session 14), a page listing "content I've submitted" (`select * from content_items where submitted_by = auth.uid()::text`, the same check Session 14's new RLS policy already allows) is a small, natural next step — today a user can only spot their own items by noticing the "Yours" badge while browsing an arc page they happen to be on.
 5. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
 6. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
@@ -2470,6 +2539,119 @@ to still be accurate, and rewrote that section from the ground up.
   aniindex-arc-page-nextjs-wwizd5` after pushing (this is the default
   branch Vercel deploys as Production — see "Confirm all changes are
   pushed" in this session's own closing check).
+
+## Session 18
+
+Phase 5 begins — a first pass at a no-auth community quality-control layer
+on top of `content_items.status`/`confirmation_count`, in four parts. (This
+task was framed to the assistant as "Session 15"; that number was already
+taken by the real Session 15 above, so this is logged as Session 18 to
+keep the log unambiguous — see the note at the top of the file.)
+
+**Part 1 — cleanup.** Removed both items Session 17's audit had flagged
+and left unfixed on purpose (an audit that fixes things it finds isn't an
+audit): the `[arc/[slug]] diagnostic:` `console.log` in
+`app/arc/[slug]/page.jsx`, and the three `[submit] ...` logs in
+`app/submit/page.jsx`'s `handleSubmit`. Added `--green: #6AF0A8;` and
+`--green-soft: rgba(106,240,168,0.14);` to `globals.css`'s `:root` — the
+exact literal color that was already in informal, consistent use
+throughout `submit.module.css`'s own border rules — so all 13
+`var(--green...)` call sites in that file (`.completedCheck`,
+`.stepDotDone`, `.stepLabelDone`, `.stepLineDone`, `.charChipConfirm`,
+`.submitSuccess`, etc.) resolve to a real color instead of silently
+dropping, first flagged all the way back in Session 13.
+
+**Part 2 — pending review badge.** `lib/supabase.js`'s `getArcContent`
+already selected `id` and `status` per row (no select-list change needed);
+`app/arc/[slug]/page.jsx`'s `buildBeatSections` now threads both through
+to each item object it hands to `ContentCard`. `components/ContentCard.jsx`
+gained an `id`/`status` prop pair and, in its default (tall) render path
+only: when `id` is present and `status === "pending"`, a
+`.pending-badge` span ("⏳ Pending review") renders in the exact slot
+`YoursBadge` would otherwise occupy — replacing it, not stacking with it,
+and with no auth check of any kind, matching the task's "any pending item
+shows the badge regardless of who submitted it." A real (`id`-bearing)
+non-pending item still falls through to the existing `YoursBadge` logic
+unchanged. Hardcoded fallback cards and the `/submit` wizard's live
+preview never pass an `id`, so this UI can never appear on them — same
+"omit rather than fabricate" convention this project has used since the
+Yours badge (Session 14).
+
+**Part 3 — confirm placement.** Added `confirmContentItem(id)` to
+`lib/supabase.js`: selects the row's current `confirmation_count`/`status`;
+no-ops (returns the current state unchanged) if `status` isn't `'pending'`,
+so a stray duplicate click or a confirm on an already-confirmed/flagged
+item can't double-count; otherwise increments the count by 1 and, once it
+reaches 2, sets `status: 'confirmed'` in the same update. This is a plain
+select-then-update, not one atomic SQL statement — a genuine (and
+accepted, documented) race exists if two confirms land on the same row at
+the same instant, the same style of trade-off this project already
+accepted for `og-fetch`'s SSRF guard. `app/api/confirm/route.js` is a thin
+POST wrapper: validates the body has an `id`, calls
+`confirmContentItem`, returns its result or a 400/500 with `{ error }`.
+`components/ConfirmButton.jsx` is a new client component nested inside
+`ContentCard`, shown only alongside the pending badge (real, pending items
+only); its click handler calls `preventDefault`/`stopPropagation` first,
+since the whole card is itself an anchor tag pointing at `sourceUrl` — an
+unguarded click would otherwise also navigate away. Tracks
+`idle | loading | done | error` locally and renders "✓ Confirmed" once
+the request succeeds.
+
+**Part 4 — flag.** Added `flagContentItem(id)` to `lib/supabase.js` — an
+unconditional `status: 'flagged'` update, no threshold, no auth, unrelated
+to the confirm counter. `app/api/flag/route.js` mirrors `/api/confirm`'s
+route shape exactly. `components/FlagButton.jsx` mirrors `ConfirmButton`'s
+client-component pattern (same `stopPropagation` requirement, same local
+status states, renders "🚩 Flagged" once done) and appears on every real
+(`id`-bearing) card regardless of status, not just pending ones.
+`getArcContent`'s existing `.in('status', ['confirmed', 'pending'])`
+allowlist (unchanged from Session 10) already excludes `'flagged'` rows —
+no code change was needed there beyond a clarifying comment, since
+`'flagged'` was simply never in the allowed set to begin with.
+
+**The RLS problem, and how it was solved.** Both new writes hit a real
+blocker documented since Session 10/11: **no `UPDATE` policy exists on any
+table**, so a plain `anon`-role `PATCH` against `content_items` would be
+rejected by Postgres before ever reaching the app's logic. Rather than add
+a `PUBLIC` `for update using (true)` policy with no other constraint (which
+would let anyone rewrite *any* column on *any* row, including
+`source_url`/`title`/`submitted_by`), the fix is two pieces of new SQL,
+both handed to the user to run manually per this project's established
+"SQL is reviewed and run manually" convention (see the Database schema
+section above, "Not run yet"): `grant update (confirmation_count, status)
+on content_items to anon, authenticated` (Postgres enforces column-level
+privileges independently of and before RLS — this is what actually stops
+any other column from ever being written, regardless of what the policy
+below says) plus a genuinely `PUBLIC`, `using (true)` update policy (the
+task explicitly requires no auth for either action, so this is the correct
+scope here, not an accidentally widened one — see the schema section's own
+reasoning for why this differs from the earlier `PUBLIC`-vs-`anon`
+lesson). **This SQL has not been run against the live Supabase project by
+this session** — until it is, `/api/confirm`/`/api/flag` are wired
+correctly (see verification below) but fail against the real database.
+
+**Verification.** This sandbox still can't reach `*.supabase.co` (see
+"Known issues"), so this session built a fuller local mock PostgREST
+server than prior sessions' — covering `arcs`/`beats`/`content_items` GET
+with the actual filter/select shapes `lib/supabase.js` sends, plus
+`content_items` PATCH — and drove everything through a real `next dev`
+server pointed at it via `NEXT_PUBLIC_SUPABASE_URL`, over real HTTP, not
+just unit-level function calls. Seeded three rows (id 501 `pending`/
+`confirmation_count: 0`, id 502 `confirmed`, id 503 `flagged`) and
+confirmed: the arc page's real render showed the pending badge + confirm
+button + flag button on 501, no pending badge/confirm button but a flag
+button on 502, and card 503 didn't render at all; confirming 501 twice via
+`POST /api/confirm` produced `confirmationCount: 1` (still `pending`) then
+`confirmationCount: 2, status: "confirmed"`, a third call was a no-op
+(confirmed via the mock's own request log — no further `PATCH` sent); a
+fresh fetch of the arc page after that showed zero remaining pending
+badge/confirm button for card 501, proving the UI reflects a genuine DB
+write on the next load rather than just the button's own local state;
+flagging 502 produced `status: "flagged"`; and a confirm call with no `id`
+correctly returned a 400. Full detail in "Fully working end-to-end" #11
+above. `next build` succeeds with both new routes present in the route
+table (`/api/confirm`, `/api/flag`, both dynamic/`ƒ` as expected for a
+route handler).
 
 ## Database schema
 

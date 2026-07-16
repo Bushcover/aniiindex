@@ -178,13 +178,11 @@ export default function SubmitPage() {
     setSubmitError("");
 
     try {
-      console.log('[submit] querying arcs: select id from arcs where slug =', ARC_SLUG);
       const { data: arc, error: arcError } = await supabase
         .from("arcs")
         .select("id")
         .eq("slug", ARC_SLUG)
         .single();
-      console.log('[submit] arcs query result:', { arc, arcError });
       if (arcError || !arc) {
         const detail = arcError
           ? `${arcError.message}${arcError.code ? ` [${arcError.code}]` : ""}`
@@ -205,7 +203,6 @@ export default function SubmitPage() {
         status: "pending",
         submitted_by: session?.user?.id || "anonymous",
       });
-      console.log('[submit] content_items insert error:', insertError);
       if (insertError) {
         throw new Error(`${insertError.message}${insertError.code ? ` [${insertError.code}]` : ""}`);
       }

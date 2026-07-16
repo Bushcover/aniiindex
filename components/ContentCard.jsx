@@ -1,4 +1,6 @@
 import YoursBadge from "@/components/YoursBadge";
+import ConfirmButton from "@/components/ConfirmButton";
+import FlagButton from "@/components/FlagButton";
 import styles from "./ContentCard.module.css";
 
 const PLATFORM_YT = { className: "plt-yt", compactClassName: styles.compactPltYt, icon: "▶", label: "YouTube" };
@@ -53,6 +55,7 @@ export function getThumbnailStyle(thumbnailUrl) {
 }
 
 export default function ContentCard({
+  id,
   title,
   creator,
   platform,
@@ -63,11 +66,18 @@ export default function ContentCard({
   beatLabel,
   compact = false,
   submittedBy,
+  status,
 }) {
   const meta = PLATFORM_META[platform] || DEFAULT_PLATFORM_META;
   const genTags = [].concat(contentType ?? []);
   const charTags = [].concat(characterTags ?? []);
   const ariaLabel = beatLabel ? `${title} — ${beatLabel}` : title;
+  // Only real Supabase-backed cards carry an id — hardcoded fallback/mockup
+  // data (and the submit wizard's live preview) has none, so the pending
+  // badge and the confirm/flag controls simply never render there, the
+  // same "omit rather than fabricate" convention this project already uses
+  // for the Yours badge.
+  const isPending = Boolean(id) && status === "pending";
 
   if (compact) {
     return (
@@ -107,7 +117,11 @@ export default function ContentCard({
   return (
     <a className="card" href={sourceUrl} target="_blank" rel="noreferrer" aria-label={ariaLabel}>
       <div className="thumb" style={getThumbnailStyle(thumbnailUrl)}>
-        {submittedBy && <YoursBadge submittedBy={submittedBy} className="yours-badge" />}
+        {isPending ? (
+          <span className="pending-badge">⏳ Pending review</span>
+        ) : (
+          submittedBy && <YoursBadge submittedBy={submittedBy} className="yours-badge" />
+        )}
         <div className={`plt ${meta.className}`}>
           {meta.icon} {meta.label}
         </div>
@@ -127,6 +141,12 @@ export default function ContentCard({
             </span>
           ))}
         </div>
+        {id && (
+          <div className="card-actions">
+            {isPending && <ConfirmButton id={id} />}
+            <FlagButton id={id} />
+          </div>
+        )}
       </div>
     </a>
   );
