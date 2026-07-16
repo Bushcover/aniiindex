@@ -25,6 +25,13 @@ export async function POST(request) {
     const item = await confirmContentItem(id);
     return Response.json(item);
   } catch (err) {
+    // Intentional, permanent operational logging (not a leftover debug
+    // log) — added in Session 19 after a real bug report ("Confirm
+    // placement" wasn't persisting) turned out to be a Supabase RLS write
+    // silently doing nothing rather than erroring. This is what actually
+    // surfaces a failure in Vercel's function logs; see
+    // confirmContentItem in lib/supabase.js for the deeper diagnostic.
+    console.error("[api/confirm] failed for id", id, err);
     return Response.json({ error: err.message || "Couldn't confirm this item." }, { status: 500 });
   }
 }

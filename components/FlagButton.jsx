@@ -39,16 +39,21 @@ export default function FlagButton({ id }) {
     );
   }
 
+  // Session 19: a failed request used to fall through to the same plain
+  // 🚩 icon as the idle state, with nothing visibly different — from the
+  // outside, a real server-side failure (e.g. an RLS-blocked write) looked
+  // exactly like "clicking the flag icon does nothing." This renders a
+  // distinct label on error so a failure is never invisible again.
   return (
     <button
       type="button"
       className="flag-btn"
       onClick={handleClick}
       disabled={state === "loading"}
-      aria-label="Flag this item"
-      title="Flag this item"
+      aria-label={state === "error" ? "Flagging failed, try again" : "Flag this item"}
+      title={state === "error" ? "Flagging failed — try again" : "Flag this item"}
     >
-      🚩
+      {state === "loading" ? "…" : state === "error" ? "⚠" : "🚩"}
     </button>
   );
 }

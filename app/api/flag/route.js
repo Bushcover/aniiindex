@@ -24,6 +24,10 @@ export async function POST(request) {
     const item = await flagContentItem(id);
     return Response.json(item);
   } catch (err) {
+    // Intentional, permanent operational logging (not a leftover debug
+    // log) — see the matching comment in app/api/confirm/route.js. Same
+    // Session 19 bug report covered both routes.
+    console.error("[api/flag] failed for id", id, err);
     return Response.json({ error: err.message || "Couldn't flag this item." }, { status: 500 });
   }
 }
