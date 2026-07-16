@@ -245,6 +245,7 @@ have ever been seeded.
 - **YouTube's oEmbed integration depends on YouTube's public endpoint staying free/unauthenticated** — it currently is, but this is an external dependency this project doesn't control.
 - **`character_tags`/character detection on `/submit`** never reflects the real pasted content — always the one hardcoded Gojo Satoru chip, regardless of what's actually in the video/post.
 - **Auth (Sessions 13/15) has never completed a real email round trip.** Every piece was verified individually against mocked Supabase responses (see "Fully working end-to-end" above) — the real `signInWithOtp`/`verifyOtp` calls, the code-step error/retry path, the redirect on success, and the signed-in nav state (verified with an injected fake session, not a session Supabase itself issued) — but no session has actually received and typed in a real emailed 6-digit code end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, enter the code that arrives, and confirm it redirects to `/` with the nav showing the signed-in state. **This is also the one remaining gap for Session 14's own work** — signing in for real and then submitting through `/submit` is the only way to see a genuine (not mocked/injected) `auth.uid()`-shaped UUID land in `content_items.submitted_by` and confirm the "Yours" badge against it.
+- **Whether a real user actually receives a 6-digit code or a clickable link depends entirely on a Supabase-project-level setting this app's code has no control over** — the Magic Link email template in the Supabase dashboard needs `{{ .Token }}` in it (not the default `{{ .ConfirmationURL }}`). This isn't a code bug and can't be fixed by editing `app/auth/page.jsx` or `lib/auth.js` — see the Session 15 follow-up notes below for the exact dashboard steps and the source-level confirmation that `signInWithOtp` has no client-side option for this.
 - **Session 14's new RLS policy (`"Users can read their own submissions"`) hasn't been run against the live Supabase project yet** — it's new SQL from this session, handed to the user per this project's established convention (see "Not run yet" in the Supabase schema section above). Until it's run, a signed-in user's own non-`pending`/`confirmed` rows (none exist today, since nothing writes any other status — see "No moderation workflow" below) wouldn't be visible to them; today's behavior is unaffected either way, since every row is currently `'pending'` and already covered by the existing public policy.
 - **Still nothing beyond `/submit` and the arc page's cards reads/uses the signed-in identity.** There's no "my submissions" list, no way to edit or delete your own submission, and no moderation view of any kind — Session 14 wired the identity through to exactly two places (the insert, and the badge), not a general-purpose ownership feature.
 
@@ -2212,6 +2213,63 @@ page.jsx` was left completely untouched — it's now unused by this flow
     on that one file) before committing, since the task was explicit about
     leaving it alone.
   - Stopped the test server and left no mock processes running afterward.
+
+### Session 15 follow-up: users still receiving a magic link, not a code — not a code bug
+
+After this shipped, real users reported still getting a clickable magic
+link by email instead of a 6-digit code. Investigated whether
+`signInWithOtp`'s call shape was somehow still triggering link mode
+(the specific hypothesis raised: maybe an explicit `emailRedirectTo:
+undefined` was needed) — it isn't, and it wouldn't have helped. Confirmed
+directly from `@supabase/auth-js`'s own installed source
+(`node_modules/@supabase/auth-js/dist/module/GoTrueClient.js`, the
+`signInWithOtp` doc comment):
+
+> Magic links and OTPs share the same implementation. To send users a
+> one-time code instead of a magic link, modify the magic link email
+> template to include `{{ .Token }}` instead of `{{ .ConfirmationURL }}`.
+
+**There is no `signInWithOtp` option, for email, that chooses between a
+link and a code** — the API call this app makes is already correct and
+identical either way. What actually determines which one a user receives
+is which template variable the Supabase project's own email template
+uses, and that's dashboard configuration, not application code. Since
+this repo's tooling has never had a way to touch the live Supabase
+project directly (same reason RLS policies and seed data have always been
+handed to the user as SQL to run manually, since Session 9), this is the
+same category of fix, just in the dashboard's Email Templates screen
+instead of the SQL editor.
+
+**No code was changed to "fix" this** — there was nothing to fix in
+`lib/auth.js`. Only added a comment there flagging this exact confusion
+for the next person who investigates it as a code bug, so it doesn't get
+re-litigated. **The actual fix, for the user to do in the Supabase
+dashboard**:
+
+1. Go to the project's dashboard → **Authentication** → **Email
+   Templates** → **Magic Link**.
+2. The default template body includes something like:
+   ```html
+   <h2>Magic Link</h2>
+   <p><a href="{{ .ConfirmationURL }}">Log In</a></p>
+   ```
+3. Replace `{{ .ConfirmationURL }}` with `{{ .Token }}` (and update the
+   surrounding copy so the email reads sensibly as "here's your code"
+   rather than "click this link") — e.g.:
+   ```html
+   <h2>Your sign-in code</h2>
+   <p>Enter this code to sign in: <strong>{{ .Token }}</strong></p>
+   ```
+4. Save. No redeploy of this app is needed — this only affects what
+   Supabase's own auth service puts in the email, not anything this
+   codebase controls.
+
+This is the one Supabase-project-level setting this app's whole OTP flow
+(Session 15) depends on and had no way to verify from inside this sandbox
+(no route to `*.supabase.co`, same limitation as every Supabase-touching
+session since Session 9) — worth double-checking first if a future report
+of "getting a link instead of a code" comes in again, before assuming it's
+a regression in `app/auth/page.jsx` or `lib/auth.js`.
 
 ## Database schema
 
