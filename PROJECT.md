@@ -1,8 +1,221 @@
 # aniindex
 
-A fan content index for anime series. No API or database is connected
-yet — everything on the arc page is hardcoded sample data for the
-"Shibuya Incident Arc" (Jujutsu Kaisen). 
+A fan content index for anime series. Started as a single hardcoded
+mockup page; as of Session 12 it has a real Next.js App Router
+structure, real AniList GraphQL data on several pages, and a real
+Supabase database with a working (if narrowly-scoped) submission
+pipeline. See "Current State — Handoff Audit" immediately below for a
+full, current snapshot; the session-by-session log after it is the
+historical record of how each piece got built.
+
+## Current State — Handoff Audit (as of Session 12)
+
+This section is a complete, current-state snapshot of the project, written
+as a handoff for whichever session picks this up next. The session-by-
+session log below this section is still the accurate history of *how* the
+project got here and *why* specific decisions were made — read this section
+first for orientation, then the log for the reasoning behind any specific
+piece of code.
+
+**Stack**: Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript), no
+CSS framework (global stylesheet ported 1:1 from the original mockup, plus
+colocated CSS Modules per page), `@supabase/supabase-js` as the only real
+dependency beyond Next/React itself. Default branch: **`claude/aniindex-arc-page-nextjs-wwizd5`**
+(not `main` — this repo has no `main` branch; see the branch-related notes
+further down this file for why). Confirmed at the end of this session: git
+status clean, `HEAD` matches `origin/claude/aniindex-arc-page-nextjs-wwizd5`
+exactly, nothing left to push.
+
+**Phases so far, loosely**: Phase 1 (Sessions 1–5) converted static HTML
+mockups into Next.js pages/components with 100% hardcoded data. Phase 2
+(Sessions 6–8) wired real AniList GraphQL data into the search, arc, and
+series pages. Phase 3 (Sessions 9–12) added Supabase as a real database —
+schema, seeding, the submit form's real write path, the arc page's real
+read path, real Open Graph/oEmbed link detection, and the bug fixes that
+followed each of those. See "Suggested next phase" at the end of this
+section for what a Phase 4 could reasonably cover.
+
+### Complete file inventory
+
+```
+app/
+  layout.jsx                    Root layout — Syne + Inter fonts, imports globals.css, static <head>/metadata
+  globals.css                   Shared styles ported from the original mockup's <style> block
+  page.jsx                      Home page — server component, 100% hardcoded data, composes HeroSearch + Sparkline
+  page.module.css               Home-page-only styles
+  arc/[slug]/page.jsx           Arc page — async server component; real Supabase beats/content + real AniList series/characters, both with hardcoded fallback; still has a temporary diagnostic console.log (see "Known issues")
+  search/page.jsx                Search page — async server component; real AniList series panel only, everything else hardcoded
+  search/search.module.css       Search-page-only styles (also imported by ArcList and the series page)
+  submit/page.jsx                 3-step submission wizard — client component; real OG/oEmbed detection, real beat selector, real Supabase insert; still has 3 debug console.logs in handleSubmit (see "Known issues")
+  submit/submit.module.css        Submit-page-only styles
+  series/[slug]/page.jsx          Series page — [slug] is an AniList numeric id; real series + characters, hardcoded arc list
+  series/[slug]/series.module.css Series-page-only styles
+  api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed for YouTube; basic SSRF guard + 8s timeout
+lib/
+  anilist.js                    searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — real AniList GraphQL calls, each cached via Next's fetch cache (next: { revalidate: 3600 })
+  supabase.js                   Exports the shared `supabase` client (fetch explicitly opted out of Next's cache) + getArcBeats / getArcContent
+components/
+  ArcNav.jsx                   Horizontal arc-chip strip. Props: { arcs: [{ slug, name, count, active? }] }
+  ArcHero.jsx                  Breadcrumb/title/meta/badges/description/characters/stats block. Props: { arc: { breadcrumb[], name, episodes, seasonPart, dateRange, badges[{type,label}], description, characters[], stats[{value,label}] } }
+  ContentTabs.jsx               Sticky tab bar. Props: { tabs: [{ label, count, active? }] }
+  IntensityChart.jsx            Ten-beat bar chart. Props: { beats: [{ label, heightPct, tier: "normal"|"high"|"peak" }] }
+  BeatSection.jsx                One story-beat block + ContentCard grid. Props: { beat: { title, count, peakLabel, items: [] } } — items spread directly into ContentCard
+  ContentCard.jsx                 Single fan-content card (default tall + compact horizontal modes). Props: { title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact? }. Also exports `getThumbnailStyle(thumbnailUrl)` (named export) — used by this component and by the submit page's preview card to correctly render either a real image URL or a CSS gradient/color value as a background
+  ContentCard.module.css          Colocated styles for ContentCard's compact mode
+  Sparkline.jsx                  Small bar-chart sparkline. Props: { bars: [{ heightPct, tier }], width?, height?, gap? }
+  Sparkline.module.css            Colocated styles
+  HeroSearch.jsx                  Client component — home page's hero search input + quick-search chips. No props; owns its own input state
+  SearchNav.jsx                    Client component — search/series pages' nav (logo, search input, icon, clear). Props: { query: string }
+  CharacterChips.jsx               Character chip list (real photo or colored-initials fallback). Props: { characters: [{ id?, name, image?, color?, initials?, count? }] } — correctly uses backgroundImage: url(...) for real photos (this component never had the CSS bug ContentCard had)
+  ArcList.jsx                     Arc-row list with sparklines, imports search.module.css directly. Props: { arcs: [{ slug, num, name, count, peak, spark[], dividerAfter? }], moreLabel? }
+next.config.mjs                  images.remotePatterns allowlists i.ytimg.com and s4.anilist.co — configured but next/image isn't used anywhere yet (see "Known issues")
+jsconfig.json                    Configures the "@/*" import alias
+package.json                     Dependencies: next, react, react-dom, @supabase/supabase-js
+```
+
+### Supabase — full schema, RLS, and seed data (all confirmed live)
+
+Four tables, created and seeded manually via the Supabase SQL editor (never
+through a migration tool in this repo). Full current-state SQL:
+
+```sql
+-- Tables
+create table series (
+  id bigint primary key generated always as identity,
+  anilist_id integer unique not null,
+  title text not null,
+  slug text unique not null,
+  created_at timestamptz default now()
+);
+
+create table arcs (
+  id bigint primary key generated always as identity,
+  series_id bigint references series(id),
+  anilist_series_id integer not null,
+  title text not null,
+  slug text unique not null,
+  episode_start integer,
+  episode_end integer,
+  order_index integer not null,
+  created_at timestamptz default now()
+);
+
+create table beats (
+  id bigint primary key generated always as identity,
+  arc_id bigint references arcs(id) not null,
+  title text not null,
+  order_index integer not null,
+  intensity integer not null default 50,
+  is_peak boolean default false,
+  created_at timestamptz default now()
+);
+
+create table content_items (
+  id bigint primary key generated always as identity,
+  arc_id bigint references arcs(id) not null,
+  beat_id bigint references beats(id),
+  source_url text not null,
+  title text not null,
+  creator text not null,
+  platform text not null,
+  thumbnail_url text,
+  content_type text not null,
+  character_tags text[] default array[]::text[],
+  status text not null default 'pending',
+  submitted_by text,
+  confirmation_count integer default 0,
+  created_at timestamptz default now()
+);
+
+-- RLS (final state, after two follow-up fixes — see Session 10/11 notes below for why)
+alter table series enable row level security;
+alter table arcs enable row level security;
+alter table beats enable row level security;
+alter table content_items enable row level security;
+
+create policy "Public read access on series" on series for select using (true);
+create policy "Public read access on arcs" on arcs for select using (true);
+create policy "Public read access on beats" on beats for select using (true);
+create policy "Public insert access on content_items" on content_items for insert with check (true);
+create policy "Public read access on content_items" on content_items for select using (status in ('pending', 'confirmed'));
+```
+
+**No `UPDATE`/`DELETE` policy exists on any table** — those operations are
+blocked for the anon/public role everywhere, by omission rather than an
+explicit deny rule (this is how Postgres RLS works: no matching policy =
+denied). None of the policies are scoped `to anon` specifically — they're
+`PUBLIC`, a deliberate choice made after troubleshooting whether the
+newer `sb_publishable_...`-format key maps to the `anon` role the same way
+a legacy anon JWT does (see the Session 10 "still failing" follow-up).
+
+**Seed data** — exactly one series/arc/beat set exists, seeded once:
+- `series`: 1 row — Jujutsu Kaisen (`anilist_id: 113415`, `slug: 'jujutsu-kaisen'`)
+- `arcs`: 1 row — Shibuya Incident Arc (`slug: 'shibuya-incident-arc'`, `episode_start: 38`, `episode_end: 47`, `order_index: 6`)
+- `beats`: 10 rows for that arc, `order_index` 1–10: Curtain falls (28), Shibuya station (35), Gojo arrives (54), Domain battle (63), **The Sealing (87, is_peak)**, Nanami (70), **Yuji breaks (100, is_peak)**, Nobara (77), Aftermath (42), Fallout (30)
+- `content_items`: however many real rows exist from actual testing/submissions through `/submit` in the live Supabase project — this repo/sandbox has no way to know that count; check directly in Supabase's Table Editor or via `select count(*) from content_items;`
+
+**This is the only arc that can have real data** — `/submit`'s `ARC_SLUG`
+constant and the arc page's fallback logic both hardcode
+`"shibuya-incident-arc"`/AniList id `113415`. No other series/arc/beats
+have ever been seeded.
+
+### What's real vs. hardcoded, per page
+
+- **`/` (home)** — 100% hardcoded (`NAV_LINKS`, `HERO_STATS`, `TRENDING_ARCS`, `POPULAR_SERIES`, `TRENDING_MOMENTS`, `FEATURES`). `HeroSearch` navigation (Enter / chip click → `/search?q=...`) is real and works. Trending arc card links all point at real slugs but only `shibuya-incident-arc` will ever show real data on the arc page.
+- **`/arc/[slug]`** — Real for `shibuya-incident-arc` only: AniList series name/description/characters (keyed by hardcoded `ANILIST_SERIES_ID`, not `params.slug`), and Supabase beats/intensity-chart/content-cards (keyed by `params.slug`, this is the one place `params.slug` genuinely drives a query). Any other slug falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS`/`ARC_NAV` mockup data — the page never breaks, it just isn't real for that slug. `ARC_NAV`, `ARC`'s own fields (name, episodes, badges, stats), and `TABS` are hardcoded regardless of slug.
+- **`/search`** — Real: the series panel (title, format, genres, score, popularity, episodes, poster), driven by `?q=`. Hardcoded regardless of query: `ARCS` (11-arc Chainsaw Man placeholder list), `CHARACTERS`, `TOP_CONTENT`, `FILTERS`, `ALSO_FOUND`, `RESULTS_SUMMARY`.
+- **`/series/[slug]`** — Real: everything about the series itself (title, description, genres, score, format/year/episodes/status, banner/poster) and the top-10 character cast, both keyed directly by the numeric AniList id in the URL — the first (and still only) page where the URL's dynamic segment drives every real value shown. Hardcoded: `ARCS` (same placeholder list as the search page, duplicated not shared).
+- **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms after typing stops), step 2's beat selector (real `beats` rows for the Shibuya arc, fetched via `getArcBeats` on mount), and the final submission (a real `content_items` insert). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`.
+
+### Fully working end-to-end (verified this session and in prior sessions)
+
+1. Home → arc card / quick-search chip / hero search → correct navigation.
+2. `/search?q=<title>` → real AniList series panel for any real anime title.
+3. `/series/<anilist-id>` → real series detail + real top-10 cast for any real AniList id; "Browse arcs" from a search result correctly threads the real id through.
+4. `/arc/shibuya-incident-arc` → real AniList series description/characters + real Supabase beats/intensity chart/content cards, with real submitted items appearing under their correct beat.
+5. Any other `/arc/<slug>` → clean fallback to the original hardcoded Shibuya mockup, no crash, no partial/mixed state.
+6. `/submit` full wizard: paste a URL → real title/thumbnail/platform/creator auto-detected (TikTok/X/Instagram/Reddit via HTML scraping, YouTube via oEmbed) → pick a real story beat → review (real `ContentCard` preview, correct thumbnail rendering) → submit → real row lands in `content_items` → visible on the arc page under the correct beat on the next load (no caching in the way).
+
+### Partially working / needs attention
+
+- **Submitted content only shows up if the RLS SQL above has actually been run.** This has been the source of three separate "it's not working" reports this session cycle (missing `SELECT` on `content_items`, and earlier, missing policies entirely) — if content still doesn't appear, check `pg_policies` before assuming a code bug (a ready-to-run inspection query is in the Session 10/11 follow-up notes below).
+- **`/submit`'s auto-detection can fail or be slow**, and the wizard is designed to let the user proceed anyway with honest placeholders (`"Untitled link"`, a generic gradient, `platform: "other"`, `"Unknown creator"`) rather than block — but there's no way for the user to *manually* correct a wrong or missing title/creator/thumbnail. It's proceed-with-placeholder, not proceed-with-editing.
+- **YouTube's oEmbed integration depends on YouTube's public endpoint staying free/unauthenticated** — it currently is, but this is an external dependency this project doesn't control.
+- **`character_tags`/character detection on `/submit`** never reflects the real pasted content — always the one hardcoded Gojo Satoru chip, regardless of what's actually in the video/post.
+
+### Known issues / cleanup needed
+
+- **Two leftover temporary diagnostic `console.log` blocks are still in the code**, added during earlier troubleshooting sessions and never removed once the underlying issues were fixed:
+  - `app/arc/[slug]/page.jsx` — a `[arc/[slug]] diagnostic:` log dumping `beatsResult`/`contentResult` status and values on every request.
+  - `app/submit/page.jsx`'s `handleSubmit` — three `[submit] ...` logs around the arc lookup and insert.
+  Both are genuinely harmless (server-side logs only, no secrets), but were explicitly marked "temporary" when added and should be removed as routine cleanup.
+- **`next.config.mjs`'s `images.remotePatterns`** (Session 12 follow-up) allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere in the codebase — all images render via plain CSS `background`/`backgroundImage` (correctly, as of the Session 12 follow-up thumbnail fix). This config is inert until/unless a future session actually adopts `next/image`.
+- **`og-fetch`'s SSRF protection is a hostname-literal blocklist**, not DNS-resolution-aware — doesn't defend against a public domain that resolves to a private IP (DNS rebinding). Noted as an accepted, explicit trade-off when built, not an oversight.
+- **`og-fetch` has no response-size cap**, only an 8-second timeout — a fast-but-huge response could still consume meaningful memory within that window.
+- **This sandbox cannot reach `*.supabase.co` or general internet hosts**, so no session working from this environment can run a true, unmocked end-to-end verification against the live Supabase project or real third-party URLs. Every Supabase/OG-fetch-related change this project has made was verified either via mocked local servers (Playwright route interception, a local mock PostgREST/oEmbed server) or via SQL handed to the user to run and report back. Keep doing this — it's been reliable — but remember it means "verified" in this file always means "verified against a faithful mock," not "confirmed against production," unless a session note says otherwise.
+
+### Explicitly not built
+
+- **No auth/login** — "Sign in" buttons are inert everywhere; `submitted_by` is hardcoded to the literal string `"anonymous"`.
+- **No moderation workflow** — `content_items.status` defaults to `'pending'` and nothing in the app ever changes it, reads it for a moderation queue, or distinguishes `'pending'` from `'confirmed'` visually (the arc page shows both identically). `confirmation_count` is written as `0` and never incremented anywhere.
+- **No tab/filter-pill filtering** on any page — clicking "Edits & Video," "Fan Art," an arc's content-type filter, etc. does nothing.
+- **No pagination or "+N more" expansion** — every "+N more" affordance is static text.
+- **No real per-arc/per-series routing beyond the one seeded arc** — `ARC_NAV` (arc page), `ARCS` (search + series pages) are still fully hardcoded placeholder arc lists unrelated to whatever series/arc is actually being viewed.
+- **No manual correction UI on `/submit`** — no way to edit a wrong auto-detected title, pick a different series/arc, or add a character beyond the one hardcoded pre-filled chip; "+ Add character," the Series/Arc "Change" links, and "Skip this beat" are all inert.
+- **No thumbnail images anywhere except real submitted content** — every hardcoded card (`BEATS` on the arc page, `TOP_CONTENT` on the search page) still uses a CSS gradient placeholder, not a real image.
+
+### Suggested next phase (Phase 4+)
+
+Roughly in order of "unblocks the most other things":
+
+1. **Remove the two leftover debug `console.log` blocks** (see "Known issues") — trivial, no reason to carry them further.
+2. **A real moderation view** — even a minimal one (a `/admin` or `?status=pending` view listing `content_items` where `status = 'pending'`, with buttons to flip it to `'confirmed'` or delete) would make the `status` column's existence pay off; right now every submission is invisible-but-present forever in the same way.
+3. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
+4. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
+5. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
+6. **Auth** — even something minimal (magic-link or OAuth via Supabase Auth, which is already the platform in use) would unlock real `submitted_by` values and be a prerequisite for any moderation permissions model.
+7. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
+8. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
 
 ## Session 1
 
