@@ -39,6 +39,14 @@ export default function AuthPage() {
             <p className={styles.successText}>
               Check your email — we sent a magic link to <strong>{email}</strong>
             </p>
+            <p className={styles.successNote}>
+              Open the link on this device to sign in — magic links don&rsquo;t
+              transfer your session to a different device or browser, so
+              opening it on your phone won&rsquo;t sign you in here.
+            </p>
+            <Link href="/" className={styles.backHomeLink}>
+              ← Back to home
+            </Link>
           </div>
         ) : (
           <>
