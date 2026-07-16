@@ -13,7 +13,7 @@ them. See "Current State — Handoff Audit" immediately below for a
 full, current snapshot; the session-by-session log after it is the
 historical record of how each piece got built.
 
-## Current State — Handoff Audit (as of Session 16)
+## Current State — Handoff Audit (as of Session 17, full project audit)
 
 This section is a complete, current-state snapshot of the project, written
 as a handoff for whichever session picks this up next. The session-by-
@@ -22,94 +22,131 @@ project got here and *why* specific decisions were made — read this section
 first for orientation, then the log for the reasoning behind any specific
 piece of code.
 
-**Stack**: Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript), no
-CSS framework (global stylesheet ported 1:1 from the original mockup, plus
-colocated CSS Modules per page), `@supabase/supabase-js` as the only real
-dependency beyond Next/React itself — Session 13's auth work and Session
-14's identity wiring both use the same package's `supabase.auth`
-namespace, no new dependency was installed either time.
-Default branch: **`claude/aniindex-arc-page-nextjs-wwizd5`** (not `main` —
-this repo has no `main` branch; see the branch-related notes further down
-this file for why). **Session 13's work was pushed to
-`claude/determined-lamport-roi673` and then explicitly merged into the
-default branch** by user request (a clean fast-forward, since the feature
-branch's parent was the default branch's tip at the time — see that
-session's own note for the exact commands). **Session 14's own work
-happened on `claude/determined-lamport-roi673` again** (this project's
-established pattern: develop on the assigned feature branch, merge to the
-default branch either automatically or on explicit request) — check which
-branch actually got the final push by running `git log --oneline -1` on
-both branches before assuming either one is current.
+**Session 17 was a full audit, not a feature session** — every file listed
+below was re-read directly from disk (not reconstructed from memory of
+prior sessions' notes) to confirm this section is accurate before Phase 4
+is considered closed. Nothing in the application code changed; this was a
+documentation-only pass. Where this section disagrees with something a
+session log below says, this section is the current truth — the logs are
+history, not a live source.
 
-**Phases so far, loosely**: Phase 1 (Sessions 1–5) converted static HTML
-mockups into Next.js pages/components with 100% hardcoded data. Phase 2
-(Sessions 6–8) wired real AniList GraphQL data into the search, arc, and
-series pages. Phase 3 (Sessions 9–12) added Supabase as a real database —
-schema, seeding, the submit form's real write path, the arc page's real
-read path, real Open Graph/oEmbed link detection, and the bug fixes that
-followed each of those. Phase 4 (Sessions 13–16) built out auth, with a
-round trip back to where it started: real Supabase Auth sign-in as a
-magic link (Session 13), a small UX fix for that flow's dead-end success
-screen, replaced entirely with a two-step email-OTP (6-digit code) flow
-(Session 15), then **reverted back to the magic link** (Session 16) once
-it turned out the OTP approach needs a Supabase-project email-template
-edit that the free plan doesn't allow — see the Session 15/16 notes for
-the full story, since it's a genuinely useful lesson for this project
-specifically (this sandbox can't reach the Supabase dashboard to have
-caught this ahead of time). Sessions 13 and 16's UX fix (the "no dead end"
-success screen) both carried forward through the OTP detour and are still
-in place. In between, Session 14 wired the signed-in user's identity into
-actual app behavior, unaffected by any of the sign-in-method churn above:
-submissions still save the real `auth.uid()`-shaped user id instead of the
-literal string `"anonymous"`, and the arc page's content cards still show
-a "Yours" badge on a submission that matches the current session's user
-id. See "Suggested next phase" at the end of this section for what's
-still left on top of that (no moderation UI, no way to see "my
-submissions" as a list, etc.).
+**Stack**: Next.js 14.2.35 (App Router), plain JavaScript/JSX (no
+TypeScript), no CSS framework (global stylesheet ported 1:1 from the
+original mockup, plus one colocated CSS Module per page/component that
+needs page-specific or component-specific styles), `@supabase/supabase-js`
+(`^2.110.5`) as the only real dependency beyond `next`/`react`/`react-dom`
+— confirmed directly from `package.json`; no other runtime dependency has
+ever been added. No test runner, no linter config beyond Next's own
+built-in ESLint (never actually run in this repo — `next lint` prompts for
+first-time setup and no session has completed it), no CI configuration
+exists in this repo.
+
+Default branch: **`claude/aniindex-arc-page-nextjs-wwizd5`** (not `main` —
+this repo has no `main` branch). This is the branch Vercel deploys as
+Production. Sessions 13–16 all developed on the assigned feature branch
+`claude/determined-lamport-roi673` and then fast-forward-merged into the
+default branch (sometimes automatically, sometimes on explicit user
+request) — the two branches have been kept in sync at the same commit
+after every session since Session 13. Always confirm with `git log
+--oneline -1` on both branches rather than assuming.
+
+**Phases**:
+- **Phase 1** (Sessions 1–5): converted static HTML mockups into Next.js
+  pages/components, 100% hardcoded data.
+- **Phase 2** (Sessions 6–8): wired real AniList GraphQL data into the
+  search, arc, and series pages.
+- **Phase 3** (Sessions 9–12): added Supabase as a real database — schema,
+  seeding, the submit form's real write path, the arc page's real read
+  path, real Open Graph/oEmbed link detection.
+- **Phase 4 — auth (Sessions 13–17), now closed**: real Supabase Auth
+  sign-in (a magic link, Session 13); a UX fix so the sign-in success
+  screen is never a dead end; a detour into a 6-digit email-OTP flow
+  (Session 15) that was reverted back to the magic link (Session 16) once
+  it turned out that needs a Supabase-project email-template edit the free
+  plan doesn't allow (see the Session 15 follow-up and Session 16 notes —
+  genuinely useful context if anyone considers trying OTP again); the
+  signed-in user's identity wired into real app behavior (Session 14) —
+  `submitted_by` and the arc page's "Yours" badge; and this session
+  (17), a full audit confirming all of the above against the actual
+  current source rather than session notes. See "Phase 5+ roadmap" at the
+  end of this section for what's next.
 
 ### Complete file inventory
 
+Every file in `app/`, `components/`, and `lib/` as of Session 17, confirmed
+by reading each one directly (not carried forward from older notes):
+
 ```
 app/
-  layout.jsx                    Root layout — Syne + Inter fonts, imports globals.css, static <head>/metadata
-  globals.css                   Shared styles ported from the original mockup's <style> block
-  page.jsx                      Home page — server component, 100% hardcoded data, composes HeroSearch + Sparkline
-  page.module.css               Home-page-only styles
-  arc/[slug]/page.jsx           Arc page — async server component; real Supabase beats/content + real AniList series/characters, both with hardcoded fallback; still has a temporary diagnostic console.log (see "Known issues")
-  search/page.jsx                Search page — async server component; real AniList series panel only, everything else hardcoded
-  search/search.module.css       Search-page-only styles (also imported by ArcList and the series page)
-  submit/page.jsx                 3-step submission wizard — client component; real OG/oEmbed detection, real beat selector, real Supabase insert; still has 3 debug console.logs in handleSubmit (see "Known issues"). (Session 14) Reads the current session via supabase.auth.getSession() on mount and saves session.user.id as submitted_by on insert, falling back to "anonymous" when signed out.
-  submit/submit.module.css        Submit-page-only styles
-  series/[slug]/page.jsx          Series page — [slug] is an AniList numeric id; real series + characters, hardcoded arc list
-  series/[slug]/series.module.css Series-page-only styles
-  api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed for YouTube; basic SSRF guard + 8s timeout
-  auth/page.jsx                   (Session 13; OTP two-step Session 15; reverted to magic link Session 16) Single-step magic-link sign-in card — client component; email input → "Send magic link" → success screen ("Check your email — we sent you a sign in link"), a same-device note, and a "← Back to home" link so the success screen is never a dead end.
-  auth/auth.module.css            (Session 13; updated Session 15/16) Styles for the sign-in card and the callback page (imported by both). The success-state classes (`.success`/`.successIcon`/`.successText`/`.successNote`) were removed in Session 15 when that screen was replaced, then restored in Session 16 when the screen came back; `.codeInput` (Session 15's 6-digit field styling) was removed again in Session 16 as dead code.
-  auth/callback/page.jsx          (Session 13) Magic-link redirect handler — client component; exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error. **Never touched by Sessions 15 or 16** (out of scope both times) — briefly unused during Session 15's OTP detour, genuinely load-bearing again as of Session 16's revert.
+  layout.jsx                      Root layout — server component. Syne + Inter fonts via Google Fonts <link> tags, imports globals.css, static <head>/metadata (title "Aniindex").
+  globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, etc.) used across every page — see "Design tokens" below for the full custom-property list.
+  page.jsx                        Home page (`/`) — server component, 100% hardcoded data (NAV_LINKS, HERO_STATS, TRENDING_ARCS, POPULAR_SERIES, TRENDING_MOMENTS, FEATURES), composes HeroSearch + Sparkline + NavAuth.
+  page.module.css                 Home-page-only styles (hero, arc/series cards, trending moments list, feature pills).
+  arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). Real Supabase beats/content (keyed by params.slug) + real AniList series/characters (keyed by a hardcoded AniList id), both independently falling back to hardcoded data on failure. Still has one temporary diagnostic console.log (see "Known issues").
+  search/page.jsx                 Search page (`/search`) — async server component. Real AniList series panel (keyed by ?q=), everything else (ARCS, CHARACTERS, TOP_CONTENT, FILTERS, ALSO_FOUND, RESULTS_SUMMARY) hardcoded.
+  search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module).
+  submit/page.jsx                 3-step submission wizard (`/submit`) — client component, owns all wizard state. Real: step 1's /api/og-fetch link detection, step 2's real beat selector (getArcBeats), step 3's real content_items insert with a real submitted_by (session.user.id, or "anonymous" when signed out). Hardcoded: SERIES_DETECTED, ARC_DETECTED, INITIAL_CHARACTERS, CONTENT_TYPE_OPTIONS. Still has 3 debug console.logs in handleSubmit (see "Known issues").
+  submit/submit.module.css        Submit-page-only styles (step indicator, all 3 step cards, beat selector chart, character chips, quality checklist).
+  series/[slug]/page.jsx          Series page (`/series/[slug]`) — async server component, `[slug]` is an AniList numeric id (not an aniindex slug). Real: everything about the series itself + top-10 cast. Hardcoded: ARCS (same placeholder list as the search page, duplicated not shared).
+  series/[slug]/series.module.css Series-page-only styles (banner hero, genre pills, score row).
+  submit/page.jsx and series/[slug]/page.jsx share no code beyond components — noted since they're easy to conflate by name similarity.
+  api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no HTML-parsing dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed (a separate code path, no scraping) for YouTube. Basic hostname-literal SSRF guard + 8s timeout on every upstream fetch. No response-size cap (see "Known issues").
+  auth/page.jsx                   Sign-in card (`/auth`) — client component, single step. Email input → "Send magic link" (calls signInWithEmail) → success screen ("Check your email — we sent you a sign in link" + a same-device note + a "← Back to home" link, so the screen is never a dead end). Real error states, not simulated.
+  auth/auth.module.css            Styles for auth/page.jsx and auth/callback/page.jsx (imported by both).
+  auth/callback/page.jsx          Magic-link redirect handler (`/auth/callback`) — client component, wrapped in <Suspense> (required for useSearchParams in a statically-rendered page). Exchanges the URL's `code` for a session via exchangeCodeForSession, or falls back to checking for an already-parsed hash-based session (implicit-flow links), then redirects to `/` or shows an error. Genuinely load-bearing — every real magic-link click passes through this page.
 lib/
-  anilist.js                    searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — real AniList GraphQL calls, each cached via Next's fetch cache (next: { revalidate: 3600 })
-  supabase.js                   Exports the shared `supabase` client (fetch explicitly opted out of Next's cache) + getArcBeats / getArcContent. (Session 14) getArcContent's select list now includes submitted_by.
-  auth.js                       (Session 13; changed Session 15, reverted Session 16) signInWithEmail / signOut / getSession — thin wrappers around supabase.auth.{signInWithOtp,signOut,getSession}. signInWithEmail is back to sending a magic link (options: { emailRedirectTo }) as of Session 16; Session 15's shouldCreateUser-only variant and its verifyOtp export are both gone (verifyOtp had no other caller once the code step was removed).
+  anilist.js                      searchSeries(query, {perPage}) / getSeriesById(id) / getSeriesCharacters(id, {perPage}) / getSeriesWithRelations(id) — real AniList GraphQL calls via a shared postToAniList() helper, each cached via Next's fetch cache (next: { revalidate: 3600 }). All four throw on request/GraphQL failure; getSeriesById/getSeriesWithRelations strip AniList's HTML markup out of `description` before returning.
+  supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcBeats(slug) and getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by). Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key).
+  auth.js                         signInWithEmail(email) — supabase.auth.signInWithOtp with emailRedirectTo pointed at /auth/callback (a genuine magic link, see the Session 15/16 history for why not a code). signOut() and getSession() — thin wrappers, getSession() swallows its own error and returns null rather than throwing. All three exported; no other functions in this file.
 components/
-  ArcNav.jsx                   Horizontal arc-chip strip. Props: { arcs: [{ slug, name, count, active? }] }
-  ArcHero.jsx                  Breadcrumb/title/meta/badges/description/characters/stats block. Props: { arc: { breadcrumb[], name, episodes, seasonPart, dateRange, badges[{type,label}], description, characters[], stats[{value,label}] } }
-  ContentTabs.jsx               Sticky tab bar. Props: { tabs: [{ label, count, active? }] }
-  IntensityChart.jsx            Ten-beat bar chart. Props: { beats: [{ label, heightPct, tier: "normal"|"high"|"peak" }] }
-  BeatSection.jsx                One story-beat block + ContentCard grid. Props: { beat: { title, count, peakLabel, items: [] } } — items spread directly into ContentCard
-  ContentCard.jsx                 Single fan-content card (default tall + compact horizontal modes). Props: { title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact?, submittedBy? }. Also exports `getThumbnailStyle(thumbnailUrl)` (named export) — used by this component and by the submit page's preview card to correctly render either a real image URL or a CSS gradient/color value as a background. (Session 14) submittedBy is optional and, when present, renders a nested YoursBadge in the thumbnail corner.
-  ContentCard.module.css          Colocated styles for ContentCard's compact mode. (Session 14) Added .compactYours for the compact mode's own "Yours" badge position.
-  Sparkline.jsx                  Small bar-chart sparkline. Props: { bars: [{ heightPct, tier }], width?, height?, gap? }
-  Sparkline.module.css            Colocated styles
-  HeroSearch.jsx                  Client component — home page's hero search input + quick-search chips. No props; owns its own input state
-  SearchNav.jsx                    Client component — search/series pages' nav (logo, search input, icon, clear). Props: { query: string }. (Session 13) Now renders NavAuth in its nav-right.
-  CharacterChips.jsx               Character chip list (real photo or colored-initials fallback). Props: { characters: [{ id?, name, image?, color?, initials?, count? }] } — correctly uses backgroundImage: url(...) for real photos (this component never had the CSS bug ContentCard had)
-  ArcList.jsx                     Arc-row list with sparklines, imports search.module.css directly. Props: { arcs: [{ slug, num, name, count, peak, spark[], dividerAfter? }], moreLabel? }
-  NavAuth.jsx                     (Session 13) Client component — the auth-aware slice of a page's nav-right. Reads the session via lib/auth's getSession() on mount and subscribes to supabase.auth.onAuthStateChange to stay in sync; renders a "Sign in" link to /auth when signed out, or the user's email + a "Sign out" button when signed in. Props: { signInClassName? } (defaults to "btn btn-ghost", overridable per page — the arc page passes "btn btn-primary" to match its existing button styling). Used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx (so both the search and series pages get it for free).
-  YoursBadge.jsx                  (Session 14) Small client component nested inside ContentCard. Props: { submittedBy, className }. Checks getSession() once on mount and renders a "✦ Yours" pill only if the current session's user id matches submittedBy — renders nothing otherwise (including while the check is still pending), so it never flashes an incorrect badge. Exists specifically so ContentCard itself and the arc page (a server component) don't need to become client-rendered just for this one comparison — see the Session 14 notes below for the full reasoning.
-next.config.mjs                  images.remotePatterns allowlists i.ytimg.com and s4.anilist.co — configured but next/image isn't used anywhere yet (see "Known issues")
-jsconfig.json                    Configures the "@/*" import alias
-package.json                     Dependencies: next, react, react-dom, @supabase/supabase-js
+  ArcNav.jsx                      Horizontal arc-chip strip (the row under the top nav on the arc page). Props: { arcs: [{ slug, name, count, active? }] }. No props default; `arcs` is required.
+  ArcHero.jsx                     Breadcrumb / <h1> / meta row (episodes, season, dates, badges) / description / character chips (via CharacterChips) / 4-stat row. Props: { arc: { breadcrumb: string[], name, episodes, seasonPart, dateRange, badges: [{type, label}], description, characters: [...CharacterChips props], stats: [{value, label}] } }.
+  ArcList.jsx                     Arc-row list with sparklines; imports search.module.css directly (not its own CSS Module). Props: { arcs: [{ slug, num, name, count, peak, spark: [{heightPct, tier}], dividerAfter? }], moreLabel? }. Used by both the search and series pages. Each row is a next/link to /arc/${slug}.
+  BeatSection.jsx                 One story-beat block: heading, item count, optional peak pill, and a grid of ContentCards. Props: { beat: { title, count, peakLabel, items: [...spread directly into ContentCard] } }. Has no markup/platform logic of its own — items pass straight through.
+  CharacterChips.jsx              Character chip list (real photo via backgroundImage, or a colored-initials circle fallback; optional mention-count badge). Props: { characters: [{ id?, name, image?, color?, initials?, count? }] }. Used by ArcHero and the series page.
+  ContentCard.jsx                 Single fan-content link card — default tall mode (globals.css classes) or compact horizontal mode (its own CSS Module). Props: { title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact = false, submittedBy? }. Also exports the named function getThumbnailStyle(thumbnailUrl), used by this component and independently by app/submit/page.jsx's step-1 preview thumbnail. submittedBy is optional; when present, nests a YoursBadge in the thumbnail's top-left corner.
+  ContentCard.module.css          Colocated styles for ContentCard's compact mode only (the default/tall mode uses globals.css's shared .card/.thumb/.cbody/.tag-* classes). Includes .compactYours for the compact mode's own "Yours" badge position (top-left of the 80×52px thumbnail).
+  ContentTabs.jsx                 Sticky tab bar (All / Edits & Video / Fan Art / Discussion / OST & Music on the arc page). Props: { tabs: [{ label, count, active? }] }.
+  HeroSearch.jsx                  Client component — home page's hero search input + "Try:" quick-search chips. No props; owns its own input state. Enter or a chip click navigates to /search?q=....
+  IntensityChart.jsx              Ten-beat bar chart ("community response by story beat"). Props: { beats: [{ label, heightPct, tier: "normal"|"high"|"peak" }] }. Peak-tier bars get a small accent dot above them.
+  NavAuth.jsx                     Client component — the signed-in/signed-out slice of a page's nav-right. Reads the session via lib/auth's getSession() on mount and subscribes to supabase.auth.onAuthStateChange to stay live; renders nothing until the initial check resolves (no flash of the wrong state). Props: { signInClassName? } (defaults to "btn btn-ghost"; the arc page passes "btn btn-primary" to match its own pre-existing button styling). Signed out: a next/link to /auth reading "Sign in". Signed in: the real email (.nav-auth-email, ellipsis-truncated past 180px) + a "Sign out" button that calls signOut(). Used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx (so the search and series pages get it too). NOT used by app/submit/page.jsx's nav, which has never had a Sign in button.
+  SearchNav.jsx                   Client component — the search and series pages' shared nav (logo, search input, icon, clear button, NavAuth, "Submit content" link). Props: { query: string }. Seeded from `query`, remounted via `key={query}` on the search page so client-side re-searches re-sync the input.
+  Sparkline.jsx                   Small bar-chart sparkline. Props: { bars: [{ heightPct, tier }], width = "34px", height = "20px", gap = "1.5px" }. Used at 34×20px/5-bar on the search page's arc list and 100%×36px/9-bar on the home page's trending arc cards.
+  YoursBadge.jsx                  Client component nested inside ContentCard. Props: { submittedBy, className }. Calls getSession() once on mount; renders a "✦ Yours" <span> (via the passed-in className) only if session.user.id === submittedBy, else renders null — including for the entire window before the check resolves, so it can never flash an incorrect badge. Exists specifically so ContentCard and the arc page (a server component with no access to the browser's session) don't need to become client-rendered just for this one id comparison.
+next.config.mjs                   images.remotePatterns allowlists i.ytimg.com and s4.anilist.co for next/image — configured but next/image isn't used anywhere in the codebase yet (see "Known issues"); every image renders via plain CSS background/backgroundImage or a raw <img> tag instead.
+jsconfig.json                     Configures the "@/*" import alias (maps to the repo root) used throughout app/components/lib.
+package.json                      Dependencies: next (14.2.35), react (^18.3.1), react-dom (^18.3.1), @supabase/supabase-js (^2.110.5). Scripts: dev/build/start/lint (all standard `next` CLI passthroughs).
+.gitignore                        node_modules, .next, out, .env*.local, npm-debug.log*, .DS_Store.
 ```
+
+**No files exist outside this list** beyond the two lockfiles
+(`package-lock.json`, tracked) and this `PROJECT.md` itself — no README,
+no test directory, no CI config, no `.env.example`. `.env.local` (real
+Supabase URL + anon key) exists locally in any environment that's actually
+been configured against the live project, but is gitignored and was never
+committed — confirmed via `git check-ignore` back in Session 9 and never
+revisited since, since nothing has changed about how env vars are handled.
+
+### Design tokens (globals.css `:root`)
+
+`--bg` `#0C0C12`, `--surface` `#14141C`, `--surface-2` `#1C1C26`,
+`--surface-3` `#232330`, `--border` `rgba(255,255,255,0.07)`,
+`--border-mid` `rgba(255,255,255,0.12)`, `--accent` `#7B6CF6`,
+`--accent-soft` `rgba(123,108,246,0.14)`, `--red` `#F0706A`, `--amber`
+`#F0A96A`, `--t1`/`--t2`/`--t3` (text, high→low emphasis)
+`#EEEEF5`/`#8A8AA8`/`#50505E`, `--display` `'Syne', sans-serif`, `--body`
+`'Inter', sans-serif`, `--r` `10px`, `--r-sm` `6px`. **Confirmed still
+true, not fixed in this audit**: `--green`/`--green-soft` are referenced
+throughout `app/submit/submit.module.css` (e.g. `.completedCheck`,
+`.stepDotDone`, `.submitSuccess`) but **never actually defined in
+`:root`** — every one of those `var(--green)`/`var(--green-soft)` calls
+silently resolves to nothing (the browser drops the declaration), the same
+failure mode as the real Session 12 thumbnail-CSS bug. First flagged in
+Session 13 when choosing colors for the (now-removed) OTP success screen;
+still unfixed, still real, still worth a two-line fix (add both to
+`:root` using the literal color already in consistent informal use
+everywhere else, `rgb(106,240,168)` / `rgba(106,240,168,0.14)`) — see
+"Known issues" below.
 
 ### Supabase — full schema, RLS, and seed data (all confirmed live)
 
@@ -268,7 +305,9 @@ have ever been seeded.
 - **`next.config.mjs`'s `images.remotePatterns`** (Session 12 follow-up) allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere in the codebase — all images render via plain CSS `background`/`backgroundImage` (correctly, as of the Session 12 follow-up thumbnail fix). This config is inert until/unless a future session actually adopts `next/image`.
 - **`og-fetch`'s SSRF protection is a hostname-literal blocklist**, not DNS-resolution-aware — doesn't defend against a public domain that resolves to a private IP (DNS rebinding). Noted as an accepted, explicit trade-off when built, not an oversight.
 - **`og-fetch` has no response-size cap**, only an 8-second timeout — a fast-but-huge response could still consume meaningful memory within that window.
+- **`--green`/`--green-soft` are used throughout `app/submit/submit.module.css` (13 call sites: `.completedCheck`, `.stepDotDone`, `.stepLabelDone`, `.stepLineDone`, `.charChipConfirm`, `.submitSuccess`) but were never defined in `globals.css`'s `:root`.** Confirmed directly in this audit (`grep -n "var(--green" app/submit/submit.module.css` → 13 matches; `grep "^\s*--" app/globals.css` → no `--green` anywhere). Every one of those declarations is silently dropped by the browser — the same failure class as the real Session 12 thumbnail-CSS bug, just never actually fixed. First flagged in Session 13, still true as of this audit. Trivial fix: add `--green: #6AF0A8; --green-soft: rgba(106,240,168,0.14);` to `:root` (that's the exact color already in informal, consistent use as literal RGB throughout the same file's border rules) — nobody has done it yet because it's cosmetic (the affected elements just render without their intended green tint/border, not broken/invisible) and no task has asked for it specifically.
 - **This sandbox cannot reach `*.supabase.co` or general internet hosts**, so no session working from this environment can run a true, unmocked end-to-end verification against the live Supabase project or real third-party URLs. Every Supabase/OG-fetch-related change this project has made was verified either via mocked local servers (Playwright route interception, a local mock PostgREST/oEmbed server) or via SQL handed to the user to run and report back. Keep doing this — it's been reliable — but remember it means "verified" in this file always means "verified against a faithful mock," not "confirmed against production," unless a session note says otherwise.
+- **`next lint` has never been run successfully in this repo** — no ESLint config exists yet; the command prompts for first-time setup (Strict/Base/Cancel) which no session has completed. `next build`'s own compile step is the only static check every session has actually relied on.
 
 ### Explicitly not built
 
@@ -280,20 +319,24 @@ have ever been seeded.
 - **No manual correction UI on `/submit`** — no way to edit a wrong auto-detected title, pick a different series/arc, or add a character beyond the one hardcoded pre-filled chip; "+ Add character," the Series/Arc "Change" links, and "Skip this beat" are all inert.
 - **No thumbnail images anywhere except real submitted content** — every hardcoded card (`BEATS` on the arc page, `TOP_CONTENT` on the search page) still uses a CSS gradient placeholder, not a real image.
 
-### Suggested next phase (Phase 4+)
+### Phase 5+ roadmap
 
-Roughly in order of "unblocks the most other things":
+Phase 4 (auth, Sessions 13–17) is closed as of this audit — sign-in works,
+the identity is real and saved, and this file is confirmed accurate
+against actual source. Roughly in order of "unblocks the most other
+things" for whatever Phase 5 becomes:
 
 1. **Remove the two leftover debug `console.log` blocks** (see "Known issues") — trivial, no reason to carry them further.
-2. **A real moderation view** — even a minimal one (a `/admin` or `?status=pending` view listing `content_items` where `status = 'pending'`, with buttons to flip it to `'confirmed'` or delete) would make the `status` column's existence pay off; right now every submission is invisible-but-present forever in the same way. Now that Session 14 wired up real user ids, this is also where a permissions model (who's allowed to moderate) would first need to get decided.
-3. **A "my submissions" view** — now that `content_items.submitted_by` holds a real user id for a signed-in submitter (Session 14), a page listing "content I've submitted" (`select * from content_items where submitted_by = auth.uid()::text`, the same check Session 14's new RLS policy already allows) is a small, natural next step — today a user can only spot their own items by noticing the "Yours" badge while browsing an arc page they happen to be on.
-4. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
-5. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
-6. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
-7. **Confirm a real magic-link round trip against the live Supabase project** from outside this sandbox (see "Partially working" above) — still the one piece of the auth/identity chain (Sessions 13–16 combined) that's never been verified against anything other than a mock or an injected session.
-8. **If this project ever moves off the Supabase free plan (or sets up custom SMTP), revisit the email-OTP flow** — Session 15's application code for it is straightforward to reconstruct from git history (`lib/auth.js`'s `verifyOtp`, `app/auth/page.jsx`'s two-step version), the only blocker was ever the dashboard-side email template, not the app code. Not worth attempting again on the free plan.
-9. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
-10. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
+2. **Add the two missing `--green`/`--green-soft` CSS custom properties** (see "Known issues") — a two-line fix, been known since Session 13.
+3. **A real moderation view** — even a minimal one (a `/admin` or `?status=pending` view listing `content_items` where `status = 'pending'`, with buttons to flip it to `'confirmed'` or delete) would make the `status` column's existence pay off; right now every submission is invisible-but-present forever in the same way. Now that Session 14 wired up real user ids, this is also where a permissions model (who's allowed to moderate) would first need to get decided.
+4. **A "my submissions" view** — now that `content_items.submitted_by` holds a real user id for a signed-in submitter (Session 14), a page listing "content I've submitted" (`select * from content_items where submitted_by = auth.uid()::text`, the same check Session 14's new RLS policy already allows) is a small, natural next step — today a user can only spot their own items by noticing the "Yours" badge while browsing an arc page they happen to be on.
+5. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
+6. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
+7. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
+8. **Confirm a real magic-link round trip against the live Supabase project** from outside this sandbox (see "Partially working" above) — still the one piece of the auth/identity chain (Sessions 13–17 combined) that's never been verified against anything other than a mock or an injected session.
+9. **If this project ever moves off the Supabase free plan (or sets up custom SMTP), revisit the email-OTP flow** — Session 15's application code for it is straightforward to reconstruct from git history (`lib/auth.js`'s `verifyOtp`, `app/auth/page.jsx`'s two-step version), the only blocker was ever the dashboard-side email template, not the app code. Not worth attempting again on the free plan.
+10. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
+11. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
 
 ## Session 1
 
@@ -2369,6 +2412,64 @@ the app actually working end to end for a real user today.
   - Confirmed `app/auth/callback/page.jsx`'s diff is empty before
     committing.
   - Stopped the test server afterward, no processes left running.
+
+## Session 17
+
+A full project audit, done before considering Phase 4 (auth, Sessions
+13–16) closed — no application code changed. Read every file in `app/`,
+`components/`, and `lib/` directly from disk (25 source files total, plus
+`next.config.mjs`/`jsconfig.json`/`package.json`/`.gitignore`), rather than
+trusting the "Current State" section's accumulated Session 13–16 patches
+to still be accurate, and rewrote that section from the ground up.
+
+- **What changed in `PROJECT.md`**: the "Current State — Handoff Audit"
+  section (previously patched incrementally across Sessions 13–16, which
+  had left it correct but fragmented — lots of parenthetical "(Session
+  13; updated Session 15/16)" annotations layered on top of each other)
+  was rewritten as one coherent reference: a complete file-by-file
+  inventory (every file in `app/`/`components`/`lib`, confirmed against
+  the actual files, not carried forward from memory), a full component
+  prop reference for all 13 components, the complete design-token list
+  from `globals.css`, the full Supabase schema/RLS/seed-data block
+  (unchanged content, reorganized presentation), and a "Phase 5+ roadmap"
+  replacing the old "Suggested next phase (Phase 4+)" heading now that
+  Phase 4 is being closed out.
+- **One real, previously-known-but-easy-to-lose issue was re-confirmed
+  and given a permanent, prominent home in "Known issues" instead of
+  being buried in a Session 13 aside**: `--green`/`--green-soft` are
+  referenced 13 times across `app/submit/submit.module.css` (confirmed via
+  `grep -c`) and are still not defined anywhere in `globals.css`'s
+  `:root` (confirmed via a second `grep` finding nothing) — every one of
+  those CSS declarations has been silently dropped by the browser since
+  whichever session first wrote them, the same failure class as the real
+  (and actually fixed) Session 12 thumbnail-CSS bug. This was flagged
+  once, in passing, in Session 13's log entry, and had no line in "Known
+  issues" or "Suggested next phase" until this audit — meaning a session
+  skimming only the Current State section (the documented, intended way
+  to pick up this project) could easily have missed it entirely. Not
+  fixed here (this session made no code changes, by design — an audit
+  that quietly starts fixing things it finds isn't an audit anymore), but
+  now has a specific "Known issues" entry with the exact fix.
+- **Nothing else materially inaccurate was found.** Specifically checked
+  and confirmed still true by reading the actual code rather than
+  assuming: both diagnostic `console.log` blocks are still present
+  (`app/arc/[slug]/page.jsx` line ~262, `app/submit/page.jsx` lines
+  181/187/208); `lib/auth.js` exports exactly `signInWithEmail`,
+  `signOut`, `getSession` (no leftover `verifyOtp`); `app/auth/page.jsx`
+  is genuinely single-step (no leftover `step` state or code-input JSX);
+  `app/auth/callback/page.jsx` matches what every prior session's "zero
+  diff" check already implied; `lib/supabase.js`'s `getArcContent` select
+  list includes `submitted_by`; `ContentCard.jsx` and
+  `ContentCard.module.css` both have the Session 14 `submittedBy`/
+  `YoursBadge`/`.compactYours` wiring; and no file exists in `app/`,
+  `components/`, or `lib/` that wasn't already documented somewhere in
+  this file.
+- **Confirmed clean end state**: `next build` succeeds with no new errors
+  (same route table as Session 16 — this session touched no application
+  code). `git status` clean, working tree matches `origin/claude/
+  aniindex-arc-page-nextjs-wwizd5` after pushing (this is the default
+  branch Vercel deploys as Production — see "Confirm all changes are
+  pushed" in this session's own closing check).
 
 ## Database schema
 
