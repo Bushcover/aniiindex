@@ -1,15 +1,16 @@
 # aniindex
 
 A fan content index for anime series. Started as a single hardcoded
-mockup page; as of Session 13 it has a real Next.js App Router
+mockup page; as of Session 14 it has a real Next.js App Router
 structure, real AniList GraphQL data on several pages, a real
 Supabase database with a working (if narrowly-scoped) submission
-pipeline, and real Supabase Auth magic-link sign-in. See "Current
-State — Handoff Audit" immediately below for a full, current
+pipeline, real Supabase Auth magic-link sign-in, and submissions that
+are now genuinely tied to the signed-in user who made them. See
+"Current State — Handoff Audit" immediately below for a full, current
 snapshot; the session-by-session log after it is the historical
 record of how each piece got built.
 
-## Current State — Handoff Audit (as of Session 13)
+## Current State — Handoff Audit (as of Session 14)
 
 This section is a complete, current-state snapshot of the project, written
 as a handoff for whichever session picks this up next. The session-by-
@@ -21,16 +22,21 @@ piece of code.
 **Stack**: Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript), no
 CSS framework (global stylesheet ported 1:1 from the original mockup, plus
 colocated CSS Modules per page), `@supabase/supabase-js` as the only real
-dependency beyond Next/React itself — Session 13's auth work uses the same
-package's `supabase.auth` namespace, no new dependency was installed.
+dependency beyond Next/React itself — Session 13's auth work and Session
+14's identity wiring both use the same package's `supabase.auth`
+namespace, no new dependency was installed either time.
 Default branch: **`claude/aniindex-arc-page-nextjs-wwizd5`** (not `main` —
 this repo has no `main` branch; see the branch-related notes further down
-this file for why). **This session's own work happened on
-`claude/determined-lamport-roi673`**, a separate feature branch — not yet
-merged into the default branch as of the end of this session; whoever
-merges it should follow the same branch/Vercel-env lesson from the Session
-10 follow-up notes (Preview vs. Production env vars) before assuming
-`/auth` works on the deployed site.
+this file for why). **Session 13's work was pushed to
+`claude/determined-lamport-roi673` and then explicitly merged into the
+default branch** by user request (a clean fast-forward, since the feature
+branch's parent was the default branch's tip at the time — see that
+session's own note for the exact commands). **Session 14's own work
+happened on `claude/determined-lamport-roi673` again** (this project's
+established pattern: develop on the assigned feature branch, merge to the
+default branch either automatically or on explicit request) — check which
+branch actually got the final push by running `git log --oneline -1` on
+both branches before assuming either one is current.
 
 **Phases so far, loosely**: Phase 1 (Sessions 1–5) converted static HTML
 mockups into Next.js pages/components with 100% hardcoded data. Phase 2
@@ -38,11 +44,14 @@ mockups into Next.js pages/components with 100% hardcoded data. Phase 2
 series pages. Phase 3 (Sessions 9–12) added Supabase as a real database —
 schema, seeding, the submit form's real write path, the arc page's real
 read path, real Open Graph/oEmbed link detection, and the bug fixes that
-followed each of those. Phase 4 (Session 13, so far) added real Supabase
-Auth magic-link sign-in and wired the nav to reflect signed-in/signed-out
-state — see "Suggested next phase" at the end of this section for what's
-still left to build on top of it (auth exists now, but nothing yet uses
-*who* is signed in for anything).
+followed each of those. Phase 4 (Sessions 13–14) added real Supabase Auth
+magic-link sign-in (Session 13), then wired the signed-in user's identity
+into actual app behavior (Session 14): submissions now save the real
+`auth.uid()`-shaped user id instead of the literal string `"anonymous"`,
+and the arc page's content cards show a "Yours" badge on a submission that
+matches the current session's user id. See "Suggested next phase" at the
+end of this section for what's still left on top of that (no moderation
+UI, no way to see "my submissions" as a list, etc.).
 
 ### Complete file inventory
 
@@ -55,7 +64,7 @@ app/
   arc/[slug]/page.jsx           Arc page — async server component; real Supabase beats/content + real AniList series/characters, both with hardcoded fallback; still has a temporary diagnostic console.log (see "Known issues")
   search/page.jsx                Search page — async server component; real AniList series panel only, everything else hardcoded
   search/search.module.css       Search-page-only styles (also imported by ArcList and the series page)
-  submit/page.jsx                 3-step submission wizard — client component; real OG/oEmbed detection, real beat selector, real Supabase insert; still has 3 debug console.logs in handleSubmit (see "Known issues")
+  submit/page.jsx                 3-step submission wizard — client component; real OG/oEmbed detection, real beat selector, real Supabase insert; still has 3 debug console.logs in handleSubmit (see "Known issues"). (Session 14) Reads the current session via supabase.auth.getSession() on mount and saves session.user.id as submitted_by on insert, falling back to "anonymous" when signed out.
   submit/submit.module.css        Submit-page-only styles
   series/[slug]/page.jsx          Series page — [slug] is an AniList numeric id; real series + characters, hardcoded arc list
   series/[slug]/series.module.css Series-page-only styles
@@ -65,7 +74,7 @@ app/
   auth/callback/page.jsx          (Session 13) Magic-link redirect handler — client component; exchanges the URL's `code` for a session (or falls back to checking for an already-parsed hash-based session), redirects to `/` or shows an error
 lib/
   anilist.js                    searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — real AniList GraphQL calls, each cached via Next's fetch cache (next: { revalidate: 3600 })
-  supabase.js                   Exports the shared `supabase` client (fetch explicitly opted out of Next's cache) + getArcBeats / getArcContent
+  supabase.js                   Exports the shared `supabase` client (fetch explicitly opted out of Next's cache) + getArcBeats / getArcContent. (Session 14) getArcContent's select list now includes submitted_by.
   auth.js                       (Session 13) signInWithEmail / signOut / getSession — thin wrappers around supabase.auth.{signInWithOtp,signOut,getSession}
 components/
   ArcNav.jsx                   Horizontal arc-chip strip. Props: { arcs: [{ slug, name, count, active? }] }
@@ -73,8 +82,8 @@ components/
   ContentTabs.jsx               Sticky tab bar. Props: { tabs: [{ label, count, active? }] }
   IntensityChart.jsx            Ten-beat bar chart. Props: { beats: [{ label, heightPct, tier: "normal"|"high"|"peak" }] }
   BeatSection.jsx                One story-beat block + ContentCard grid. Props: { beat: { title, count, peakLabel, items: [] } } — items spread directly into ContentCard
-  ContentCard.jsx                 Single fan-content card (default tall + compact horizontal modes). Props: { title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact? }. Also exports `getThumbnailStyle(thumbnailUrl)` (named export) — used by this component and by the submit page's preview card to correctly render either a real image URL or a CSS gradient/color value as a background
-  ContentCard.module.css          Colocated styles for ContentCard's compact mode
+  ContentCard.jsx                 Single fan-content card (default tall + compact horizontal modes). Props: { title, creator, platform, thumbnailUrl, contentType, characterTags, sourceUrl, beatLabel, compact?, submittedBy? }. Also exports `getThumbnailStyle(thumbnailUrl)` (named export) — used by this component and by the submit page's preview card to correctly render either a real image URL or a CSS gradient/color value as a background. (Session 14) submittedBy is optional and, when present, renders a nested YoursBadge in the thumbnail corner.
+  ContentCard.module.css          Colocated styles for ContentCard's compact mode. (Session 14) Added .compactYours for the compact mode's own "Yours" badge position.
   Sparkline.jsx                  Small bar-chart sparkline. Props: { bars: [{ heightPct, tier }], width?, height?, gap? }
   Sparkline.module.css            Colocated styles
   HeroSearch.jsx                  Client component — home page's hero search input + quick-search chips. No props; owns its own input state
@@ -82,6 +91,7 @@ components/
   CharacterChips.jsx               Character chip list (real photo or colored-initials fallback). Props: { characters: [{ id?, name, image?, color?, initials?, count? }] } — correctly uses backgroundImage: url(...) for real photos (this component never had the CSS bug ContentCard had)
   ArcList.jsx                     Arc-row list with sparklines, imports search.module.css directly. Props: { arcs: [{ slug, num, name, count, peak, spark[], dividerAfter? }], moreLabel? }
   NavAuth.jsx                     (Session 13) Client component — the auth-aware slice of a page's nav-right. Reads the session via lib/auth's getSession() on mount and subscribes to supabase.auth.onAuthStateChange to stay in sync; renders a "Sign in" link to /auth when signed out, or the user's email + a "Sign out" button when signed in. Props: { signInClassName? } (defaults to "btn btn-ghost", overridable per page — the arc page passes "btn btn-primary" to match its existing button styling). Used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx (so both the search and series pages get it for free).
+  YoursBadge.jsx                  (Session 14) Small client component nested inside ContentCard. Props: { submittedBy, className }. Checks getSession() once on mount and renders a "✦ Yours" pill only if the current session's user id matches submittedBy — renders nothing otherwise (including while the check is still pending), so it never flashes an incorrect badge. Exists specifically so ContentCard itself and the arc page (a server component) don't need to become client-rendered just for this one comparison — see the Session 14 notes below for the full reasoning.
 next.config.mjs                  images.remotePatterns allowlists i.ytimg.com and s4.anilist.co — configured but next/image isn't used anywhere yet (see "Known issues")
 jsconfig.json                    Configures the "@/*" import alias
 package.json                     Dependencies: next, react, react-dom, @supabase/supabase-js
@@ -152,6 +162,17 @@ create policy "Public read access on arcs" on arcs for select using (true);
 create policy "Public read access on beats" on beats for select using (true);
 create policy "Public insert access on content_items" on content_items for insert with check (true);
 create policy "Public read access on content_items" on content_items for select using (status in ('pending', 'confirmed'));
+
+-- Session 14, not yet run in the live project (handed to the user, per this
+-- project's established "SQL is reviewed and run manually" convention —
+-- see "Not run yet" below). Lets a signed-in user read their own
+-- submissions regardless of status, on top of the public policy above —
+-- Postgres RLS ORs multiple permissive policies for the same command
+-- together, so this is additive, not a replacement.
+create policy "Users can read their own submissions"
+  on content_items for select
+  to authenticated
+  using (submitted_by = auth.uid()::text);
 ```
 
 **No `UPDATE`/`DELETE` policy exists on any table** — those operations are
@@ -161,6 +182,21 @@ denied). None of the policies are scoped `to anon` specifically — they're
 `PUBLIC`, a deliberate choice made after troubleshooting whether the
 newer `sb_publishable_...`-format key maps to the `anon` role the same way
 a legacy anon JWT does (see the Session 10 "still failing" follow-up).
+**The one exception is Session 14's new policy above, which is deliberately
+scoped `to authenticated`** — unlike the earlier lesson, this one actually
+needs a real role check: `auth.uid()` returns `null` for an anonymous
+request, and `submitted_by = null::text` is never true (Postgres's `=`
+against `null` is always `null`, not `true`), so scoping this specific
+policy is what makes "only the actual owner" mean anything — a `PUBLIC`
+version would either do nothing extra (anon can't match) or, if written
+carelessly, accidentally widen access, neither of which is what a
+`to authenticated` + `auth.uid()` check is for. **Not run yet** — this
+policy is new SQL from Session 14 that hasn't been executed against the
+live Supabase project by this repo's own tooling (per the established
+convention, see "Database schema" below); the user needs to run it in the
+Supabase SQL editor before an authenticated user's own non-`pending`/
+`confirmed` rows (if any come to exist once a moderation workflow adds
+other status values) will actually be readable by them.
 
 **Seed data** — exactly one series/arc/beat set exists, seeded once:
 - `series`: 1 row — Jujutsu Kaisen (`anilist_id: 113415`, `slug: 'jujutsu-kaisen'`)
@@ -179,10 +215,11 @@ have ever been seeded.
 - **`/arc/[slug]`** — Real for `shibuya-incident-arc` only: AniList series name/description/characters (keyed by hardcoded `ANILIST_SERIES_ID`, not `params.slug`), and Supabase beats/intensity-chart/content-cards (keyed by `params.slug`, this is the one place `params.slug` genuinely drives a query). Any other slug falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS`/`ARC_NAV` mockup data — the page never breaks, it just isn't real for that slug. `ARC_NAV`, `ARC`'s own fields (name, episodes, badges, stats), and `TABS` are hardcoded regardless of slug.
 - **`/search`** — Real: the series panel (title, format, genres, score, popularity, episodes, poster), driven by `?q=`. Hardcoded regardless of query: `ARCS` (11-arc Chainsaw Man placeholder list), `CHARACTERS`, `TOP_CONTENT`, `FILTERS`, `ALSO_FOUND`, `RESULTS_SUMMARY`.
 - **`/series/[slug]`** — Real: everything about the series itself (title, description, genres, score, format/year/episodes/status, banner/poster) and the top-10 character cast, both keyed directly by the numeric AniList id in the URL — the first (and still only) page where the URL's dynamic segment drives every real value shown. Hardcoded: `ARCS` (same placeholder list as the search page, duplicated not shared).
-- **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms after typing stops), step 2's beat selector (real `beats` rows for the Shibuya arc, fetched via `getArcBeats` on mount), and the final submission (a real `content_items` insert). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`. **Still not real, as of Session 13**: `submitted_by` stays hardcoded to `"anonymous"` even for a user who's genuinely signed in — nothing on this page reads the session yet (see "Suggested next phase").
+- **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms after typing stops), step 2's beat selector (real `beats` rows for the Shibuya arc, fetched via `getArcBeats` on mount), and the final submission (a real `content_items` insert). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`. **Real as of Session 14**: `submitted_by` now saves the real signed-in user's id (`session.user.id`, read via `supabase.auth.getSession()` on mount) when one exists, falling back to the literal string `"anonymous"` only when genuinely signed out — see the Session 14 notes below.
 - **`/auth`** (Session 13) — Real end to end: submitting an email calls the real `signInWithOtp`, with genuine loading/success/error states (error state is real, not simulated — this sandbox's network block on `*.supabase.co` reliably exercises it; success state verified against a mocked response, see the Session 13 notes below).
 - **`/auth/callback`** (Session 13) — Real: exchanges the URL's `code` for a session via `exchangeCodeForSession`, or falls back to checking for an already-set session (implicit-flow magic links resolve via the URL hash instead), then redirects to `/` or shows an error. Not exercised against a real magic-link email in this project yet (see "Partially working" below).
 - **Nav (all pages except `/submit`)** (Session 13) — Real: `NavAuth` reads the actual Supabase session client-side and shows "Sign in" (linking to `/auth`) when signed out, or the real signed-in email + a working "Sign out" button when signed in. `/submit`'s nav has never had a Sign in button (see its own compact nav in the Session 5 notes) and wasn't touched.
+- **`/arc/[slug]`'s content cards** (Session 14) — Real, additionally: a card whose real `content_items.submitted_by` matches the current browser session's signed-in user id now shows a small "✦ Yours" badge (`components/YoursBadge.jsx`, nested inside `ContentCard`). Only real Supabase-backed cards can ever carry this — hardcoded fallback data has no `submittedBy` value, so the badge simply never renders there, the same "omit rather than fabricate" convention this project has used since Session 6.
 
 ### Fully working end-to-end (verified this session and in prior sessions)
 
@@ -193,6 +230,7 @@ have ever been seeded.
 5. Any other `/arc/<slug>` → clean fallback to the original hardcoded Shibuya mockup, no crash, no partial/mixed state.
 6. `/submit` full wizard: paste a URL → real title/thumbnail/platform/creator auto-detected (TikTok/X/Instagram/Reddit via HTML scraping, YouTube via oEmbed) → pick a real story beat → review (real `ContentCard` preview, correct thumbnail rendering) → submit → real row lands in `content_items` → visible on the arc page under the correct beat on the next load (no caching in the way).
 7. (Session 13) Every page's nav "Sign in" link genuinely navigates to `/auth` (confirmed by reading the rendered `href` directly on the home, arc, search, and series pages, not just visually). `/auth`'s form correctly shows the loading state, then either the real error banner (a genuine "Failed to fetch" from this sandbox's `*.supabase.co` network block — real proof the error path is wired, not simulated) or, with the OTP request mocked to succeed, the green "Check your email — we sent a magic link to `<email>`" success state with the real typed address interpolated. With a fake session injected into `localStorage` under Supabase's own storage-key convention, the nav correctly swaps to showing that session's email + a working "Sign out" button across a full page reload — proving `NavAuth`/`getSession` genuinely read persisted session state, not just in-memory state from the sign-in form.
+8. (Session 14) With a fake session injected into `localStorage`, driving `/submit`'s full wizard end to end (URL → beat → review → submit, all three of `arcs`/`beats`/`content_items` mocked at the browser network level) produced a `content_items` insert whose `submitted_by` field was exactly that session's `user.id` — not `"anonymous"`. Repeating the same flow with no session present produced `submitted_by: "anonymous"`, confirming the fallback still works for signed-out users. Separately, with a local mock PostgREST server standing in for the arc page's *server-side* Supabase calls (browser-level request mocking can't reach those, since they run in the Next.js server process — see the Session 14 notes below for why this needed its own verification approach) seeded with two `content_items` rows — one with `submitted_by` matching an injected session, one not — `/arc/shibuya-incident-arc` rendered the "✦ Yours" badge on exactly the matching card and not the other one.
 
 ### Partially working / needs attention
 
@@ -200,8 +238,9 @@ have ever been seeded.
 - **`/submit`'s auto-detection can fail or be slow**, and the wizard is designed to let the user proceed anyway with honest placeholders (`"Untitled link"`, a generic gradient, `platform: "other"`, `"Unknown creator"`) rather than block — but there's no way for the user to *manually* correct a wrong or missing title/creator/thumbnail. It's proceed-with-placeholder, not proceed-with-editing.
 - **YouTube's oEmbed integration depends on YouTube's public endpoint staying free/unauthenticated** — it currently is, but this is an external dependency this project doesn't control.
 - **`character_tags`/character detection on `/submit`** never reflects the real pasted content — always the one hardcoded Gojo Satoru chip, regardless of what's actually in the video/post.
-- **Auth (Session 13) has never completed a real magic-link round trip.** Every piece was verified individually — the real `signInWithOtp` call (proven by its real network failure in this sandbox), `exchangeCodeForSession`/redirect logic (code-reviewed and exercised for the "no code, no session" error path, but never against a real Supabase-issued `code`), and the signed-in nav state (verified with an injected fake session, not a session Supabase itself issued) — but no session has actually clicked a real emailed magic link end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, click the link that arrives, and confirm it lands on `/auth/callback` and then `/` with the nav showing the signed-in state.
-- **Nothing gates on being signed in yet.** `/submit` still writes `submitted_by: "anonymous"` regardless of whether the submitter has a real session (see "What's real vs. hardcoded, per page" above) — Session 13 built sign-in/sign-out itself, not anything that *uses* the signed-in identity.
+- **Auth (Session 13) has never completed a real magic-link round trip.** Every piece was verified individually — the real `signInWithOtp` call (proven by its real network failure in this sandbox), `exchangeCodeForSession`/redirect logic (code-reviewed and exercised for the "no code, no session" error path, but never against a real Supabase-issued `code`), and the signed-in nav state (verified with an injected fake session, not a session Supabase itself issued) — but no session has actually clicked a real emailed magic link end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, click the link that arrives, and confirm it lands on `/auth/callback` and then `/` with the nav showing the signed-in state. **This is also the one remaining gap for Session 14's own work** — signing in for real and then submitting through `/submit` is the only way to see a genuine (not mocked/injected) `auth.uid()`-shaped UUID land in `content_items.submitted_by` and confirm the "Yours" badge against it.
+- **Session 14's new RLS policy (`"Users can read their own submissions"`) hasn't been run against the live Supabase project yet** — it's new SQL from this session, handed to the user per this project's established convention (see "Not run yet" in the Supabase schema section above). Until it's run, a signed-in user's own non-`pending`/`confirmed` rows (none exist today, since nothing writes any other status — see "No moderation workflow" below) wouldn't be visible to them; today's behavior is unaffected either way, since every row is currently `'pending'` and already covered by the existing public policy.
+- **Still nothing beyond `/submit` and the arc page's cards reads/uses the signed-in identity.** There's no "my submissions" list, no way to edit or delete your own submission, and no moderation view of any kind — Session 14 wired the identity through to exactly two places (the insert, and the badge), not a general-purpose ownership feature.
 
 ### Known issues / cleanup needed
 
@@ -216,7 +255,7 @@ have ever been seeded.
 
 ### Explicitly not built
 
-- **Auth — partially resolved in Session 13.** "Sign in" now genuinely links to `/auth`, which sends a real Supabase magic-link email and, once clicked, signs the user in (see "Fully working end-to-end" and "Partially working" above for what is and isn't verified yet). Still not built: `submitted_by` is still hardcoded to the literal string `"anonymous"` even for a signed-in user — nothing yet reads the session on `/submit` or anywhere else, so signing in doesn't currently change any app behavior beyond the nav itself.
+- **Auth — resolved in Session 13, extended in Session 14.** "Sign in" now genuinely links to `/auth`, which sends a real Supabase magic-link email and, once clicked, signs the user in (see "Fully working end-to-end" and "Partially working" above for what is and isn't verified yet). As of Session 14, signing in actually changes app behavior beyond the nav: `/submit` saves the real signed-in user's id as `submitted_by` instead of `"anonymous"`, and the arc page's cards show a "Yours" badge on a matching submission. Still not built: no "my submissions" view, no way to edit/delete your own submission, and no moderation workflow of any kind (see below) — the identity is now real and saved, but nothing yet lets a user *act* on "this is mine" beyond seeing the badge.
 - **No moderation workflow** — `content_items.status` defaults to `'pending'` and nothing in the app ever changes it, reads it for a moderation queue, or distinguishes `'pending'` from `'confirmed'` visually (the arc page shows both identically). `confirmation_count` is written as `0` and never incremented anywhere.
 - **No tab/filter-pill filtering** on any page — clicking "Edits & Video," "Fan Art," an arc's content-type filter, etc. does nothing.
 - **No pagination or "+N more" expansion** — every "+N more" affordance is static text.
@@ -229,13 +268,14 @@ have ever been seeded.
 Roughly in order of "unblocks the most other things":
 
 1. **Remove the two leftover debug `console.log` blocks** (see "Known issues") — trivial, no reason to carry them further.
-2. **A real moderation view** — even a minimal one (a `/admin` or `?status=pending` view listing `content_items` where `status = 'pending'`, with buttons to flip it to `'confirmed'` or delete) would make the `status` column's existence pay off; right now every submission is invisible-but-present forever in the same way.
-3. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
-4. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
-5. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
-6. **Use the real signed-in identity now that auth (Session 13) exists** — wire `/submit`'s `submitted_by` to the real session's user id/email instead of the literal string `"anonymous"` (falling back to `"anonymous"` only when genuinely signed out), and confirm a real magic-link round trip against the live Supabase project from outside this sandbox (see the Session 13 "Partially working" note above) — this is the natural prerequisite for any moderation permissions model, not a fresh "add auth" task anymore.
-7. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
-8. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
+2. **A real moderation view** — even a minimal one (a `/admin` or `?status=pending` view listing `content_items` where `status = 'pending'`, with buttons to flip it to `'confirmed'` or delete) would make the `status` column's existence pay off; right now every submission is invisible-but-present forever in the same way. Now that Session 14 wired up real user ids, this is also where a permissions model (who's allowed to moderate) would first need to get decided.
+3. **A "my submissions" view** — now that `content_items.submitted_by` holds a real user id for a signed-in submitter (Session 14), a page listing "content I've submitted" (`select * from content_items where submitted_by = auth.uid()::text`, the same check Session 14's new RLS policy already allows) is a small, natural next step — today a user can only spot their own items by noticing the "Yours" badge while browsing an arc page they happen to be on.
+4. **Seed a second arc** (any real arc, doesn't have to be Jujutsu Kaisen) to prove the Supabase-backed arc/submit pipeline generalizes beyond the one hand-seeded case — right now "does this work for more than one arc" is untested by construction, not just unverified.
+5. **Real arc-level routing** — replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query (the `arcs` table already supports this; it's a `select ... where series_id = ...` away) once more than one arc exists to query.
+6. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden, since detection failing currently means a permanently generic placeholder with no recourse.
+7. **Confirm a real magic-link round trip against the live Supabase project** from outside this sandbox (see "Partially working" above) — still the one piece of the auth/identity chain (Sessions 13–14 combined) that's never been verified against anything other than a mock or an injected session.
+8. **`next/image` adoption**, now that the `remotePatterns` config exists for it — would give real thumbnails proper optimization/lazy-loading instead of a raw CSS background.
+9. **Tab/filter-pill filtering** — needs a real per-item `content_type` taxonomy decision first (right now `content_type` is a free-text string chosen from a fixed label list, not an enum/id), then straightforward client-side or query filtering.
 
 ## Session 1
 
@@ -1908,6 +1948,157 @@ wiring the nav to reflect signed-in/signed-out state.
     above for what a future session (or the user, from a real browser)
     should check to close this gap.
 
+## Session 14
+
+Wired the signed-in user identity (Session 13) into actual app behavior:
+real submissions now save the real user id instead of the literal string
+`"anonymous"`, and the arc page's content cards show a small "Yours" badge
+on a submission that belongs to whoever's currently signed in. Three parts.
+
+- **`app/submit/page.jsx`**: added a `session` state, populated once on
+  mount via a direct `supabase.auth.getSession()` call (the same client
+  this file already imports for its `arcs`/`content_items` queries — no
+  new import needed). Deliberately *not* subscribed to
+  `supabase.auth.onAuthStateChange` the way `NavAuth`/Session 13 is —
+  reasoned about this explicitly: the wizard is a single sitting, and
+  whatever was true when the form opened is what should be saved,
+  regardless of whether the user signs in/out in another tab mid-wizard.
+  `handleSubmit`'s insert changed from a hardcoded
+  `submitted_by: "anonymous"` to `submitted_by: session?.user?.id ||
+  "anonymous"` — one line, but it's the entire behavioral change: signed
+  in saves the real `auth.uid()`-shaped UUID, signed out still saves the
+  exact same fallback string as before, so a signed-out user's submission
+  flow is genuinely unchanged.
+- **RLS**: added one new policy (SQL below, and in the "Supabase — full
+  schema" section above), letting an `authenticated` user read their own
+  `content_items` rows regardless of `status`, on top of the existing
+  public policy (`status in ('pending', 'confirmed')`) — Postgres RLS ORs
+  multiple permissive policies for the same command, so this is additive.
+  Scoped `to authenticated` specifically (not `PUBLIC`, unlike most of
+  this project's other policies — see the Session 10 "still failing"
+  history for why `PUBLIC` was preferred there): here the policy's whole
+  point is comparing `auth.uid()` against `submitted_by`, and
+  `auth.uid()` is `null` for an anonymous request, which can never equal
+  a real id — so `to authenticated` isn't a style choice here, it's what
+  makes the check meaningful at all.
+
+  ```sql
+  create policy "Users can read their own submissions"
+    on content_items for select
+    to authenticated
+    using (submitted_by = auth.uid()::text);
+  ```
+
+  **Not run against the live Supabase project by this session** — handed
+  to the user, per this project's established "SQL is reviewed and run
+  manually in the SQL editor" convention (Sessions 9–12 all did the same).
+  Doesn't change today's visible behavior either way, since every existing
+  row is `'pending'` and already covered by the public policy — it matters
+  once a moderation workflow (still not built — see "Suggested next
+  phase") introduces other status values a submitter would otherwise lose
+  visibility into their own content under.
+- **The "Yours" badge** — the one part of this task that took real
+  thought, per the task's own framing ("think about the cleanest way to
+  do this given the arc page is a server component"):
+  - `lib/supabase.js`'s `getArcContent` select list gained
+    `submitted_by` (it wasn't being fetched at all before — every other
+    field the arc page needed already was). `app/arc/[slug]/page.jsx`'s
+    `buildBeatSections` now maps `item.submitted_by` through to each
+    card's props as `submittedBy`, alongside the existing
+    `platform`/`thumbnailUrl`/etc. mapping — no new fetch, just widening
+    an existing one and threading one more field through.
+  - **The actual design problem**: `app/arc/[slug]/page.jsx` is an async
+    Server Component — it has no access to the browser's Supabase session
+    (there's no cookie-based/SSR session anywhere in this app; every
+    session lives in the browser's `localStorage`, per Sessions 13's
+    design). `ContentCard`, which renders each card, is a plain shared
+    component with no `"use client"` of its own, used both here (server-
+    rendered, via `BeatSection`) and inside `/submit`'s step 3 preview
+    (already client-rendered). Making the whole arc page or all of
+    `ContentCard` client-side just to compare one id would have been a
+    much bigger blast radius than the task needed.
+  - **The fix**: a new, tiny client component,
+    `components/YoursBadge.jsx`, nested inside `ContentCard`. This is
+    the standard Next.js App Router pattern for exactly this situation —
+    a Server Component can render a Client Component as a child, and only
+    that nested piece opts into client-side JS; everything around it
+    (the card's markup, the beat section, the page itself) stays server-
+    rendered exactly as before. `YoursBadge` takes `submittedBy` as a
+    prop (already available server-side from the widened query above —
+    no client-side fetch of the content itself is needed, only the
+    *comparison* needs the browser), calls `lib/auth`'s `getSession()`
+    once on mount (the same Session 13 utility `NavAuth` already uses,
+    not a new pattern), and renders a `✦ Yours` pill only if
+    `session.user.id === submittedBy` — otherwise renders `null`,
+    including for the entire window before the check resolves, so it can
+    never flash an incorrect badge.
+  - `ContentCard.jsx` gained an optional `submittedBy` prop and renders
+    `{submittedBy && <YoursBadge .../>}` in both its default and `compact`
+    thumbnail markup — gated on the prop being present specifically so
+    hardcoded placeholder cards (which never have a `submittedBy`) don't
+    each mount a `YoursBadge`/`getSession()` call for nothing; only real
+    Supabase-backed cards do.
+  - Styling: `.yours-badge` (default mode, `globals.css`) sits top-left
+    of the thumbnail — the existing `.plt` platform badge already owns
+    bottom-left, and the hover-only "↗" overlay owns top-right, so top-
+    left was the one open corner. `.compactYours` (compact mode,
+    `ContentCard.module.css`) mirrors the same top-left placement at the
+    compact thumbnail's smaller scale. Both use a solid-ish
+    `rgba(123,108,246,0.85)` accent fill rather than the app's usual
+    `--accent-soft` translucent tint, matching the existing platform
+    badges' own reasoning (`.plt-yt`/`.plt-tt`/etc. all use solid-ish
+    fills too) — a translucent badge risks disappearing against a light
+    or busy real thumbnail image, which a platform-badge-style solid
+    fill doesn't.
+- **Verified with a real production build and browser**, extending this
+  project's established verification pattern (still can't reach
+  `*.supabase.co` from this sandbox):
+  - `next build` succeeds with no new errors.
+  - **Submission identity**: with a fake session injected into
+    `localStorage` and `/submit`'s `arcs`/`beats`/`content_items` Supabase
+    calls mocked at the browser network level (this page's Supabase calls
+    are genuinely client-side, so Playwright's request interception
+    applies directly, same as Session 11's follow-up verification of this
+    same page), drove the full wizard end to end — the resulting
+    `content_items` insert's `submitted_by` was exactly the injected
+    session's `user.id`. Repeated with no session present: `submitted_by`
+    came back `"anonymous"`, confirming the fallback is untouched.
+  - **The "Yours" badge required a different verification approach than
+    the submission test**, and it's worth being explicit about why: the
+    arc page's Supabase calls happen *server-side*
+    (`app/arc/[slug]/page.jsx` is an async Server Component), so
+    browser-level Playwright route mocking — which only intercepts
+    requests the browser itself makes — can't reach them, unlike
+    `/submit`'s genuinely client-side calls above. This is the same
+    limitation Session 11's original arc-page verification ran into, and
+    it was solved the same way here: a small local Node HTTP server
+    standing in for Supabase's REST API, seeded with two `content_items`
+    rows (one `submitted_by` matching a to-be-injected session, one not),
+    with `NEXT_PUBLIC_SUPABASE_URL` pointed at it. **One real wrinkle hit
+    and resolved along the way**: `next build` bakes `NEXT_PUBLIC_*`
+    values into the *browser* bundle at build time (confirmed directly —
+    Session 10's own finding, re-confirmed here), so the mock server's URL
+    had to be set before running `next build`, not just before `next
+    start`, for the client-side `getSession()` call inside `YoursBadge` to
+    agree with the server-side `getArcContent()` call about which
+    Supabase instance (and therefore which `localStorage` key) was in
+    play — a build pointed at the mock but a browser bundle still baked
+    with the placeholder fallback silently produced a real server-rendered
+    page with correct content and a client-side session check that could
+    never match anything, which looked like a code bug in `YoursBadge`
+    until traced back to being a stale-build artifact instead. Rebuilding
+    with the mock URL set resolved it. With that sorted: loading
+    `/arc/shibuya-incident-arc` with the matching session injected showed
+    exactly one "✦ Yours" badge, on the card whose mocked `submitted_by`
+    matched, and none on the other mocked card — confirmed both via a
+    screenshot and by asserting on each card's own DOM text directly, not
+    visual inspection alone.
+  - Restored a clean default build (no mock env vars) and stopped/removed
+    both the mock Supabase server and the plain `next start` server used
+    for the submission test afterward — no test state, mock server
+    processes, or non-default `.next` build left running or committed
+    (`.next` itself is already gitignored, per the existing `.gitignore`).
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -1949,12 +2140,18 @@ on Session 1–8 hardcoded data / AniList calls.
   Session 10 notes above) — it's no longer just a future destination.
   `arc_id` is required; `beat_id` is optional (nullable) since a
   submission could plausibly land at the arc level before/without a
-  specific beat assignment. `status` (default `'pending'`) and
-  `submitted_by` anticipate the moderation workflow `/submit` still has no
-  backend for beyond writing the row (nothing reads `status` or shows a
-  moderation queue yet); `confirmation_count` anticipates some future
-  "confirm this is accurate" community signal that doesn't exist in the
-  UI yet. `character_tags` is a Postgres `text[]`, matching
+  specific beat assignment. `status` (default `'pending'`) still
+  anticipates the moderation workflow `/submit` has no backend for beyond
+  writing the row (nothing reads `status` or shows a moderation queue
+  yet). `submitted_by` was write-only (always the literal string
+  `"anonymous"`) through Session 13; **as of Session 14 it holds a real
+  Supabase `auth.uid()`-shaped user id for a signed-in submitter** (see
+  the Session 14 notes above), and is read back out in two places: the
+  arc page's "Yours" badge, and — once the Session 14 RLS policy has been
+  run — a signed-in user's own non-public-status rows via
+  `submitted_by = auth.uid()::text`. `confirmation_count` anticipates some
+  future "confirm this is accurate" community signal that doesn't exist in
+  the UI yet. `character_tags` is a Postgres `text[]`, matching
   `ContentCard`'s existing `characterTags` array prop directly — no
   join table needed for this first pass.
 
@@ -2078,7 +2275,7 @@ app/
   arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
   search/page.jsx        The search results page. Async Server Component — fetches the series panel from AniList (Session 6); ARCS/CHARACTERS/TOP_CONTENT are still hardcoded consts.
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
-  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above). Step 1 debounces real Open Graph auto-detection via /api/og-fetch (see Session 12 notes above).
+  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above). Step 1 debounces real Open Graph auto-detection via /api/og-fetch (see Session 12 notes above). (Session 14) Reads the session via supabase.auth.getSession() on mount and saves session.user.id as submitted_by, falling back to "anonymous" when signed out.
   submit/submit.module.css Styles unique to the submit page
   series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
   series/[slug]/series.module.css  Styles unique to the series page
@@ -2088,7 +2285,7 @@ app/
   auth/callback/page.jsx  (Session 13) Magic-link redirect handler, client component
 lib/
   anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
-  supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11)
+  supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11). (Session 14) getArcContent's select list now includes submitted_by.
   auth.js                 (Session 13) signInWithEmail / signOut / getSession — wraps the shared client's supabase.auth namespace
 components/
   ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
@@ -2096,8 +2293,8 @@ components/
   ContentTabs.jsx      Sticky tab bar (All / Edits & Video / Fan Art / Discussion / OST & Music)
   IntensityChart.jsx   Bar chart of "community response by story beat" with peak-moment markers
   BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
-  ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags)
-  ContentCard.module.css  Colocated styles for ContentCard's compact (horizontal) display mode
+  ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags). (Session 14) Optional submittedBy prop renders a nested YoursBadge in the thumbnail corner.
+  ContentCard.module.css  Colocated styles for ContentCard's compact (horizontal) display mode. (Session 14) Added .compactYours.
   Sparkline.jsx        A small intensity sparkline (5 bars on the search page, 9 on the home page)
   Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
   HeroSearch.jsx       Client component: home page's hero search input + quick-search chips
@@ -2105,6 +2302,7 @@ components/
   CharacterChips.jsx   Character chip list (photo or colored-initials fallback, optional mention count) — used by ArcHero and the series page
   ArcList.jsx          Arc-row list with sparklines (imports search.module.css) — used by the search page and the series page
   NavAuth.jsx           (Session 13) Client component: the signed-in/signed-out slice of a page's nav — used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx
+  YoursBadge.jsx        (Session 14) Client component nested inside ContentCard: renders a "✦ Yours" pill if the current session's user id matches the submittedBy prop, else nothing
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
 
@@ -2208,6 +2406,14 @@ markup.
   signed out, or the session's email (`.nav-auth-email`) + a "Sign out"
   button when signed in. Used by `app/page.jsx`, `app/arc/[slug]/page.jsx`,
   and `SearchNav` (so the search and series pages get it too).
+- **YoursBadge** (Session 14) — client component nested inside
+  `ContentCard`. Takes `{ submittedBy, className }`; on mount, calls
+  `getSession()` once and renders a `✦ Yours` pill (via the passed-in
+  `className` — `.yours-badge` for the default card mode, `.compactYours`
+  for compact) if `session.user.id === submittedBy`, else renders nothing.
+  Exists so `ContentCard` and the arc page (a Server Component) don't need
+  to become client-rendered just for this one id comparison — see the
+  Session 14 notes above for the full reasoning.
 
 ## Hardcoded data (in `app/page.jsx`)
 
@@ -2394,11 +2600,15 @@ database/API:
   and signs the user in on click-through; the nav reflects real
   signed-in/signed-out state (email + Sign out button vs. Sign in link).
   Character chip links are still inert (unrelated to auth — no character
-  detail/filter page exists). `submitted_by` is still hardcoded to
-  `"anonymous"` even for a signed-in user, and there's still no moderation
-  UI — Session 13 built the identity layer itself, not anything that
-  consumes it yet (see "Suggested next phase" in the Current State section
-  above).
+  detail/filter page exists). **Further resolved in Session 14**:
+  `submitted_by` now saves the real signed-in user's id instead of the
+  literal string `"anonymous"` (still falls back to `"anonymous"` when
+  genuinely signed out), and the arc page's content cards show a "Yours"
+  badge on a submission that matches the current session. Still no
+  moderation UI, no "my submissions" list, and no way to edit/delete a
+  submission — Sessions 13–14 together built and wired up the identity
+  layer, not a full ownership feature set on top of it (see "Suggested
+  next phase" in the Current State section above).
 - No pagination/infinite scroll for the card grids, and no real
   expansion behind the "+N more" affordances on the search page.
 - No real series/arc/character *detection* on `/submit` —

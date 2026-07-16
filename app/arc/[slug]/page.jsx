@@ -221,6 +221,7 @@ function buildBeatSections(beats, content) {
         contentType: item.content_type,
         characterTags: item.character_tags,
         sourceUrl: item.source_url,
+        submittedBy: item.submitted_by,
       })),
     };
   });

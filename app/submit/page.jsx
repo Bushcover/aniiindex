@@ -69,6 +69,21 @@ export default function SubmitPage() {
   const [resolvedLink, setResolvedLink] = useState(null); // { title, thumbnailUrl, platform, creator } | null
   const [ogStatus, setOgStatus] = useState("idle"); // idle | loading | success | error
   const [ogError, setOgError] = useState("");
+  const [session, setSession] = useState(null); // null until checked, or once confirmed signed out
+
+  // Read the current session once on mount, so a signed-in submission can
+  // save the real user id instead of the "anonymous" fallback. Doesn't
+  // subscribe to auth changes — by the time handleSubmit runs, whatever was
+  // true when the form was opened is what should be saved.
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled) setSession(data.session);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Debounced Open Graph auto-detection: waits 500ms after the user stops
   // typing/pasting before calling /api/og-fetch, and aborts a still-in-
@@ -188,7 +203,7 @@ export default function SubmitPage() {
         content_type: contentType,
         character_tags: characters.map((c) => c.name),
         status: "pending",
-        submitted_by: "anonymous",
+        submitted_by: session?.user?.id || "anonymous",
       });
       console.log('[submit] content_items insert error:', insertError);
       if (insertError) {

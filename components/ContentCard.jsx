@@ -1,3 +1,4 @@
+import YoursBadge from "@/components/YoursBadge";
 import styles from "./ContentCard.module.css";
 
 const PLATFORM_YT = { className: "plt-yt", compactClassName: styles.compactPltYt, icon: "▶", label: "YouTube" };
@@ -61,6 +62,7 @@ export default function ContentCard({
   sourceUrl,
   beatLabel,
   compact = false,
+  submittedBy,
 }) {
   const meta = PLATFORM_META[platform] || DEFAULT_PLATFORM_META;
   const genTags = [].concat(contentType ?? []);
@@ -77,6 +79,7 @@ export default function ContentCard({
         aria-label={ariaLabel}
       >
         <div className={styles.compactThumb} style={getThumbnailStyle(thumbnailUrl)}>
+          {submittedBy && <YoursBadge submittedBy={submittedBy} className={styles.compactYours} />}
           <div className={`${styles.compactPlt} ${meta.compactClassName}`}>
             {meta.icon} {meta.label}
           </div>
@@ -104,6 +107,7 @@ export default function ContentCard({
   return (
     <a className="card" href={sourceUrl} target="_blank" rel="noreferrer" aria-label={ariaLabel}>
       <div className="thumb" style={getThumbnailStyle(thumbnailUrl)}>
+        {submittedBy && <YoursBadge submittedBy={submittedBy} className="yours-badge" />}
         <div className={`plt ${meta.className}`}>
           {meta.icon} {meta.label}
         </div>

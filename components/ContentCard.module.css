@@ -28,6 +28,18 @@
   overflow: hidden;
 }
 
+.compactYours {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(123, 108, 246, 0.85);
+}
+
 .compactPlt {
   position: absolute;
   bottom: 4px;
