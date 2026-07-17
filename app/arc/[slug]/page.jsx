@@ -1,9 +1,7 @@
 import Link from "next/link";
 import ArcNav from "@/components/ArcNav";
 import ArcHero from "@/components/ArcHero";
-import ContentTabs from "@/components/ContentTabs";
-import IntensityChart from "@/components/IntensityChart";
-import BeatSection from "@/components/BeatSection";
+import ArcContent from "@/components/ArcContent";
 import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent, getArcMeta, getArcsBySeries } from "@/lib/supabase";
@@ -323,23 +321,7 @@ export default async function ArcPage({ params }) {
 
       <ArcHero arc={arc} />
 
-      <ContentTabs tabs={TABS} />
-
-      <div className="container">
-        <IntensityChart beats={intensityBeats} />
-
-        <div className="content-body">
-          {beatSections.map((beat) => (
-            <BeatSection key={beat.title} beat={beat} />
-          ))}
-        </div>
-
-        <div className="index-note">
-          aniindex is a fan content index — nothing is hosted here. All items link to their original source
-          and creator. Series data via <a href="#">AniList API</a>. &nbsp;·&nbsp;{" "}
-          <Link href="/submit">Submit content</Link> &nbsp;·&nbsp; <a href="#">Report an item</a>
-        </div>
-      </div>
+      <ArcContent tabs={TABS} intensityBeats={intensityBeats} beatSections={beatSections} />
     </>
   );
 }

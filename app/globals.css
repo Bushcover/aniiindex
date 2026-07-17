@@ -96,7 +96,7 @@ nav {
 /* ── Tabs ── */
 .tabs-wrap { position: sticky; top: 56px; z-index: 90; background: rgba(12,12,18,0.94); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
 .tabs { display: flex; }
-.tab { display: flex; align-items: center; gap: 7px; padding: 14px 18px; font-size: 13px; font-weight: 500; color: var(--t2); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all .15s; }
+.tab { display: flex; align-items: center; gap: 7px; padding: 14px 18px; font-size: 13px; font-weight: 500; color: var(--t2); background: transparent; border: none; border-bottom: 2px solid transparent; font-family: var(--body); cursor: pointer; white-space: nowrap; transition: all .15s; }
 .tab:hover { color: var(--t1); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .tab .cnt { background: var(--surface-3); border-radius: 10px; padding: 1px 6px; font-size: 10px; color: var(--t3); }
