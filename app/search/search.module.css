@@ -76,6 +76,7 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  overflow-x: hidden;
 }
 .filterPill {
   padding: 4px 12px;
@@ -117,8 +118,20 @@
   display: flex;
   align-items: stretch;
 }
+/* Session 31: `min-width: 0` added — this is a `flex: 1` child of
+   `.seriesPanel` (also `display: flex`) but had no `min-width`
+   override, so its browser-computed automatic minimum width (roughly
+   its content's own min-content size) could exceed the space actually
+   available on mobile, refusing to shrink. Since `.seriesPanel` already
+   has `overflow: hidden`, the practical effect wasn't the *page*
+   growing wider so much as this panel's own real content (poster,
+   title, genre tags, buttons) getting silently clipped instead of
+   reflowing/wrapping — likely the specific "content cut off" symptom
+   reported, distinct from `.typeFilters` (above) actually pushing the
+   page wider. */
 .seriesPanelBody {
   flex: 1;
+  min-width: 0;
   padding: 20px 24px;
   background: linear-gradient(to right, var(--series-accent-soft, var(--accent-soft)) 0%, transparent 50%);
   display: flex;
@@ -454,4 +467,14 @@
      can lay out sensibly — the right column alone extended 83px past
      the viewport. Stack to a single column instead. */
   .twoCol { grid-template-columns: 1fr; }
+
+  /* Session 31: real-device report of the filter pills row pushing the
+     page wider than the viewport, despite `.typeFilters` already having
+     `flex-wrap: wrap`. Forces it to claim its full row width once
+     `.resultsHeader`'s own flex-wrap puts it on its own line, rather
+     than leaving its flex-basis computed from its own pre-wrap content
+     extent — a real edge case `flex-wrap` alone doesn't fully close.
+     Scoped to mobile only so desktop's existing side-by-side layout
+     (query info + pills on one line) is untouched. */
+  .typeFilters { width: 100%; }
 }

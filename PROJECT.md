@@ -126,12 +126,12 @@ files):
 ```
 app/
   layout.jsx                      Root layout — server component. Syne + Inter fonts via Google Fonts <link> tags, imports globals.css, static <head>/metadata (title "Aniindex"). As of Session 30: also exports `viewport = { width: "device-width", initialScale: 1 }` — this was missing entirely through Session 29, meaning every `@media (max-width: ...)` rule added that session almost certainly never matched on a real mobile browser (which defaults to an ~980px layout viewport without this, regardless of physical screen size) even though it tested clean under Playwright/DevTools viewport emulation (which sets the rendering viewport directly, bypassing the need for this tag).
-  globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, .pending-badge, .card-actions, .confirm-btn, .flag-btn, etc.) used across every page — see "Design tokens" below for the full custom-property list. As of Session 29: a `.tab-empty-state` class (the tab-filter empty-state message, `ArcContent.jsx`) and a responsive section at the end (`@media (max-width: 768px)`/`(max-width: 480px)`) fixing `.tabs-wrap` (no horizontal-scroll handling before this, unlike `.arc-strip-wrap`), the arc page's `.hero h1` size, and `.cards`' grid at mobile widths. As of Session 30: `body { overflow-x: hidden; }` (real-device-only mobile overflow, see "Known issues" — reached this exact one-line rule only after two attempts that both broke `nav`'s `position: sticky`, see the rule's own comment for the full story), plus `overflow-wrap: break-word` on `.ctitle`/`.ccreator` (real submitted content, e.g. a long unbroken creator handle, has no length limit the way this app's own mock/test strings always did).
+  globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, .pending-badge, .card-actions, .confirm-btn, .flag-btn, etc.) used across every page — see "Design tokens" below for the full custom-property list. As of Session 29: a `.tab-empty-state` class (the tab-filter empty-state message, `ArcContent.jsx`) and a responsive section at the end (`@media (max-width: 768px)`/`(max-width: 480px)`) fixing `.tabs-wrap` (no horizontal-scroll handling before this, unlike `.arc-strip-wrap`), the arc page's `.hero h1` size, and `.cards`' grid at mobile widths. As of Session 30: `body { overflow-x: hidden; }` (real-device-only mobile overflow, see "Known issues" — reached this exact one-line rule only after two attempts that both broke `nav`'s `position: sticky`, see the rule's own comment for the full story), plus `overflow-wrap: break-word` on `.ctitle`/`.ccreator` (real submitted content, e.g. a long unbroken creator handle, has no length limit the way this app's own mock/test strings always did). As of Session 31 — the arc page's content tabs were still reported overflowing on a real device despite Session 30's fixes: `.tabs` switched from horizontal-scroll (`overflow-x: auto` + `width: max-content`) to `flex-wrap: wrap` at `max-width: 768px`, structurally removing the nested-scrollable-region-inside-a-sticky-element pattern entirely rather than continuing to harden it; `.tabs-wrap` (itself `position: sticky`) also gets `overflow-x: hidden` directly as a backstop, confirmed via an isolated test page not to break its own stickiness (only two *ancestors* both having non-visible overflow-x does that, not an element and one ancestor — see that rule's own comment). `.arc-strip-wrap` also gets `overscroll-behavior-x: contain` defensively (not reported broken, but the same nested-horizontal-scroll pattern, and this is the purpose-built property for stopping a nested scroll region's touch gesture from chaining out to the whole page — a real-device-only failure mode a `scrollWidth` check can't detect at all).
   page.jsx                        Home page (`/`) — server component, 100% hardcoded data (NAV_LINKS, HERO_STATS, TRENDING_ARCS, POPULAR_SERIES, TRENDING_MOMENTS, FEATURES), composes HeroSearch + Sparkline + NavAuth. `TRENDING_ARCS`' Attack on Titan card slug was `"rumbling-arc"` through Session 23 — a typo relative to the seeded `"the-rumbling-arc"` slug — fixed in Session 24.
   page.module.css                 Home-page-only styles (hero, arc/series cards, trending moments list, feature pills). As of Session 29: a responsive section hides `.navLinks` (Browse/Series/Characters/Seasonal — already plain non-clickable divs, not real nav) at `max-width:768px`, since it was the confirmed cause of this page's nav overflowing on mobile, plus a `.hero h1` size tightening at `max-width:480px`.
   arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). As of Session 24: looks up `params.slug` in Supabase's `arcs` table via `getArcMeta` (a second round trip, run before the AniList calls since they depend on its result) to get the arc's real title, episode range, and `anilist_series_id`; uses that id to fetch the correct series' real AniList description/characters (`getSeriesById`/`getSeriesCharacters`), instead of always querying Jujutsu Kaisen's hardcoded id. Falls back to `FALLBACK_ANILIST_SERIES_ID` (113415, JJK) and the hardcoded `ARC` object's own `name`/`episodes` when `params.slug` isn't seeded. As of Session 25: also calls `getArcsBySeries(anilistSeriesId)` and builds `arcNavItems` (real arc chips for the current arc's series, each `{ slug, name, active }`) passed to `ArcNav` — falls back to the hardcoded `ARC_NAV` placeholder strip when the series has no other seeded arcs. `ARC`'s other fields (badges, seasonPart, dateRange, stats) and `TABS` are still fully hardcoded regardless of slug — deliberately out of scope for both sessions. Supabase beats/content (keyed by params.slug, via getArcBeats/getArcContent) are unchanged. `buildBeatSections` threads each real item's `id` and `status` through to ContentCard (needed for the pending badge/confirm/flag UI). Session 25's two temporary diagnostic `console.error` calls (added to chase a missing-beats bug on `/arc/control-devil-arc`) were removed in Session 27 once that bug was confirmed fixed live — no debug logging of any kind remains. As of Session 28: no longer renders `ContentTabs`/`IntensityChart`/`BeatSection` directly — delegates everything from the tab bar down to the new client component `ArcContent` (`tabs={TABS}`, `intensityBeats`, `beatSections` passed through unchanged), since the tab-filtering feature needs client state shared between the tab bar and the beat sections, and this page itself is a Server Component.
   search/page.jsx                 Search page (`/search`) — async server component. Real AniList series panel (keyed by ?q=), everything else (ARCS, CHARACTERS, TOP_CONTENT, FILTERS, ALSO_FOUND, RESULTS_SUMMARY) hardcoded. Renders ContentCard directly (compact mode) for TOP_CONTENT — the one place a Server Component renders the now-client-component ContentCard, which is valid, ordinary App Router behavior.
-  search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module). As of Session 29: `.twoCol` (arc list | characters+top content) stacks to a single column at `max-width:768px` — confirmed via direct measurement that both columns squeezed to ~185–236px on a 390px viewport before this fix, with the right column extending 83px past the viewport. As of Session 30: `.seriesName` (the real AniList series title) also has `overflow-wrap: break-word`.
+  search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module). As of Session 29: `.twoCol` (arc list | characters+top content) stacks to a single column at `max-width:768px` — confirmed via direct measurement that both columns squeezed to ~185–236px on a 390px viewport before this fix, with the right column extending 83px past the viewport. As of Session 30: `.seriesName` (the real AniList series title) also has `overflow-wrap: break-word`. As of Session 31 — both `.typeFilters` (the search-page filter pills row) and the real series panel were still reported overflowing on a real device: `.typeFilters` gets `overflow-x: hidden` unconditionally plus `width: 100%` at `max-width: 768px` (forces it to claim its full row width once `.resultsHeader`'s own flex-wrap puts it on its own line, closing an edge case plain `flex-wrap` didn't); `.seriesPanelBody` (a `flex: 1` child of the already-`overflow: hidden` `.seriesPanel`) gets `min-width: 0` — it had none, so its real content (poster/title/genre tags/buttons) could refuse to shrink below its own natural width and get silently clipped by the panel's existing `overflow: hidden` instead of properly reflowing, which is the likely explanation for "content cut off" specifically (as opposed to the page itself growing wider).
   submit/page.jsx                 3-step submission wizard (`/submit`) — client component, owns all wizard state. Real: step 1's /api/og-fetch link detection, step 2's real beat selector (getArcBeats), step 3's real content_items insert with a real submitted_by (session.user.id, or "anonymous" when signed out). Hardcoded: SERIES_DETECTED, ARC_DETECTED, INITIAL_CHARACTERS, CONTENT_TYPE_OPTIONS. No debug logging — confirmed clean this session.
   submit/submit.module.css        Submit-page-only styles (step indicator, all 3 step cards, beat selector chart, character chips, quality checklist). All 13 `var(--green)`/`var(--green-soft)` call sites resolve to a real color (both tokens defined in globals.css's `:root` since Session 18).
   series/[slug]/page.jsx          Series page (`/series/[slug]`) — async server component, `[slug]` is an AniList numeric id (not an aniindex slug). Real: everything about the series itself + top-10 cast. As of Session 25: also calls `getArcsBySeries(anilistId)` and, when it returns any rows, renders those as real `ArcList` rows (`slug`, `name` ← `title`, `num` ← zero-padded `order_index`; no `count`/`spark`/`peak` — omitted, no real equivalent exists yet) instead of the hardcoded `ARCS` placeholder list, and drops the hardcoded `moreLabel`. Falls back to `ARCS`/`MORE_ARCS_LABEL` for any series with nothing seeded.
@@ -429,7 +429,13 @@ sessions (verified by mock/browser-driven testing, as noted):
 
 ### Known issues / cleanup needed
 
-- **Session 29's mobile pass was verified only via Playwright/DevTools viewport emulation, never a real device — and Session 30 found that gap mattered.** The root layout had no viewport meta tag at all until Session 30 added one; without it, a real mobile browser doesn't render at the device's actual CSS pixel width (it assumes an ~980px desktop-sized layout viewport and zooms the whole page to fit), which means every `@media (max-width: 768px)`/`(max-width: 480px)` rule Session 29 added almost certainly never matched on an actual phone, even though it tested clean under emulation (which sets the rendering viewport directly, sidestepping the missing tag entirely). Session 30 also found and fixed two further real-device-only overflow sources emulation didn't catch: real submitted content (e.g. a long unbroken creator handle) with no `overflow-wrap` protection, and — a self-inflicted one — the first two attempts at this session's own `overflow-x: hidden` fix each broke `nav`'s `position: sticky` in ways that don't show up in a simple `scrollWidth` check, only caught by directly measuring nav's position across a scroll. No session has tested landscape orientation, very small phones (<375px), phablets, or an actual physical device — everything here is still verified via emulation/direct measurement, now at least with the viewport meta tag that makes those results meaningful on a real device too.
+- **Mobile responsiveness has taken three sessions (29, 30, 31) and still isn't confirmed against an actual physical device.** Every fix across all three was verified via Playwright/Chromium viewport emulation (`scrollWidth`/`clientWidth` measurement, element bounding-rect checks, and — after Session 30's own regression — before/after-scroll sticky-position checks), never a real phone, and each session so far has found something the previous one's emulation-based verification missed:
+  - Session 29 added `@media (max-width: ...)` rules that tested clean under emulation but (per Session 30's finding) likely never matched on a real device at all, because the root layout had no viewport meta tag — without it, a real mobile browser assumes an ~980px desktop-sized layout viewport and zooms the page to fit, while emulation sets the rendering viewport directly and never depended on that tag being present.
+  - Session 30 added the viewport meta tag, plus `overflow-wrap` on real-content text fields (a long unbroken creator handle can visually spill past its box, a failure mode this app's own short mock test strings never trigger) — and its own first two attempts at an `overflow-x: hidden` fix each broke `nav`'s `position: sticky`, an interaction bug a simple `scrollWidth` check can't reveal at all, only caught by directly measuring nav's position across a scroll before pushing.
+  - Session 31, reported still broken after all of that: fixed two missing `min-width: 0`/`width: 100%` flexbox gaps on the search page (content clipped by an already-existing `overflow: hidden` rather than reflowing), and — the more structural fix — replaced the arc page's content-tabs horizontal-scroll with `flex-wrap: wrap`, removing a nested-scrollable-region-inside-a-`position:sticky`-element pattern entirely rather than continuing to harden it, since a real touch device's gesture handling for exactly that pattern is something this sandbox has no way to test directly and is the most likely explanation for "the page sliding sideways" that a pure CSS-overflow check would never surface.
+  - Also added `overscroll-behavior-x: contain` to both horizontal-scroll rows (`.arc-strip-wrap`, `.tabs-wrap`) — the CSS property specifically designed to stop a nested scrollable region's touch/scroll gesture from chaining out to the whole page, which is the class of bug all of this points toward and that Chromium-based emulation is least likely to reproduce faithfully.
+  
+  No session has tested landscape orientation, very small phones (<375px), phablets, or — the recurring theme — an actual physical device of any kind. If mobile overflow is reported again, suspect this same class of emulation-blind-spot issue (touch-gesture/scroll-chaining behavior, not a static layout measurement) before assuming a new CSS bug, and if at all possible, get a real-device screen recording or the exact browser/OS rather than another "it still doesn't work" report — this project's tooling genuinely cannot reproduce the failure mode directly.
 - **The arc page's header still has hardcoded fields Session 24 deliberately left out of scope.** `ARC`'s badges, `seasonPart`, `dateRange`, and `stats` (fan-item/save/contributor counts) are still always Shibuya's regardless of `params.slug` — only `name` and `episodes` were switched to real per-arc data. None of this causes a wrong-series mismatch the way the pre-Session-24 bug did (badges/stats/dateRange were never series-specific claims to begin with), but it's still a visible seam on the 4 non-Shibuya real arcs.
 - **Real arc chips/rows (`ArcNav`, `ArcList` on the series page) show no fan-item count or intensity sparkline** — Session 25 deliberately omitted these rather than fabricate them, since no per-arc content-count or beat-intensity rollup query exists yet. The hardcoded placeholder data these replace did have those numbers (fake), so real arc chips/rows look slightly sparser than the mockup ones next to them.
 - **`next.config.mjs`'s `images.remotePatterns`** allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere — all images render via plain CSS `background`/`backgroundImage`. Inert until a future session adopts `next/image`.
@@ -3668,6 +3674,100 @@ confirmed to actually surface the real arcs. Whoever picks this up next
 with live access: visit `/series/145064` and confirm Shibuya Incident Arc
 and Vs. Mahito Arc appear instead of the hardcoded Chainsaw Man
 placeholder list.
+
+## Session 31
+
+Reported: mobile horizontal overflow still present on the arc and search
+pages on a real device, despite Session 30's fix — "content being cut
+off on the left" and "the page sliding sideways," with the arc page's
+content tabs and the search page's series panel/filter pills named
+specifically.
+
+Took this report seriously as a sign that Session 30's verification
+method has a real blind spot, not just "try the same kind of fix again."
+Every check across Sessions 29–30 was Playwright/Chromium viewport
+emulation — never a real device, never real touch input, never real
+WebKit. That gap is directly relevant here: a nested horizontally-
+scrollable region (`overflow-x: auto`) sitting inside a `position:
+sticky` element is exactly the kind of thing that can behave differently
+under a real touch gesture (scroll/bounce "chaining" out to the whole
+page) than in an emulated desktop browser driving synthetic scroll
+events — and both `.tabs-wrap` (arc page) and, less directly,
+`.arc-strip-wrap` fit that description precisely. A `scrollWidth`/
+`clientWidth` check, which is what every prior session's verification
+relied on, cannot detect a touch-gesture propagation bug at all — it's
+not a static layout measurement.
+
+**Arc page**: replaced `.tabs`' Session 29/30 horizontal-scroll pattern
+(`overflow-x: auto` + `width: max-content`) with `flex-wrap: wrap` at
+`max-width: 768px` — 5 short tab labels wrap cleanly to a few rows, and
+this removes the nested-scrollable-sticky-region pattern structurally
+rather than trying to harden it further with a technique (`overflow-x:
+auto`) already reported not to hold up on a real device twice now.
+`.tabs-wrap` (itself `position: sticky`) also gets `overflow-x: hidden`
+directly, honoring the task's explicit request literally — confirmed via
+an isolated standalone test page (a bare sticky element with `overflow-x:
+hidden` on itself, nested under a `body` that also has it) that this
+specific combination does not break its own stickiness, learning from
+Session 30's mistake rather than assuming it's safe: only two *ancestors*
+both having non-visible `overflow-x` breaks sticky, not an element and a
+single ancestor. Also added `overscroll-behavior-x: contain` to both
+`.tabs-wrap` and `.arc-strip-wrap` — not reported broken for the latter,
+but the same pattern, and this is the CSS property specifically designed
+to stop a nested scroll region's gesture from chaining to the page,
+directly targeting the failure mode this whole bug report points at.
+
+**Search page**: two real, distinct flexbox gaps found by re-reading the
+CSS carefully, not by guessing:
+- `.typeFilters` (filter pills row) already had `flex-wrap: wrap` but
+  could still, per a subtle flex layout edge case, have its flex-basis
+  computed from its own pre-wrap content extent before its parent
+  (`.resultsHeader`, also `flex-wrap: wrap`) finished deciding whether to
+  wrap it onto its own line. Added `overflow-x: hidden` (unconditional,
+  harmless on desktop) plus `width: 100%` at `max-width: 768px` (forces
+  it to claim its full row width once wrapped, closing the edge case).
+- `.seriesPanelBody` — a `flex: 1` child of `.seriesPanel`, which already
+  has `overflow: hidden` — had no `min-width: 0`. Its real content
+  (poster, title, genre tags, action buttons) could refuse to shrink
+  below its own natural width and get silently clipped by the parent's
+  existing `overflow: hidden` instead of properly reflowing/wrapping —
+  the likely explanation for "content cut off" specifically, as distinct
+  from the page itself growing wider. Added `min-width: 0`.
+
+Also re-checked the whole codebase for `100vw`/negative margins/other
+fixed-width traps per the task's explicit request — same result as
+Session 30, nothing found beyond what's already covered.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as prior sessions. Re-ran the full overflow + sticky-nav
+regression check (temporarily installed Playwright, removed before
+finishing, confirmed via `git status` showing no `package.json`/
+`package-lock.json` diff) on all 4 of `/`, `/arc/[slug]`, `/search`,
+`/series/[slug]` at 390px: `scrollWidth === clientWidth` on every page,
+*and* `nav` confirmed still pinned at `top: 0` after a 500px scroll on
+every page (the sticky-regression check Session 30 introduced, run again
+here specifically because `.tabs-wrap` — itself sticky — was directly
+modified this session). Additionally confirmed, via direct measurement
+rather than just "should work" reasoning: the arc page's tabs now
+genuinely wrap (`flexWrap: "wrap"`, rendered across 3 rows at 390px, and
+`.tabs-wrap`'s own `scrollWidth` now exactly equals its width — meaning
+it has *zero* overflow left to scroll, not just contained overflow); the
+search page's series panel and filter pills both end exactly at the
+container's right edge (362px = 390 − 28px padding on each side), not
+past it.
+
+**What this session could not verify, stated plainly**: none of this was
+tested against an actual physical mobile device, real touch input, or
+real WebKit/Safari — the specific gap this whole bug report exists
+because of. Every fix here is well-justified by direct code reading and
+CSS-layout reasoning (the `min-width: 0` gaps are unambiguous flexbox
+bugs; `flex-wrap` structurally cannot overflow the way `overflow-x: auto`
+can under WebKit's touch handling) and re-verified by the most rigorous
+measurement this sandbox can perform, but if mobile overflow is reported
+a fourth time, the next place to look is `overscroll-behavior-x:
+contain`'s actual browser support/behavior on the reporter's specific
+device, or getting a real screen recording, rather than another round of
+Chromium-emulation-based guessing.
 
 ## Database schema
 

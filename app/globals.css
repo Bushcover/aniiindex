@@ -76,7 +76,16 @@ nav {
 .nav-auth-email { font-size: 12px; color: var(--t2); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Arc strip ── */
-.arc-strip-wrap { background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+/* Session 31: `overscroll-behavior-x: contain` added — a nested
+   horizontally-scrollable region (this) can, on real touch devices,
+   let its scroll/bounce gesture "chain" out to the page itself instead
+   of staying contained to this row, which a simple scrollWidth check
+   can't detect (it's a touch-gesture behavior, not a layout-overflow
+   one). This wasn't reported broken here specifically, unlike the
+   nearly-identical `.tabs-wrap` below, but it's the same pattern and
+   this is the well-established, purpose-built CSS property for exactly
+   this failure mode — cheap, safe insurance. */
+.arc-strip-wrap { background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .arc-strip-wrap::-webkit-scrollbar { display: none; }
 .arc-strip { display: flex; gap: 4px; padding: 10px 28px; white-space: nowrap; width: max-content; }
 .arc-chip {
@@ -215,14 +224,32 @@ nav {
 @media (max-width: 768px) {
   /* Content tabs (arc page): the 5 tabs (All / Edits & Video / Fan Art
      / Discussion / OST & Music) never had overflow handling, unlike
-     .arc-strip-wrap above — confirmed via direct measurement that on a
-     390px-wide viewport they simply overflowed the whole document
-     (scrollWidth 677px) instead of scrolling within their own row.
-     Same contained-horizontal-scroll pattern as .arc-strip-wrap, just
-     scoped to this breakpoint since desktop never needs it. */
-  .tabs-wrap { overflow-x: auto; scrollbar-width: none; }
-  .tabs-wrap::-webkit-scrollbar { display: none; }
-  .tabs { width: max-content; }
+     .arc-strip-wrap above — confirmed via direct measurement (Session
+     29) that on a 390px-wide viewport they simply overflowed the whole
+     document (scrollWidth 677px) instead of scrolling within their own
+     row.
+     Session 29's fix mirrored .arc-strip-wrap's contained-horizontal-
+     scroll pattern (overflow-x: auto + width: max-content) — reported
+     still overflowing on a real device despite testing clean under
+     Playwright/DevTools emulation (Session 30's viewport-meta-tag fix
+     notwithstanding). Rather than keep debugging a nested
+     touch-scrollable region inside a `position: sticky` element (this
+     project has no way to test real touch/WebKit behavior directly, and
+     `.tabs-wrap` being sticky is exactly the kind of thing that can
+     behave differently under real touch gestures than in an emulated
+     desktop browser), switched to wrapping instead of scrolling — 5
+     short labels wrap cleanly to two lines, and it structurally removes
+     the entire nested-horizontal-scroll-container pattern rather than
+     trying to make one more robust. `overflow-x: hidden` on `.tabs-wrap`
+     itself is added as a direct backstop per the task's explicit
+     request; confirmed via an isolated test page (a sticky element with
+     overflow-x: hidden on itself, nested under body with its own
+     overflow-x: hidden) that this specific combination does not break
+     `.tabs-wrap`'s own sticky positioning — only two *ancestors* both
+     having non-visible overflow-x does that (see Session 30's
+     write-up), not an element and a single ancestor. */
+  .tabs-wrap { overflow-x: hidden; }
+  .tabs { flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {
