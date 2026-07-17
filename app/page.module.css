@@ -468,4 +468,18 @@
      overflowing at 390px (renders at its 28px floor) — tightened
      slightly further specifically for the smallest phones. */
   .hero h1 { font-size: clamp(24px, 8vw, 32px); }
+
+  /* Session 36: `.arcGrid`'s `repeat(auto-fill, minmax(300px, 1fr))`
+     forces every column to be at least 300px regardless of available
+     width — on a 320px viewport, `.container`'s own padding leaves only
+     264px, so the grid's single forced column overflowed its parent by
+     36px (clipped visually, but still widened `document.scrollWidth`).
+     This is what was actually behind the "8px overflow at 320px" this
+     session was asked to fix — the Submit-content icon collapse
+     (unconditionally applied below, matching the search/series pages)
+     was real and consistent but didn't touch this, since it's an
+     unrelated "Trending arcs" grid, not nav-right. Same fix pattern
+     already used for `.cards` (globals.css) and the content-card grid
+     — a single column below this breakpoint. */
+  .arcGrid { grid-template-columns: 1fr; }
 }

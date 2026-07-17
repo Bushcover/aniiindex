@@ -230,8 +230,9 @@ export default function HomePage() {
         </div>
         <div className="nav-right">
           <NavAuth />
-          <Link href="/submit" className="btn btn-primary">
-            Submit content
+          <Link href="/submit" className="btn btn-primary nav-submit-btn" aria-label="Submit content">
+            <span className="nav-submit-icon" aria-hidden="true">+</span>
+            <span className="nav-submit-text">Submit content</span>
           </Link>
         </div>
       </nav>
