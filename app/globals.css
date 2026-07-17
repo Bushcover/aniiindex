@@ -155,7 +155,12 @@ nav {
 .stat-div { width: 1px; height: 36px; background: var(--border-mid); }
 
 /* ── Tabs ── */
-.tabs-wrap { position: sticky; top: 56px; z-index: 90; background: rgba(12,12,18,0.94); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+/* Session 33: overflow-x: hidden made unconditional (was only inside the
+   max-width:768px media query below, added Session 31) — harmless on
+   desktop (tabs never overflow there), and closes the gap where a
+   viewport just over 768px, or any future non-media-query code path
+   touching this element, wouldn't have had this protection. */
+.tabs-wrap { position: sticky; top: 56px; z-index: 90; background: rgba(12,12,18,0.94); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); overflow-x: hidden; }
 .tabs { display: flex; }
 .tab { display: flex; align-items: center; gap: 7px; padding: 14px 18px; font-size: 13px; font-weight: 500; color: var(--t2); background: transparent; border: none; border-bottom: 2px solid transparent; font-family: var(--body); cursor: pointer; white-space: nowrap; transition: all .15s; }
 .tab:hover { color: var(--t1); }
@@ -271,8 +276,12 @@ nav {
      overflow-x: hidden) that this specific combination does not break
      `.tabs-wrap`'s own sticky positioning — only two *ancestors* both
      having non-visible overflow-x does that (see Session 30's
-     write-up), not an element and a single ancestor. */
-  .tabs-wrap { overflow-x: hidden; }
+     write-up), not an element and a single ancestor. `overflow-x:
+     hidden` moved to `.tabs-wrap`'s own unconditional rule above in
+     Session 33 — kept `.tabs`' wrap here since that's the actual mobile
+     layout change (desktop's 5 tabs already fit on one line, wrapping
+     there would be a visual no-op but there's no reason to apply it
+     unconditionally). */
   .tabs { flex-wrap: wrap; }
 }
 
