@@ -366,8 +366,8 @@ at all (which `flagContentItem` no longer depends on or reads back from,
 per the Session 21 fix above). There's no `'rejected'`/other status value
 and no way to un-flag an item.
 
-**Seed data** — as of Session 23:
-- `series`: 3 rows — Jujutsu Kaisen (`anilist_id: 113415`, `slug: 'jujutsu-kaisen'`), Attack on Titan (`anilist_id: 16498`, added Session 23), Chainsaw Man (`anilist_id: 146065`, added Session 23).
+**Seed data** — as of Session 23 (one field pending correction, see below):
+- `series`: 3 rows — Jujutsu Kaisen (`anilist_id: 113415`, `slug: 'jujutsu-kaisen'`), Attack on Titan (`anilist_id: 16498`, added Session 23), Chainsaw Man (`anilist_id: 146065` **as seeded — confirmed wrong, see Session 26; SQL to correct it to `127230` was handed to the human operator but not yet confirmed run as of this audit**).
 - `arcs`: 5 rows — Shibuya Incident Arc (`slug: 'shibuya-incident-arc'`, JJK, `episode_start: 38`, `episode_end: 47`, `order_index: 6`, the original Session 9 seed); Vs. Mahito Arc (`slug: 'vs-mahito-arc'`, JJK, episodes 14–20, Session 23); Control Devil Arc (`slug: 'control-devil-arc'`, Chainsaw Man, episodes 10–12, Session 23); The Rumbling Arc (`slug: 'the-rumbling-arc'`, Attack on Titan, episodes 88–96, Session 23); Marley Arc (`slug: 'marley-arc'`, Attack on Titan, episodes 64–75, Session 23).
 - `beats`: 10 rows for the Shibuya arc, `order_index` 1–10: Curtain falls (28), Shibuya station (35), Gojo arrives (54), Domain battle (63), **The Sealing (87, is_peak)**, Nanami (70), **Yuji breaks (100, is_peak)**, Nobara (77), Aftermath (42), Fallout (30). Beats also now exist for the four Session 23 arcs — reported verified with correct per-arc counts, but their individual titles/order/intensity values were never reported back to this file; check Supabase's Table Editor directly.
 - `content_items`: real rows exist only against the Shibuya arc — `/submit`'s hardcoded `ARC_SLUG` (see below) means the app itself has never written a `content_items` row for any of the four Session 23 arcs. Check `select count(*) from content_items;` for the current total against Shibuya. `status` values among real rows include `'pending'`, `'confirmed'`, and `'flagged'`.
@@ -383,7 +383,7 @@ Session 24 task scope) — see "Known issues" below.
 ### What's real vs. hardcoded, per page
 
 - **`/` (home)** — 100% hardcoded (`NAV_LINKS`, `HERO_STATS`, `TRENDING_ARCS`, `POPULAR_SERIES`, `TRENDING_MOMENTS`, `FEATURES`). `HeroSearch` navigation (Enter / chip click → `/search?q=...`) is real and works. `TRENDING_ARCS`' Attack on Titan card slug was fixed in Session 24 (`"rumbling-arc"` → `"the-rumbling-arc"`, matching the seeded slug) — its link, and `shibuya-incident-arc`'s, now both land on real arc-page data. The other four `TRENDING_ARCS` cards (`bomb-girl-arc`/Chainsaw Man, `swordsmith-village-arc`/Demon Slayer, `onigashima-raid`/One Piece, `chimera-ant-arc`/Hunter × Hunter) still point at unseeded slugs — none matches `control-devil-arc`, `vs-mahito-arc`, or `marley-arc`. (Separately, the arc page's own `ARC_NAV` chip strip already happened to hardcode a `"vs-mahito-arc"` slug before Session 23 — that one also lands on real data; see the arc page bullet below.)
-- **`/arc/[slug]`** — As of Session 24, real for any of the 5 seeded arc slugs (`shibuya-incident-arc`, `vs-mahito-arc`, `control-devil-arc`, `the-rumbling-arc`, `marley-arc`): the page header's name and episode range (via a new `getArcMeta(params.slug)` lookup against the `arcs` table) and the AniList series description/characters (via that row's own real `anilist_series_id`, not a hardcoded constant) are now genuinely correct per slug — `/arc/control-devil-arc` shows Chainsaw Man's real AniList data, `/arc/the-rumbling-arc` and `/arc/marley-arc` show Attack on Titan's, each under its own real Supabase beats/content (**but see "Known issues" — a real production report says beats/content don't actually render on `/arc/control-devil-arc`, still open as of this audit**). As of Session 25, `ArcNav` (the chip strip) is also real: it shows every other seeded arc for the current arc's own series (via `getArcsBySeries`), each chip a working link to `/arc/[slug]`, falling back to the hardcoded `ARC_NAV` placeholder strip only when the series has no other seeded arcs. `ARC`'s remaining fields (badges, seasonPart, dateRange, stats) and `TABS` are still hardcoded regardless of slug — deliberately out of scope for both sessions. Any slug outside the 5 seeded ones falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS`/`ARC_NAV`/`FALLBACK_ANILIST_SERIES_ID` (113415, JJK) mockup data — the page never breaks, it just isn't real for that slug. Real content cards additionally show: a "✦ Yours" badge (own submissions, signed in), a "⏳ Pending review" badge + "Confirm placement" button (pending items, no auth needed), and a flag button (any real item) — confirming and flagging both write genuinely to Supabase and update the page instantly, client-side, no reload.
+- **`/arc/[slug]`** — As of Session 24, real for any of the 5 seeded arc slugs (`shibuya-incident-arc`, `vs-mahito-arc`, `control-devil-arc`, `the-rumbling-arc`, `marley-arc`): the page header's name and episode range (via a new `getArcMeta(params.slug)` lookup against the `arcs` table) and the AniList series description/characters (via that row's own real `anilist_series_id`, not a hardcoded constant) are correct-by-design per slug — but as of this audit, `/arc/control-devil-arc` specifically shows the **wrong** AniList series data (see "Known issues": its seeded `anilist_series_id`, `146065`, turned out to be an unrelated show, not Chainsaw Man; SQL to correct it to `127230` has been handed to the human operator but isn't confirmed run yet). `/arc/the-rumbling-arc` and `/arc/marley-arc` show Attack on Titan's real AniList data correctly, each under its own real Supabase beats/content (**but see "Known issues" — a real production report also says beats/content don't actually render on `/arc/control-devil-arc`, a separate, still-open issue unrelated to the AniList-id mixup**). As of Session 25, `ArcNav` (the chip strip) is also real: it shows every other seeded arc for the current arc's own series (via `getArcsBySeries`), each chip a working link to `/arc/[slug]`, falling back to the hardcoded `ARC_NAV` placeholder strip only when the series has no other seeded arcs. `ARC`'s remaining fields (badges, seasonPart, dateRange, stats) and `TABS` are still hardcoded regardless of slug — deliberately out of scope for both sessions. Any slug outside the 5 seeded ones falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS`/`ARC_NAV`/`FALLBACK_ANILIST_SERIES_ID` (113415, JJK) mockup data — the page never breaks, it just isn't real for that slug. Real content cards additionally show: a "✦ Yours" badge (own submissions, signed in), a "⏳ Pending review" badge + "Confirm placement" button (pending items, no auth needed), and a flag button (any real item) — confirming and flagging both write genuinely to Supabase and update the page instantly, client-side, no reload.
 - **`/search`** — Real: the series panel (title, format, genres, score, popularity, episodes, poster), driven by `?q=`. Hardcoded regardless of query: `ARCS` (11-arc Chainsaw Man placeholder list), `CHARACTERS`, `TOP_CONTENT`, `FILTERS`, `ALSO_FOUND`, `RESULTS_SUMMARY`.
 - **`/series/[slug]`** — Real: everything about the series itself (title, description, genres, score, format/year/episodes/status, banner/poster) and the top-10 character cast, both keyed directly by the numeric AniList id in the URL — the only page where the URL's dynamic segment drives every real value shown. As of Session 25, the arc list is also real when the series has any seeded arcs (via `getArcsBySeries(anilistId)`) — real slug/name/order per row, each linking to `/arc/[slug]`; no real fan-item-count or intensity-sparkline data exists yet, so those are simply omitted from real rows rather than fabricated. Falls back to the hardcoded `ARCS` placeholder list (same one the search page uses, originally authored for Chainsaw Man) for any series with nothing seeded.
 - **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms), step 2's beat selector (real `beats` rows for the Shibuya arc), and the final submission (a real `content_items` insert, with a real `submitted_by` — the signed-in user's id, or `"anonymous"` when signed out). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`.
@@ -427,6 +427,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 
 ### Known issues / cleanup needed
 
+- **`series.anilist_id` for Chainsaw Man is seeded wrong — `146065` is a real AniList id, but for an unrelated show ("Mushoku Tensei: Jobless Reincarnation Season 2"), not Chainsaw Man.** Confirmed live against AniList's API (Session 26) — apparently a data-entry slip in Session 23's hand-written SQL, never round-tripped through this repo to catch. Effect: `/arc/control-devil-arc` shows a completely wrong AniList series description/characters (Mushoku Tensei's, not Chainsaw Man's), even though its own Supabase beats/arc data is fine. **This is unrelated to the beats/content bug below** — `getSeriesById`/`getSeriesCharacters` (wrong-series symptom) and `getArcBeats`/`getArcContent` (missing-sections symptom) are independent code paths keyed by different values (`anilist_series_id` vs. `params.slug`). The correct id, `127230` (confirmed: Chainsaw Man TV, 12 episodes, 2022 — consistent with Control Devil Arc's own seeded episode range of 10–12), and the SQL to fix both `series.anilist_id` and `arcs.anilist_series_id`, were handed to the human operator in Session 26. **Not yet confirmed run** — whoever picks this up next should verify `select anilist_id from series where slug ilike '%chainsaw%';` returns `127230` before assuming this is fixed.
 - **`/arc/control-devil-arc` reportedly renders no beats/content sections at all — open, not confirmed fixed.** A real production report (after Session 24 shipped) said the page ends after the hero section, despite the arc having 5 real seeded beats. Session 25 code-reviewed `getArcMeta`/`getArcBeats`/`getArcContent`'s slug handling and the `anilist_series_id` → AniList-id wiring and found no logic bug in either — both use `params.slug`/`arcMeta.anilist_series_id` correctly. The one plausible cause found and fixed: `getArcRowBySlug`/`getArcMeta` used `.single()`, which throws (not returns null) if a slug matches *more than one* row — and this table is seeded entirely by hand via the SQL editor, so an accidental duplicate-slug insert is a real, unverified-from-this-sandbox possibility. Both now use `.limit(1).maybeSingle()` instead, so a duplicate row degrades to "use the first match" rather than throwing and taking `getArcBeats`/`getArcContent` down with it (which would silently fall back to hardcoded Shibuya content, not render nothing — so this may not even be the actual cause). `getArcMeta` also carries a **temporary** diagnostic `console.log` (slug/result/error), and the arc page logs `console.error` if `getArcBeats`/`getArcContent` actually reject — both meant to be removed once the real cause is confirmed from Vercel's logs on the next live test. Whoever picks this up next: check those logs (or query `select slug, count(*) from arcs group by slug having count(*) > 1;` directly) before assuming a new code bug.
 - **The arc page's header still has hardcoded fields Session 24 deliberately left out of scope.** `ARC`'s badges, `seasonPart`, `dateRange`, and `stats` (fan-item/save/contributor counts) are still always Shibuya's regardless of `params.slug` — only `name` and `episodes` were switched to real per-arc data. None of this causes a wrong-series mismatch the way the pre-Session-24 bug did (badges/stats/dateRange were never series-specific claims to begin with), but it's still a visible seam on the 4 non-Shibuya real arcs.
 - **Real arc chips/rows (`ArcNav`, `ArcList` on the series page) show no fan-item count or intensity sparkline** — Session 25 deliberately omitted these rather than fabricate them, since no per-arc content-count or beat-intensity rollup query exists yet. The hardcoded placeholder data these replace did have those numbers (fake), so real arc chips/rows look slightly sparser than the mockup ones next to them.
@@ -434,7 +435,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 - **`og-fetch`'s SSRF protection is a hostname-literal blocklist**, not DNS-resolution-aware — doesn't defend against a public domain that resolves to a private IP (DNS rebinding). An accepted, explicit trade-off, not an oversight.
 - **`og-fetch` has no response-size cap**, only an 8-second timeout.
 - **Confirming/flagging have no rate-limiting, no per-visitor ledger, and no atomicity** — see "Partially working" above.
-- **This sandbox cannot reach `*.supabase.co` or general internet hosts**, so no session working from it can run a true, unmocked end-to-end verification against the live Supabase project or real third-party URLs. Every Supabase/OG-fetch-related change has been verified either via mocked local servers (Playwright route interception, a local mock PostgREST/oEmbed server) or via SQL handed to the user to run and report back. "Verified" in this file always means "verified against a faithful mock," not "confirmed against production," unless a session note says otherwise — and even a faithful mock can encode a wrong assumption about real Postgres/RLS behavior, as Sessions 19–21 each discovered in turn.
+- **Whether "this sandbox" can reach the open internet is environment-dependent, not a fixed fact about this project** — Sessions through 25 stated flatly that it couldn't reach `*.supabase.co` or general internet hosts, and every Supabase/OG-fetch-related change was verified either via mocked local servers (Playwright route interception, a local mock PostgREST/oEmbed server) or via SQL handed to the user to run and report back. **Session 26 found this was no longer true for its own environment**: `curl`/live GraphQL calls to `graphql.anilist.co` succeeded directly (used to catch the Chainsaw Man `anilist_id` bug below — see "Explicitly not built"/roadmap for a session that never had to happen if this had been checked sooner). Supabase itself is still unverifiable from any session, but for a different reason now — no session has ever had this project's real `NEXT_PUBLIC_SUPABASE_URL`/anon key available to it (`.env.local` is gitignored and never committed), independent of network reachability. **Takeaway for future sessions**: don't assume "no internet access" — test it (a plain `curl` to a public API costs nothing to check) before falling back to a mock or asking the human to run something manually. "Verified" in this file means "verified against a faithful mock" or "verified live" — a session note should now say which, since both are genuinely possible depending on the environment. Even a faithful mock can encode a wrong assumption about real Postgres/RLS behavior, as Sessions 19–21 each discovered in turn.
 - **`next lint` has never been run successfully in this repo** — no ESLint config exists; the command prompts for first-time setup, which no session has completed. `next build`'s own compile step is the only static check every session has relied on.
 
 ### Explicitly not built
@@ -3051,7 +3052,12 @@ editor, outside this repo/sandbox, and reported back for this file to
 record:
 
 - `series`: Attack on Titan (`anilist_id: 16498`) and Chainsaw Man
-  (`anilist_id: 146065`).
+  (`anilist_id: 146065`). **Correction (Session 26): `146065` was wrong** —
+  confirmed live against AniList's API to be an unrelated show ("Mushoku
+  Tensei: Jobless Reincarnation Season 2"), not Chainsaw Man at all,
+  presumably a data-entry slip in this session's hand-written SQL that
+  was never round-tripped through this repo to catch. See Session 26's
+  own log entry below for the fix.
 - `arcs`: Vs. Mahito Arc (`slug: 'vs-mahito-arc'`, Jujutsu Kaisen, episodes
   14–20), Control Devil Arc (`slug: 'control-devil-arc'`, Chainsaw Man,
   episodes 10–12), The Rumbling Arc (`slug: 'the-rumbling-arc'`, Attack on
@@ -3252,6 +3258,63 @@ picks this up next, outside this sandbox: re-test `/arc/control-devil-arc`
 first and check the new diagnostic logs in Vercel regardless of outcome;
 then confirm the arc-page nav strip and the Chainsaw Man/Attack on
 Titan/Jujutsu Kaisen series pages' arc lists are both real and clickable.
+
+## Session 26
+
+Reported bug: the Chainsaw Man series page (`/series/127230`, reached by
+searching "Chainsaw Man") showed no arcs, and the human operator's own
+diagnosis was that AniList returns both a manga and an anime entry for
+"Chainsaw Man" and the app had the wrong one seeded (`146065`) versus
+what search resolves to (`127230`).
+
+**Correcting the record**: this session had live network access to
+`graphql.anilist.co` (a plain `curl` from this environment succeeded —
+see the updated "Known issues" entry on sandbox network access, since
+every prior session assumed this was impossible and that assumption no
+longer holds universally). Queried AniList directly rather than trusting
+either the human's diagnosis or the existing seed data:
+
+- `127230` → `Chainsaw Man`, format `TV`, type `ANIME`, 2022, 12 episodes.
+  The real anime. Not a manga — the human's specific theory ("AniList
+  returns a manga and an anime, we seeded the manga") was wrong.
+- `146065` (what was actually seeded) → **`Mushoku Tensei: Jobless
+  Reincarnation Season 2`**. Not Chainsaw Man in any form — an unrelated
+  show. This explains the symptom without needing a manga/anime mixup at
+  all: `getArcsBySeries(146065)` (Session 25) correctly found zero arcs,
+  because `arcs.anilist_series_id` for `control-devil-arc` was never
+  really Chainsaw Man's id to begin with.
+- Also spot-checked Attack on Titan's seeded `anilist_id` (`16498`) and
+  Jujutsu Kaisen's (`113415`) the same way — both confirmed correct (real
+  `TV`/`ANIME` entries for the right shows). Did not find a second
+  instance of this bug.
+- Also confirmed `lib/anilist.js`'s `SEARCH_SERIES_QUERY` already filters
+  `type: ANIME` and the search page already takes `results[0]` — the
+  code path that resolves "Chainsaw Man" → `127230` was never buggy.
+  Grepped `app/`, `components/`, `lib/` for `146065`/`127230`: zero
+  matches outside PROJECT.md itself, so no code needed changing.
+
+**No code was pushed this session** — nothing in the codebase was wrong.
+Handed the human operator this SQL to run manually (this project's
+established convention — no session has ever had write access to the
+live Supabase project):
+
+```sql
+UPDATE series SET anilist_id = 127230 WHERE anilist_id = 146065;
+UPDATE arcs SET anilist_series_id = 127230 WHERE slug = 'control-devil-arc';
+```
+
+Keyed the `series` update off the confirmed-wrong `anilist_id = 146065`
+rather than a guessed `slug = 'chainsaw-man'` (the human's own draft),
+since this file has no confirmed record of that series row's actual
+`slug` value and `146065` is independently confirmed wrong regardless of
+what the slug turns out to be.
+
+**Not yet confirmed run.** PROJECT.md's Seed data / Known issues /
+`/arc/[slug]` sections above are updated to state the correction is
+pending, not applied — whoever picks this up next should confirm
+`select anilist_id from series where slug ilike '%chainsaw%';` returns
+`127230` (and the matching `arcs` row) before treating this as resolved,
+then update those sections to drop the "pending" language.
 
 ## Database schema
 
