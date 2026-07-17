@@ -6,7 +6,7 @@ import IntensityChart from "@/components/IntensityChart";
 import BeatSection from "@/components/BeatSection";
 import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
-import { getArcBeats, getArcContent, getArcMeta } from "@/lib/supabase";
+import { getArcBeats, getArcContent, getArcMeta, getArcsBySeries } from "@/lib/supabase";
 
 // Forces this route to always render dynamically and re-fetch on every
 // request — without it, Next can treat this dynamic-segment page as
@@ -22,6 +22,11 @@ export const revalidate = 0;
 // (via `getArcMeta`), not this constant.
 const FALLBACK_ANILIST_SERIES_ID = 113415;
 
+// Fallback only, as of Session 25 — used when getArcsBySeries returns no
+// real arcs for the current arc's series (e.g. params.slug isn't seeded
+// at all, or its series genuinely has no other seeded arcs yet). When
+// real arcs exist, the nav strip renders those instead — see
+// `arcNavItems` below.
 const ARC_NAV = [
   { slug: "cursed-child-arc", name: "Cursed Child Arc", count: 341 },
   { slug: "vs-mahito-arc", name: "Vs. Mahito Arc", count: 589 },
@@ -249,13 +254,23 @@ export default async function ArcPage({ params }) {
 
   const anilistSeriesId = arcMeta?.anilist_series_id ?? FALLBACK_ANILIST_SERIES_ID;
 
-  const [seriesResult, charactersResult] = await Promise.allSettled([
+  const [seriesResult, charactersResult, seriesArcsResult] = await Promise.allSettled([
     getSeriesById(anilistSeriesId),
     getSeriesCharacters(anilistSeriesId),
+    getArcsBySeries(anilistSeriesId),
   ]);
 
   const series = seriesResult.status === "fulfilled" ? seriesResult.value : null;
   const realCharacters = charactersResult.status === "fulfilled" ? charactersResult.value : null;
+  const realSeriesArcs = seriesArcsResult.status === "fulfilled" ? seriesArcsResult.value : [];
+
+  // Real arcs for the current arc's series, if any are seeded — falls
+  // back to the hardcoded ARC_NAV placeholder strip otherwise (Session
+  // 25). `active` marks whichever chip matches the arc actually being
+  // viewed; getArcsBySeries doesn't know params.slug, so that's set here.
+  const arcNavItems = realSeriesArcs.length
+    ? realSeriesArcs.map((a) => ({ slug: a.slug, name: a.title, active: a.slug === params.slug }))
+    : ARC_NAV;
 
   const seriesName = series ? series.title.english || series.title.romaji : ARC.breadcrumb[0];
   const description = series?.description || ARC.description;
@@ -269,6 +284,15 @@ export default async function ArcPage({ params }) {
     description,
     characters,
   };
+
+  // Temporary diagnostic (Session 25), same open bug as getArcMeta's own
+  // log in lib/supabase.js: if either of these actually rejected (a real
+  // Postgres/RLS error, not just "slug not seeded"), that's exactly what
+  // would make arcFoundInDb false below and silently fall back to
+  // hardcoded Shibuya beats/content instead of throwing — worth seeing
+  // the real rejection reason in Vercel's logs rather than guessing.
+  if (beatsResult.status === "rejected") console.error("[arc page] getArcBeats rejected for slug", params.slug, beatsResult.reason);
+  if (contentResult.status === "rejected") console.error("[arc page] getArcContent rejected for slug", params.slug, contentResult.reason);
 
   // `getArcBeats`/`getArcContent` both resolve to `null` specifically when
   // `params.slug` doesn't match a seeded arc — treated as one signal so the
@@ -304,7 +328,7 @@ export default async function ArcPage({ params }) {
         </div>
       </nav>
 
-      <ArcNav arcs={ARC_NAV} />
+      <ArcNav arcs={arcNavItems} />
 
       <ArcHero arc={arc} />
 

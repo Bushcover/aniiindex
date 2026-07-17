@@ -10,8 +10,10 @@ export default function ArcList({ arcs, moreLabel }) {
           <Link href={`/arc/${arc.slug}`} className={styles.arcRow}>
             <div className={styles.arcNum}>{arc.num}</div>
             <div className={styles.arcRowName}>{arc.name}</div>
-            <Sparkline bars={arc.spark} />
-            <div className={styles.arcRowCount}>{arc.count.toLocaleString("en-US")}</div>
+            {arc.spark && <Sparkline bars={arc.spark} />}
+            {typeof arc.count === "number" && (
+              <div className={styles.arcRowCount}>{arc.count.toLocaleString("en-US")}</div>
+            )}
             {arc.peak && (
               <div className={styles.arcRowPeak}>
                 <div className={styles.arcPeakDot}></div>

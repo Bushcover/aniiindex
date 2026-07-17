@@ -55,6 +55,7 @@ nav {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
   color: var(--t2); border: 1px solid transparent; cursor: pointer; transition: all .15s;
+  text-decoration: none;
 }
 .arc-chip:hover { color: var(--t1); border-color: var(--border-mid); }
 .arc-chip.active { background: var(--accent-soft); border-color: rgba(123,108,246,0.3); color: var(--accent); }

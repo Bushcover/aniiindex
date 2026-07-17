@@ -2,12 +2,14 @@ import ArcList from "@/components/ArcList";
 import CharacterChips from "@/components/CharacterChips";
 import SearchNav from "@/components/SearchNav";
 import { getSeriesWithRelations, getSeriesCharacters } from "@/lib/anilist";
+import { getArcsBySeries } from "@/lib/supabase";
 import styles from "./series.module.css";
 
-// TODO(Session 8): AniList has no arc-level data, so this arc list is the
-// same hardcoded placeholder set used on the search page (originally
-// authored for Chainsaw Man) — it isn't derived from the real series above.
-// Replace once real per-series arc data exists.
+// Fallback only, as of Session 25 — AniList has no arc-level data, so
+// this hardcoded placeholder set (originally authored for Chainsaw Man)
+// only renders when getArcsBySeries finds no real seeded arcs for this
+// series' AniList id. Still used as-is for any series with nothing
+// seeded yet.
 const ARCS = [
   {
     slug: "introduction-arc",
@@ -137,15 +139,33 @@ function statusLabel(status) {
 export default async function SeriesPage({ params }) {
   const anilistId = Number(params.slug);
 
-  const [seriesResult, charactersResult] = await Promise.allSettled([
+  const [seriesResult, charactersResult, seriesArcsResult] = await Promise.allSettled([
     getSeriesWithRelations(anilistId),
     getSeriesCharacters(anilistId),
+    getArcsBySeries(anilistId),
   ]);
 
   const series = seriesResult.status === "fulfilled" ? seriesResult.value : null;
   const characters = charactersResult.status === "fulfilled" ? charactersResult.value : [];
+  const realSeriesArcs = seriesArcsResult.status === "fulfilled" ? seriesArcsResult.value : [];
 
   const seriesName = series ? series.title.english || series.title.romaji : null;
+
+  // Real arcs for this series, if any are seeded — falls back to the
+  // hardcoded ARCS placeholder list otherwise (Session 25). `num` uses
+  // the real `order_index` (zero-padded, matching the placeholder list's
+  // own "01"/"02"/... style); `count`/`spark`/`peak` have no real-data
+  // equivalent yet (no per-arc fan-item count or beat-intensity rollup
+  // exists), so they're omitted rather than fabricated — ArcList renders
+  // fine without them (see components/ArcList.jsx).
+  const arcs = realSeriesArcs.length
+    ? realSeriesArcs.map((a) => ({
+        slug: a.slug,
+        name: a.title,
+        num: String(a.order_index).padStart(2, "0"),
+      }))
+    : ARCS;
+  const moreLabel = realSeriesArcs.length ? undefined : MORE_ARCS_LABEL;
 
   return (
     <>
@@ -223,7 +243,7 @@ export default async function SeriesPage({ params }) {
                   Each bar shows community response intensity across story beats
                 </div>
               </div>
-              <ArcList arcs={ARCS} moreLabel={MORE_ARCS_LABEL} />
+              <ArcList arcs={arcs} moreLabel={moreLabel} />
             </div>
 
             <div className={styles.section}>
