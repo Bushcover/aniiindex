@@ -81,9 +81,14 @@ export default function ArcContent({ tabs, intensityBeats, beatSections }) {
         <IntensityChart beats={intensityBeats} />
 
         <div className="content-body">
-          {filteredBeatSections.map((beat) => (
-            <BeatSection key={beat.title} beat={beat} />
-          ))}
+          {activeBucket && filteredBeatSections.length === 0 ? (
+            <div className="tab-empty-state">
+              No {activeLabel} content yet for this arc — be the first to{" "}
+              <Link href="/submit">submit some</Link>.
+            </div>
+          ) : (
+            filteredBeatSections.map((beat) => <BeatSection key={beat.title} beat={beat} />)
+          )}
         </div>
 
         <div className="index-note">

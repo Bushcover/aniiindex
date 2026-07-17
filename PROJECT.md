@@ -126,16 +126,16 @@ files):
 ```
 app/
   layout.jsx                      Root layout — server component. Syne + Inter fonts via Google Fonts <link> tags, imports globals.css, static <head>/metadata (title "Aniindex").
-  globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, .pending-badge, .card-actions, .confirm-btn, .flag-btn, etc.) used across every page — see "Design tokens" below for the full custom-property list.
+  globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, .pending-badge, .card-actions, .confirm-btn, .flag-btn, etc.) used across every page — see "Design tokens" below for the full custom-property list. As of Session 29: a `.tab-empty-state` class (the tab-filter empty-state message, `ArcContent.jsx`) and a responsive section at the end (`@media (max-width: 768px)`/`(max-width: 480px)`) fixing `.tabs-wrap` (no horizontal-scroll handling before this, unlike `.arc-strip-wrap`), the arc page's `.hero h1` size, and `.cards`' grid at mobile widths — see "Known issues"/Session 29's own log entry for what was actually broken and how each was confirmed.
   page.jsx                        Home page (`/`) — server component, 100% hardcoded data (NAV_LINKS, HERO_STATS, TRENDING_ARCS, POPULAR_SERIES, TRENDING_MOMENTS, FEATURES), composes HeroSearch + Sparkline + NavAuth. `TRENDING_ARCS`' Attack on Titan card slug was `"rumbling-arc"` through Session 23 — a typo relative to the seeded `"the-rumbling-arc"` slug — fixed in Session 24.
-  page.module.css                 Home-page-only styles (hero, arc/series cards, trending moments list, feature pills).
+  page.module.css                 Home-page-only styles (hero, arc/series cards, trending moments list, feature pills). As of Session 29: a responsive section hides `.navLinks` (Browse/Series/Characters/Seasonal — already plain non-clickable divs, not real nav) at `max-width:768px`, since it was the confirmed cause of this page's nav overflowing on mobile, plus a `.hero h1` size tightening at `max-width:480px`.
   arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). As of Session 24: looks up `params.slug` in Supabase's `arcs` table via `getArcMeta` (a second round trip, run before the AniList calls since they depend on its result) to get the arc's real title, episode range, and `anilist_series_id`; uses that id to fetch the correct series' real AniList description/characters (`getSeriesById`/`getSeriesCharacters`), instead of always querying Jujutsu Kaisen's hardcoded id. Falls back to `FALLBACK_ANILIST_SERIES_ID` (113415, JJK) and the hardcoded `ARC` object's own `name`/`episodes` when `params.slug` isn't seeded. As of Session 25: also calls `getArcsBySeries(anilistSeriesId)` and builds `arcNavItems` (real arc chips for the current arc's series, each `{ slug, name, active }`) passed to `ArcNav` — falls back to the hardcoded `ARC_NAV` placeholder strip when the series has no other seeded arcs. `ARC`'s other fields (badges, seasonPart, dateRange, stats) and `TABS` are still fully hardcoded regardless of slug — deliberately out of scope for both sessions. Supabase beats/content (keyed by params.slug, via getArcBeats/getArcContent) are unchanged. `buildBeatSections` threads each real item's `id` and `status` through to ContentCard (needed for the pending badge/confirm/flag UI). Session 25's two temporary diagnostic `console.error` calls (added to chase a missing-beats bug on `/arc/control-devil-arc`) were removed in Session 27 once that bug was confirmed fixed live — no debug logging of any kind remains. As of Session 28: no longer renders `ContentTabs`/`IntensityChart`/`BeatSection` directly — delegates everything from the tab bar down to the new client component `ArcContent` (`tabs={TABS}`, `intensityBeats`, `beatSections` passed through unchanged), since the tab-filtering feature needs client state shared between the tab bar and the beat sections, and this page itself is a Server Component.
   search/page.jsx                 Search page (`/search`) — async server component. Real AniList series panel (keyed by ?q=), everything else (ARCS, CHARACTERS, TOP_CONTENT, FILTERS, ALSO_FOUND, RESULTS_SUMMARY) hardcoded. Renders ContentCard directly (compact mode) for TOP_CONTENT — the one place a Server Component renders the now-client-component ContentCard, which is valid, ordinary App Router behavior.
-  search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module).
+  search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module). As of Session 29: `.twoCol` (arc list | characters+top content) stacks to a single column at `max-width:768px` — confirmed via direct measurement that both columns squeezed to ~185–236px on a 390px viewport before this fix, with the right column extending 83px past the viewport.
   submit/page.jsx                 3-step submission wizard (`/submit`) — client component, owns all wizard state. Real: step 1's /api/og-fetch link detection, step 2's real beat selector (getArcBeats), step 3's real content_items insert with a real submitted_by (session.user.id, or "anonymous" when signed out). Hardcoded: SERIES_DETECTED, ARC_DETECTED, INITIAL_CHARACTERS, CONTENT_TYPE_OPTIONS. No debug logging — confirmed clean this session.
   submit/submit.module.css        Submit-page-only styles (step indicator, all 3 step cards, beat selector chart, character chips, quality checklist). All 13 `var(--green)`/`var(--green-soft)` call sites resolve to a real color (both tokens defined in globals.css's `:root` since Session 18).
   series/[slug]/page.jsx          Series page (`/series/[slug]`) — async server component, `[slug]` is an AniList numeric id (not an aniindex slug). Real: everything about the series itself + top-10 cast. As of Session 25: also calls `getArcsBySeries(anilistId)` and, when it returns any rows, renders those as real `ArcList` rows (`slug`, `name` ← `title`, `num` ← zero-padded `order_index`; no `count`/`spark`/`peak` — omitted, no real equivalent exists yet) instead of the hardcoded `ARCS` placeholder list, and drops the hardcoded `moreLabel`. Falls back to `ARCS`/`MORE_ARCS_LABEL` for any series with nothing seeded.
-  series/[slug]/series.module.css Series-page-only styles (banner hero, genre pills, score row).
+  series/[slug]/series.module.css Series-page-only styles (banner hero, genre pills, score row). As of Session 29: `.heroInner` switches from row to column at `max-width:768px` — confirmed via direct measurement that the fixed-160px poster + flex info block didn't just look cramped but genuinely broke (info squeezed to ~150px, wrapped into an 1000px+-tall column, and `align-items:flex-end` shoved the poster hundreds of pixels down to align with it, landing it mid-page instead of at the top).
   submit/page.jsx and series/[slug]/page.jsx share no code beyond components — noted since they're easy to conflate by name similarity.
   api/og-fetch/route.js           POST route — real HTML/OG scraping (regex-based, no HTML-parsing dependency) for TikTok/X/Instagram/Reddit; real YouTube oEmbed (a separate code path, no scraping) for YouTube. Basic hostname-literal SSRF guard + 8s timeout on every upstream fetch. No response-size cap (see "Known issues"). Unchanged since Session 12.
   api/confirm/route.js            POST route, body `{ id }`. Calls lib/supabase.js's confirmContentItem(id) and returns its result as JSON, or a 400/500 with `{ error }` on a missing id / thrown error. No auth check — any viewer can confirm a pending item. The catch block console.error's the full thrown error (with the id) before responding — intentional, permanent operational logging (added Session 19), not a temporary debug log.
@@ -148,7 +148,7 @@ lib/
   supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcMeta(slug) (added Session 24 — selects `title, episode_start, episode_end, anilist_series_id` from the arc's own row; returns null for an unseeded slug, same convention as the two below; this is what lets the arc page derive a real header/AniList id per slug instead of always assuming Shibuya/JJK), getArcsBySeries(anilistSeriesId) (added Session 25 — selects `slug, title, episode_start, episode_end, order_index` for every arc row matching a given AniList series id, ordered by order_index; always returns an array, `[]` on no match or query error, never null, unlike the slug-keyed lookups below — used by the arc page's nav strip and the series page's arc list), getArcBeats(slug), getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by; its `.in('status', ['confirmed','pending'])` allowlist is also what excludes flagged items, with no separate filtering step needed), confirmContentItem(id), and flagContentItem(id). As of Session 25, the internal `getArcRowBySlug` helper (used by getArcBeats/getArcContent) and getArcMeta both use `.limit(1).maybeSingle()` instead of `.single()` — defends against a duplicate-slug row (this table is seeded entirely by hand via the SQL editor) making `.single()` throw and taking every caller down with it, rather than degrading to "use the first match." getArcMeta's Session 25 temporary diagnostic `console.log` (added to chase a missing-beats bug on `/arc/control-devil-arc`) was removed in Session 27 once that bug was confirmed fixed live. confirmContentItem: select-then-update, no-ops if the row isn't currently 'pending', chains `.select().maybeSingle()` onto its update and throws + console.errors if the result is null (an RLS-blocked UPDATE matches zero rows silently — this is what let Session 18's original version report false success). flagContentItem (rewritten in Session 21): does an initial select to confirm the id exists/is readable, then performs the update and trusts its own `{ error }` result alone — no post-update verification select, specifically because that verification technique (tried two different ways across Sessions 19–20) kept hitting a genuine Postgres `42501` permission error on a row whose new status ('flagged') isn't covered by the read policy. Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key).
   auth.js                         signInWithEmail(email) — supabase.auth.signInWithOtp with emailRedirectTo pointed at /auth/callback (a genuine magic link, see the Session 15/16 history for why not a code). signOut() and getSession() — thin wrappers, getSession() swallows its own error and returns null rather than throwing. All three exported; no other functions in this file.
 components/
-  ArcContent.jsx                  Added Session 28. Client component (`"use client"`) that owns the arc page's content-tab filter state and renders everything from the tab bar (`ContentTabs`) through `IntensityChart`, the beat-section list, and the index note — moved out of `app/arc/[slug]/page.jsx` (a Server Component, can't hold state) since `ContentTabs` and the beat sections aren't parent/child in the markup but both need to react to the same "which tab is active" state. Props: { tabs, intensityBeats, beatSections } — all three passed through unchanged from the arc page's existing consts/real-data computation. Owns `activeLabel` state (defaults to whichever tab has `active: true`, i.e. "All"); maps each tab label to a content-type "bucket" (`edit`/`fanart`/`discussion`/`ost`/`null` for All) and classifies each item's `contentType` tag(s) into a bucket via keyword matching (`classifyTag` — handles both real Supabase `content_type` strings like `"Edit / AMV"` and the hardcoded fallback data's more varied tag vocabulary like `"AMV"`/`"Tribute"`, since content_type has never been a real enum). On "All," every beat section renders unfiltered, including ones with zero items (preserves the pre-existing "empty beat still shows its header" behavior). On any other tab, each beat's items are filtered to matches and the whole beat section is dropped if none match, rather than showing an empty header. `IntensityChart` itself is not filtered — only content cards/beat sections, per the task's scope.
+  ArcContent.jsx                  Added Session 28. Client component (`"use client"`) that owns the arc page's content-tab filter state and renders everything from the tab bar (`ContentTabs`) through `IntensityChart`, the beat-section list, and the index note — moved out of `app/arc/[slug]/page.jsx` (a Server Component, can't hold state) since `ContentTabs` and the beat sections aren't parent/child in the markup but both need to react to the same "which tab is active" state. Props: { tabs, intensityBeats, beatSections } — all three passed through unchanged from the arc page's existing consts/real-data computation. Owns `activeLabel` state (defaults to whichever tab has `active: true`, i.e. "All"); maps each tab label to a content-type "bucket" (`edit`/`fanart`/`discussion`/`ost`/`null` for All) and classifies each item's `contentType` tag(s) into a bucket via keyword matching (`classifyTag` — handles both real Supabase `content_type` strings like `"Edit / AMV"` and the hardcoded fallback data's more varied tag vocabulary like `"AMV"`/`"Tribute"`, since content_type has never been a real enum). On "All," every beat section renders unfiltered, including ones with zero items (preserves the pre-existing "empty beat still shows its header" behavior). On any other tab, each beat's items are filtered to matches and the whole beat section is dropped if none match, rather than showing an empty header. As of Session 29: if a non-"All" filter matches zero items across every beat (not just one), the beat-section list is replaced with a single `.tab-empty-state` message ("No {tab label} content yet for this arc — be the first to submit some.", linking to `/submit`) instead of rendering nothing — the individual per-beat hiding from Session 28 already worked, but there was no explanation shown for a filter matching nothing anywhere. `IntensityChart` itself is not filtered — only content cards/beat sections, per the task's scope.
   ArcNav.jsx                      Horizontal arc-chip strip (the row under the top nav on the arc page). Props: { arcs: [{ slug, name, count?, active? }] }. No props default; `arcs` is required. As of Session 25: each chip is a real `next/link` to `/arc/${slug}` (previously a plain, unclickable `<div>` — the actual root cause of a "nav chips aren't clickable" bug report, independent of whether the strip's data was hardcoded or real); `count` is optional (renders no badge when omitted, since real Supabase arc rows have no fan-item-count equivalent) rather than the old unconditional `.toLocaleString()` call, which would have thrown on a real arc's missing `count`.
   ArcHero.jsx                     Breadcrumb / <h1> / meta row (episodes, season, dates, badges) / description / character chips (via CharacterChips) / 4-stat row. Props: { arc: { breadcrumb: string[], name, episodes, seasonPart, dateRange, badges: [{type, label}], description, characters: [...CharacterChips props], stats: [{value, label}] } }.
   ArcList.jsx                     Arc-row list with sparklines; imports search.module.css directly (not its own CSS Module). Props: { arcs: [{ slug, num, name, count?, peak?, spark?: [{heightPct, tier}], dividerAfter? }], moreLabel? }. Used by both the search page (still 100% hardcoded arcs) and the series page (real arcs as of Session 25 when seeded). Each row is a next/link to /arc/${slug} — this was already true before Session 25, so arc-row navigation itself was never the bug on the series page; the bug was that no real arcs reached this component at all. `count`/`spark` are optional as of Session 25 (real Supabase arc rows have neither a fan-item count nor per-beat intensity data yet) — omitted rather than fabricated, matching this codebase's existing convention elsewhere (e.g. YoursBadge).
@@ -408,6 +408,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 9. `/auth`'s single-step magic-link flow: submitting an email produces the exact success message, no code input anywhere, a working "← Back to home" link; the real `signInWithOtp` request body confirmed correct (verified against mocked Supabase responses in Session 16 — see "Partially working" for what's still never been tried against a real inbox).
 10. **The full Phase 5 quality-control loop, confirmed working in production as of Session 21**: a pending item shows a "⏳ Pending review" badge and a "Confirm placement" button (no auth needed); clicking it writes a real confirmation to Supabase (verified: confirming twice flips a real row to `'confirmed'`) and, as of Session 20, the badge and button disappear from the page instantly, with no reload — optimistically, ahead of the real two-confirmation threshold being met (see "Partially working" for the precise, intentional gap this creates). Any real card's flag button writes a real flag to Supabase and, as of Session 20, removes the card from the page instantly, with no reload; getArcContent's status allowlist independently keeps a flagged row from ever appearing again on a future load. Both routes' error paths are real and visibly distinct from success in the UI (Session 19's fix to `FlagButton`'s error state). This was reached only after three rounds of real production bug reports and fixes (Sessions 19–21) — see the session log for the full diagnostic history of each.
 11. Extensive mock-PostgREST-server and browser-driven (Playwright) verification across Sessions 18–21 of the above — not repeated in detail here since it's thoroughly documented in each session's own log entry and this section would otherwise just duplicate it; see Sessions 18, 19, 20, and 21 below for exactly what was tested and how.
+12. **Mobile layout at 390px (iPhone-class) width, confirmed zero-overflow on all 6 pages** (`/`, `/arc/[slug]`, `/search`, `/series/[slug]`, `/submit`, `/auth`) as of Session 29 — verified via direct Playwright measurement (`document.documentElement.scrollWidth` equals viewport width on every page, not just visual inspection), plus the search page's two-column stack and the series page's hero re-stack confirmed via screenshot. See Session 29's own log entry for the full list of what was actually broken versus already fine, and "Known issues" for what this pass didn't cover (tablet-range widths beyond the 768px/480px breakpoints themselves, landscape orientation, real device testing).
 
 ### Partially working / needs attention
 
@@ -428,6 +429,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 
 ### Known issues / cleanup needed
 
+- **Session 29's mobile pass covered 390px (iPhone-class) width thoroughly but not exhaustively.** Verified via direct measurement + screenshots that all 6 pages have zero horizontal overflow at 390px, and spot-checked the search page at 700px (tablet range) — but no session has tested landscape orientation, very small phones (<375px), very large phones/phablets, actual physical devices, or every width between the 480px/768px breakpoints and 390px. The fixes target the specific breakage found, not a systematic audit of every intermediate width.
 - **The arc page's header still has hardcoded fields Session 24 deliberately left out of scope.** `ARC`'s badges, `seasonPart`, `dateRange`, and `stats` (fan-item/save/contributor counts) are still always Shibuya's regardless of `params.slug` — only `name` and `episodes` were switched to real per-arc data. None of this causes a wrong-series mismatch the way the pre-Session-24 bug did (badges/stats/dateRange were never series-specific claims to begin with), but it's still a visible seam on the 4 non-Shibuya real arcs.
 - **Real arc chips/rows (`ArcNav`, `ArcList` on the series page) show no fan-item count or intensity sparkline** — Session 25 deliberately omitted these rather than fabricate them, since no per-arc content-count or beat-intensity rollup query exists yet. The hardcoded placeholder data these replace did have those numbers (fake), so real arc chips/rows look slightly sparser than the mockup ones next to them.
 - **`next.config.mjs`'s `images.remotePatterns`** allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere — all images render via plain CSS `background`/`backgroundImage`. Inert until a future session adopts `next/image`.
@@ -3444,6 +3446,113 @@ AMV"`, `"OST / Music"`, etc.) is still unverified against production.
 Whoever picks this up next with live access: submit or check a real
 `content_items` row of each `CONTENT_TYPE_OPTIONS` value and confirm it
 lands under the tab it's supposed to.
+
+## Session 29
+
+Two-part task. Second part first here since it's the smaller one.
+
+**Part 2 — tab filter empty state.** The task described the bug as
+"beat section headers show even when completely empty on filtered
+tabs," but that specific symptom wasn't actually reproducible — Session
+28's per-beat hiding (drop a beat section entirely once none of its
+items match the active tab) was already confirmed working via direct
+Playwright testing in that session's own log entry. What *was* missing:
+when a tab matches literally nothing anywhere in the arc (e.g. "OST &
+Music" against an arc with no OST-tagged content), the page just showed
+a blank gap with no explanation — not broken, but not "clean" either.
+Added exactly what the task asked for regardless of the discrepancy in
+how the bug was described: `components/ArcContent.jsx` now renders a
+`.tab-empty-state` message ("No {tab label} content yet for this arc —
+be the first to submit some.", linking to `/submit`) in place of the
+beat-section list specifically when a non-"All" filter matches zero
+items across every beat. New `.tab-empty-state` CSS in `globals.css`.
+
+**Part 1 — mobile responsiveness pass.** Rather than guess at CSS
+values, drove every page (`/`, `/arc/[slug]`, `/search`, `/series/
+[slug]`, `/submit`, `/auth`) at a 390px viewport with a temporarily
+installed Playwright (`npm install --no-save`, uninstalled before
+finishing, same convention as prior sessions — confirmed via `git
+status` showing no `package.json`/`package-lock.json` diff), and for
+each page confirmed/refuted overflow via
+`document.documentElement.scrollWidth` (a wider `scrollWidth` than
+`clientWidth` is unambiguous, unlike eyeballing a screenshot) rather
+than assuming the task's list of "known issues to check" was accurate.
+It wasn't, entirely — some named concerns turned out to already be
+fine, and the two worst actual bugs weren't on the task's list at all:
+
+- **Confirmed already fine, no changes made**: the arc-nav strip's
+  horizontal scroll (`.arc-strip-wrap` already had `overflow-x: auto`
+  since it was built); character-chip wrapping on the arc page
+  (`.chars { flex-wrap: wrap }`); the content-card grid going to a
+  single column (`auto-fill(minmax(280px,1fr))` already collapses to 1
+  column below ~574px content width); the entire `/submit` wizard
+  (already built with `flex-wrap`/`min-width:0`/ellipsis-truncation
+  throughout, confirmed via screenshot after triggering step 1's
+  detected-link state); `/auth`'s centered card. The home and arc pages'
+  hero text was already fluid via `clamp()` and not literally
+  overflowing, though tightened slightly further anyway per the task's
+  explicit ask.
+- **Found and fixed — home page nav overflow** (not on the task's
+  list). `document.documentElement.scrollWidth` was 580px at 390px
+  viewport. Root cause, confirmed via direct child-by-child
+  measurement: `.navLinks` (Browse/Series/Characters/Seasonal —
+  already plain, non-clickable `<div>`s per `page.jsx`'s `NAV_LINKS`,
+  not real navigation) plus `.nav-right` don't fit next to the logo,
+  and `nav` has no wrap/collapse behavior. Fixed by hiding `.navLinks`
+  at `max-width: 768px` (`page.module.css`) — the simplest fix that
+  doesn't require inventing a hamburger-menu pattern this design has
+  never had.
+- **Found and fixed — arc page content-tabs overflow** (not on the
+  task's list; the task named the *arc-nav strip*, which was already
+  fine, not the *content tabs* row below it). `scrollWidth` was 677px.
+  Root cause: `.tabs-wrap`/`.tabs` (added Session 28) never got
+  `overflow-x: auto` the way `.arc-strip-wrap` did — the 5 tabs just
+  overflowed the whole document instead of scrolling within their own
+  row. Fixed by adding the same contained-scroll pattern
+  `.arc-strip-wrap` already used, at `max-width: 768px`
+  (`globals.css`).
+- **Found and fixed — search page two-column layout** (on the task's
+  list). `.twoCol`'s `1.1fr 0.9fr` grid squeezed both columns to
+  ~236px/185px at 390px, confirmed via direct grid-child measurement
+  (both columns' `top` values matched — genuinely side by side, not an
+  illusion from a screenshot). Fixed by stacking to `1fr` at `max-width:
+  768px` (`search.module.css`).
+- **Found and fixed — series page hero** (on the task's list, described
+  as "not overflowing" but the actual bug was worse than overflow).
+  `document.documentElement.scrollWidth` didn't actually flag this one
+  (390px, no overflow) — the bug was a broken *visual* layout, not a
+  wider-than-viewport one. Root cause, confirmed via direct
+  `getBoundingClientRect` measurement of `.poster`/`.info`: `.info`
+  (`flex: 1; min-width: 0`) squeezed to ~150px instead of wrapping to
+  its own line, its text wrapped into a ~1080px-tall column, and
+  `align-items: flex-end` (which aligns each flex line's items to its
+  own bottom edge) then pushed the 240px-tall poster down by roughly
+  the difference — landing it visually mid-page, overlapping the
+  description text, instead of at the top next to the title. Fixed by
+  switching `.heroInner` to `flex-direction: column` at `max-width:
+  768px` (`series.module.css`), which resolves both problems at once
+  (no more squeeze, no more misaligned poster).
+
+Every fix re-verified after the change: full mobile audit re-run,
+confirming `scrollWidth === clientWidth` on all 6 pages; screenshots
+retaken for home/arc/search/series and visually compared against the
+"before" set. One apparent visual bug during this re-check — the sticky
+nav appearing to duplicate mid-page in a `fullPage` screenshot of the
+tab-filter empty state — was confirmed to be a `fullPage`
+screenshot-stitching artifact specific to `position: sticky` elements,
+not a real rendering bug, by taking a second, non-`fullPage` screenshot
+at a real scroll position (rendered cleanly, sticky nav pinned only at
+the very top, no duplication).
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly,
+same route table as prior sessions. All CSS changes are additive
+`@media (max-width: ...)` blocks appended after existing rules in each
+file — nothing above any of them was edited, so desktop layout (already
+confirmed unaffected by every prior session's own build-and-read
+verification) should be unchanged; this session didn't separately
+re-screenshot desktop widths to double-confirm that, since no
+pre-existing selector or rule was touched, only new ones added inside
+`max-width` queries that cannot match a desktop viewport.
 
 ## Database schema
 

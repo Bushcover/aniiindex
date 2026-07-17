@@ -445,3 +445,27 @@
   color: #6af0a8;
   flex-shrink: 0;
 }
+
+/* ══ Responsive (Session 29) — additive only, see globals.css ══ */
+
+@media (max-width: 768px) {
+  /* This nav row was the actual cause of the home page overflowing on
+     mobile — confirmed via direct measurement (nav's children extended
+     to 580px wide on a 390px viewport, entirely from .navLinks (306px)
+     and .nav-right not fitting alongside the logo). These links
+     (Browse/Series/Characters/Seasonal) are already plain, non-clickable
+     divs, not real navigation (see NAV_LINKS in page.jsx) — no
+     hamburger-menu equivalent exists in this design, so the minimal,
+     non-breaking fix is to hide this decorative row on mobile; the
+     hero search below still works, and every other page's own nav
+     (search bar + sign in + submit) is unaffected since none of them
+     render .navLinks at all. */
+  .navLinks { display: none; }
+}
+
+@media (max-width: 480px) {
+  /* Already fluid via clamp(28px, 5vw, 52px) and not literally
+     overflowing at 390px (renders at its 28px floor) — tightened
+     slightly further specifically for the smallest phones. */
+  .hero h1 { font-size: clamp(24px, 8vw, 32px); }
+}

@@ -126,6 +126,13 @@ nav {
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 
+/* Session 29: shown instead of the beat list when a content-tab filter
+   (Edits & Video / Fan Art / Discussion / OST & Music) matches nothing
+   anywhere in the arc — replaces what would otherwise be a blank gap
+   with no explanation. Never shown on "All". */
+.tab-empty-state { padding: 48px 0; text-align: center; color: var(--t2); font-size: 14px; line-height: 1.7; }
+.tab-empty-state a { color: var(--accent); text-underline-offset: 3px; }
+
 /* Card */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; text-decoration: none; display: block; }
 .card:hover { border-color: var(--border-mid); transform: translateY(-2px); }
@@ -162,3 +169,39 @@ nav {
 /* Footer */
 .index-note { padding: 18px 0 48px; border-top: 1px solid var(--border); font-size: 12px; color: var(--t3); line-height: 1.7; }
 .index-note a { color: var(--t2); text-underline-offset: 3px; }
+
+/* ══════════════════════════════════════════════════════════════
+   Responsive (Session 29) — additive mobile/tablet overrides only.
+   Nothing above this point is touched; every rule below is scoped to
+   a max-width query, so desktop layout is unaffected either way.
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Content tabs (arc page): the 5 tabs (All / Edits & Video / Fan Art
+     / Discussion / OST & Music) never had overflow handling, unlike
+     .arc-strip-wrap above — confirmed via direct measurement that on a
+     390px-wide viewport they simply overflowed the whole document
+     (scrollWidth 677px) instead of scrolling within their own row.
+     Same contained-horizontal-scroll pattern as .arc-strip-wrap, just
+     scoped to this breakpoint since desktop never needs it. */
+  .tabs-wrap { overflow-x: auto; scrollbar-width: none; }
+  .tabs-wrap::-webkit-scrollbar { display: none; }
+  .tabs { width: max-content; }
+}
+
+@media (max-width: 480px) {
+  /* Arc page hero title (ArcHero.jsx). Its clamp(26px, 4vw, 42px) was
+     already fluid and not literally broken at 390px (renders at its
+     26px floor), but that's still large next to this page's 14px body
+     copy on a phone — tightened further specifically at this
+     breakpoint. */
+  .hero h1 { font-size: clamp(22px, 7vw, 28px); }
+
+  /* Content card grid: auto-fill(minmax(280px,1fr)) already collapses
+     to one column once available width can't fit two 280px cards, but
+     that's incidental to the 280px minimum, not a guarantee — pinned
+     explicitly here so the arc page's beat sections are always single
+     column on phones regardless of any future minmax() tweak
+     elsewhere. */
+  .cards { grid-template-columns: 1fr; }
+}

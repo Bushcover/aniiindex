@@ -145,3 +145,17 @@
   margin: 0 auto;
   line-height: 1.6;
 }
+
+/* ══ Responsive (Session 29) — additive only, see globals.css ══ */
+
+@media (max-width: 768px) {
+  /* Confirmed via direct measurement, not just visual inspection: the
+     fixed 160px poster + flex:1/min-width:0 info block don't fit side
+     by side at mobile widths — info squeezes to ~150px, its text wraps
+     into an abnormally tall column (over 1000px), and align-items:
+     flex-end then pushes the poster hundreds of pixels down to align
+     with that tall block's bottom edge, landing it mid-page overlapping
+     the description text instead of at the top. Stack vertically
+     instead — poster on top at full size, info below at full width. */
+  .heroInner { flex-direction: column; align-items: flex-start; }
+}

@@ -443,3 +443,14 @@
   margin: 0 auto;
   line-height: 1.6;
 }
+
+/* ══ Responsive (Session 29) — additive only, see globals.css ══ */
+
+@media (max-width: 768px) {
+  /* Confirmed via direct measurement: at a 1.1fr/0.9fr split, both
+     columns squeeze to ~236px/185px on a 390px viewport, well past
+     where their contents (arc names, character chips, content cards)
+     can lay out sensibly — the right column alone extended 83px past
+     the viewport. Stack to a single column instead. */
+  .twoCol { grid-template-columns: 1fr; }
+}
