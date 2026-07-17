@@ -153,6 +153,7 @@
   letter-spacing: -0.5px;
   color: var(--t1);
   margin-bottom: 6px;
+  overflow-wrap: break-word;
 }
 .seriesMeta {
   display: flex;

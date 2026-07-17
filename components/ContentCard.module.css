@@ -80,10 +80,14 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: break-word;
 }
+/* Session 30: same real-content-can-be-a-single-long-unbroken-token
+   defense as globals.css's .ccreator — see that comment. */
 .compactMeta {
   font-size: 10px;
   color: var(--t3);
+  overflow-wrap: break-word;
 }
 .compactTags {
   display: flex;
