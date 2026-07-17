@@ -285,15 +285,6 @@ export default async function ArcPage({ params }) {
     characters,
   };
 
-  // Temporary diagnostic (Session 25), same open bug as getArcMeta's own
-  // log in lib/supabase.js: if either of these actually rejected (a real
-  // Postgres/RLS error, not just "slug not seeded"), that's exactly what
-  // would make arcFoundInDb false below and silently fall back to
-  // hardcoded Shibuya beats/content instead of throwing — worth seeing
-  // the real rejection reason in Vercel's logs rather than guessing.
-  if (beatsResult.status === "rejected") console.error("[arc page] getArcBeats rejected for slug", params.slug, beatsResult.reason);
-  if (contentResult.status === "rejected") console.error("[arc page] getArcContent rejected for slug", params.slug, contentResult.reason);
-
   // `getArcBeats`/`getArcContent` both resolve to `null` specifically when
   // `params.slug` doesn't match a seeded arc — treated as one signal so the
   // page never mixes real beats with hardcoded content or vice versa.
