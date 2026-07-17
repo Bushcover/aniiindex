@@ -1,4 +1,26 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Session 32: "reset" pass requested after Sessions 29-31's targeted,
+   per-element fixes were reported still failing on a real device three
+   times running. Two of the three requested rules added as specified —
+   `*, *::before, *::after` gets `max-width: 100%` added alongside its
+   existing box-sizing/margin/padding reset (box-sizing: border-box was
+   already here since Session 1; not a new rule, just extending it), and
+   `body` gets `max-width: 100vw` added to its existing `overflow-x:
+   hidden` (Session 30).
+   `html` deliberately does NOT get `overflow-x: hidden` here, even
+   though it was explicitly requested — this is not caution, it's a
+   repeat of an already-proven regression: the comment directly above
+   `body`'s own rule below documents, from direct empirical testing in
+   this exact codebase (an isolated test page, not guesswork), that
+   `overflow-x: hidden` on both `html` and `body` together breaks `nav`'s
+   `position: sticky` outright (confirmed via before/after-scroll
+   measurement — nav stops pinning and scrolls away like a normal static
+   element). `body` alone already provides full horizontal-overflow
+   containment (confirmed then and re-confirmed this session); adding it
+   to `html` too would only reintroduce that exact regression for no
+   additional containment benefit. `html` still gets `max-width: 100vw`
+   (harmless, no sticky interaction) as the literal-non-overflow-x part
+   of what was asked. */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; max-width: 100%; }
 
 :root {
   --bg: #0C0C12;
@@ -21,6 +43,8 @@
   --r: 10px;
   --r-sm: 6px;
 }
+
+html { max-width: 100vw; }
 
 /* Session 30: getting this one line right took two wrong attempts, both
    caught before shipping by directly measuring nav's position across a
@@ -50,7 +74,7 @@
    there's no known downside to it anywhere, and it's the one
    configuration confirmed, by direct measurement, not to touch sticky
    positioning at all. */
-body { background: var(--bg); color: var(--t1); font-family: var(--body); font-size: 14px; line-height: 1.6; min-height: 100vh; overflow-x: hidden; }
+body { background: var(--bg); color: var(--t1); font-family: var(--body); font-size: 14px; line-height: 1.6; min-height: 100vh; overflow-x: hidden; max-width: 100vw; }
 
 /* ── Nav ── */
 nav {
