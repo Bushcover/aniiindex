@@ -6,7 +6,7 @@ import IntensityChart from "@/components/IntensityChart";
 import BeatSection from "@/components/BeatSection";
 import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
-import { getArcBeats, getArcContent } from "@/lib/supabase";
+import { getArcBeats, getArcContent, getArcMeta } from "@/lib/supabase";
 
 // Forces this route to always render dynamically and re-fetch on every
 // request — without it, Next can treat this dynamic-segment page as
@@ -15,10 +15,12 @@ import { getArcBeats, getArcContent } from "@/lib/supabase";
 // fetched on an earlier request instead of the current database state.
 export const revalidate = 0;
 
-// AniList numeric id for the series this arc belongs to (Jujutsu Kaisen).
-// Every slug currently renders this same hardcoded arc (see PROJECT.md), so
-// this id is hardcoded too — it isn't derived from `params.slug` yet.
-const ANILIST_SERIES_ID = 113415;
+// AniList numeric id for Jujutsu Kaisen — used only as a fallback when
+// `params.slug` doesn't match a seeded `arcs` row (see `arcFoundInDb`
+// below), matching the hardcoded `ARC.breadcrumb[0]` fallback below it.
+// Any seeded slug instead uses its own row's real `anilist_series_id`
+// (via `getArcMeta`), not this constant.
+const FALLBACK_ANILIST_SERIES_ID = 113415;
 
 const ARC_NAV = [
   { slug: "cursed-child-arc", name: "Cursed Child Arc", count: 341 },
@@ -230,17 +232,30 @@ function buildBeatSections(beats, content) {
 }
 
 export default async function ArcPage({ params }) {
-  const [seriesResult, charactersResult, beatsResult, contentResult] = await Promise.allSettled([
-    getSeriesById(ANILIST_SERIES_ID),
-    getSeriesCharacters(ANILIST_SERIES_ID),
+  // Looked up first, in its own round trip, because the series lookup
+  // below depends on its result (`arcMeta.anilist_series_id`) — it can't
+  // join the AniList calls in a single Promise.allSettled the way
+  // getArcBeats/getArcContent do, since those two are independently keyed
+  // by `params.slug` alone.
+  const [arcMetaResult, beatsResult, contentResult] = await Promise.allSettled([
+    getArcMeta(params.slug),
     getArcBeats(params.slug),
     getArcContent(params.slug),
   ]);
 
-  const series = seriesResult.status === "fulfilled" ? seriesResult.value : null;
-  const realCharacters = charactersResult.status === "fulfilled" ? charactersResult.value : null;
+  const arcMeta = arcMetaResult.status === "fulfilled" ? arcMetaResult.value : null;
   const realArcBeats = beatsResult.status === "fulfilled" ? beatsResult.value : null;
   const realArcContent = contentResult.status === "fulfilled" ? contentResult.value : null;
+
+  const anilistSeriesId = arcMeta?.anilist_series_id ?? FALLBACK_ANILIST_SERIES_ID;
+
+  const [seriesResult, charactersResult] = await Promise.allSettled([
+    getSeriesById(anilistSeriesId),
+    getSeriesCharacters(anilistSeriesId),
+  ]);
+
+  const series = seriesResult.status === "fulfilled" ? seriesResult.value : null;
+  const realCharacters = charactersResult.status === "fulfilled" ? charactersResult.value : null;
 
   const seriesName = series ? series.title.english || series.title.romaji : ARC.breadcrumb[0];
   const description = series?.description || ARC.description;
@@ -248,6 +263,8 @@ export default async function ArcPage({ params }) {
 
   const arc = {
     ...ARC,
+    name: arcMeta?.title || ARC.name,
+    episodes: arcMeta ? `Episodes ${arcMeta.episode_start}–${arcMeta.episode_end}` : ARC.episodes,
     breadcrumb: [seriesName, ARC.breadcrumb[1]],
     description,
     characters,

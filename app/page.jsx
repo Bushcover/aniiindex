@@ -45,7 +45,7 @@ const TRENDING_ARCS = [
     peakLabel: "Peak: Yuji's breakdown",
   },
   {
-    slug: "rumbling-arc",
+    slug: "the-rumbling-arc",
     seriesDotColor: "#F0706A",
     seriesLabel: "Attack on Titan · Final Season",
     name: "Rumbling Arc",

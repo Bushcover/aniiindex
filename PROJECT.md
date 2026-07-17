@@ -127,9 +127,9 @@ files):
 app/
   layout.jsx                      Root layout — server component. Syne + Inter fonts via Google Fonts <link> tags, imports globals.css, static <head>/metadata (title "Aniindex").
   globals.css                     Shared styles ported 1:1 from the original mockup's <style> block. Bare-tag/class selectors (nav, .btn, .card, .thumb, .yours-badge, .pending-badge, .card-actions, .confirm-btn, .flag-btn, etc.) used across every page — see "Design tokens" below for the full custom-property list.
-  page.jsx                        Home page (`/`) — server component, 100% hardcoded data (NAV_LINKS, HERO_STATS, TRENDING_ARCS, POPULAR_SERIES, TRENDING_MOMENTS, FEATURES), composes HeroSearch + Sparkline + NavAuth.
+  page.jsx                        Home page (`/`) — server component, 100% hardcoded data (NAV_LINKS, HERO_STATS, TRENDING_ARCS, POPULAR_SERIES, TRENDING_MOMENTS, FEATURES), composes HeroSearch + Sparkline + NavAuth. `TRENDING_ARCS`' Attack on Titan card slug was `"rumbling-arc"` through Session 23 — a typo relative to the seeded `"the-rumbling-arc"` slug — fixed in Session 24.
   page.module.css                 Home-page-only styles (hero, arc/series cards, trending moments list, feature pills).
-  arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). Real Supabase beats/content (keyed by params.slug) + real AniList series/characters (keyed by a hardcoded AniList id), both independently falling back to hardcoded data on failure. `buildBeatSections` threads each real item's `id` and `status` through to ContentCard (needed for the pending badge/confirm/flag UI). No debug logging of any kind — confirmed clean this session.
+  arc/[slug]/page.jsx             Arc page — async server component, `export const revalidate = 0` (forces dynamic, no caching). As of Session 24: looks up `params.slug` in Supabase's `arcs` table via `getArcMeta` (a second round trip, run before the AniList calls since they depend on its result) to get the arc's real title, episode range, and `anilist_series_id`; uses that id to fetch the correct series' real AniList description/characters (`getSeriesById`/`getSeriesCharacters`), instead of always querying Jujutsu Kaisen's hardcoded id. Falls back to `FALLBACK_ANILIST_SERIES_ID` (113415, JJK) and the hardcoded `ARC` object's own `name`/`episodes` when `params.slug` isn't seeded. `ARC_NAV`, `ARC`'s other fields (badges, seasonPart, dateRange, stats), and `TABS` are still fully hardcoded regardless of slug — deliberately out of scope for Session 24, see PROJECT.md's "Known issues"/roadmap. Supabase beats/content (keyed by params.slug, via getArcBeats/getArcContent) are unchanged. `buildBeatSections` threads each real item's `id` and `status` through to ContentCard (needed for the pending badge/confirm/flag UI). No debug logging of any kind.
   search/page.jsx                 Search page (`/search`) — async server component. Real AniList series panel (keyed by ?q=), everything else (ARCS, CHARACTERS, TOP_CONTENT, FILTERS, ALSO_FOUND, RESULTS_SUMMARY) hardcoded. Renders ContentCard directly (compact mode) for TOP_CONTENT — the one place a Server Component renders the now-client-component ContentCard, which is valid, ordinary App Router behavior.
   search/search.module.css        Search-page-only styles — also imported directly by components/ArcList.jsx and app/series/[slug]/series.module.css's sibling page (series page reuses SearchNav, which imports this module).
   submit/page.jsx                 3-step submission wizard (`/submit`) — client component, owns all wizard state. Real: step 1's /api/og-fetch link detection, step 2's real beat selector (getArcBeats), step 3's real content_items insert with a real submitted_by (session.user.id, or "anonymous" when signed out). Hardcoded: SERIES_DETECTED, ARC_DETECTED, INITIAL_CHARACTERS, CONTENT_TYPE_OPTIONS. No debug logging — confirmed clean this session.
@@ -145,7 +145,7 @@ app/
   auth/callback/page.jsx          Magic-link redirect handler (`/auth/callback`) — client component, wrapped in <Suspense> (required for useSearchParams in a statically-rendered page). Exchanges the URL's `code` for a session via exchangeCodeForSession, or falls back to checking for an already-parsed hash-based session (implicit-flow links), then redirects to `/` or shows an error. Genuinely load-bearing — every real magic-link click passes through this page.
 lib/
   anilist.js                      searchSeries(query, {perPage}) / getSeriesById(id) / getSeriesCharacters(id, {perPage}) / getSeriesWithRelations(id) — real AniList GraphQL calls via a shared postToAniList() helper, each cached via Next's fetch cache (next: { revalidate: 3600 }). All four throw on request/GraphQL failure; getSeriesById/getSeriesWithRelations strip AniList's HTML markup out of `description` before returning. Unchanged since Session 8.
-  supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcBeats(slug), getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by; its `.in('status', ['confirmed','pending'])` allowlist is also what excludes flagged items, with no separate filtering step needed), confirmContentItem(id), and flagContentItem(id). confirmContentItem: select-then-update, no-ops if the row isn't currently 'pending', chains `.select().maybeSingle()` onto its update and throws + console.errors if the result is null (an RLS-blocked UPDATE matches zero rows silently — this is what let Session 18's original version report false success). flagContentItem (rewritten in Session 21): does an initial select to confirm the id exists/is readable, then performs the update and trusts its own `{ error }` result alone — no post-update verification select, specifically because that verification technique (tried two different ways across Sessions 19–20) kept hitting a genuine Postgres `42501` permission error on a row whose new status ('flagged') isn't covered by the read policy. Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key).
+  supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcMeta(slug) (added Session 24 — selects `title, episode_start, episode_end, anilist_series_id` from the arc's own row; returns null for an unseeded slug, same convention as the two below; this is what lets the arc page derive a real header/AniList id per slug instead of always assuming Shibuya/JJK), getArcBeats(slug), getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by; its `.in('status', ['confirmed','pending'])` allowlist is also what excludes flagged items, with no separate filtering step needed), confirmContentItem(id), and flagContentItem(id). confirmContentItem: select-then-update, no-ops if the row isn't currently 'pending', chains `.select().maybeSingle()` onto its update and throws + console.errors if the result is null (an RLS-blocked UPDATE matches zero rows silently — this is what let Session 18's original version report false success). flagContentItem (rewritten in Session 21): does an initial select to confirm the id exists/is readable, then performs the update and trusts its own `{ error }` result alone — no post-update verification select, specifically because that verification technique (tried two different ways across Sessions 19–20) kept hitting a genuine Postgres `42501` permission error on a row whose new status ('flagged') isn't covered by the read policy. Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key).
   auth.js                         signInWithEmail(email) — supabase.auth.signInWithOtp with emailRedirectTo pointed at /auth/callback (a genuine magic link, see the Session 15/16 history for why not a code). signOut() and getSession() — thin wrappers, getSession() swallows its own error and returns null rather than throwing. All three exported; no other functions in this file.
 components/
   ArcNav.jsx                      Horizontal arc-chip strip (the row under the top nav on the arc page). Props: { arcs: [{ slug, name, count, active? }] }. No props default; `arcs` is required.
@@ -373,19 +373,17 @@ and no way to un-flag an item.
 - `content_items`: real rows exist only against the Shibuya arc — `/submit`'s hardcoded `ARC_SLUG` (see below) means the app itself has never written a `content_items` row for any of the four Session 23 arcs. Check `select count(*) from content_items;` for the current total against Shibuya. `status` values among real rows include `'pending'`, `'confirmed'`, and `'flagged'`.
 
 **Five arcs across three series now have real beats seeded** (up from
-one arc/one series through Session 22) — but this does not mean four of
-them render correctly yet. `/submit`'s `ARC_SLUG` constant still
-hardcodes `"shibuya-incident-arc"` (no other arc can receive real
-submissions), and `app/arc/[slug]/page.jsx`'s `ANILIST_SERIES_ID` and
-`ARC` header object are still hardcoded to Jujutsu Kaisen/Shibuya
-regardless of `params.slug` — see "Known issues" below for exactly what
-that produces on the four new slugs, and Session 23's own log entry above
-for the full explanation.
+one arc/one series through Session 22). As of Session 24, the arc page's
+header and AniList series lookup are also real per-slug — see below.
+`/submit`'s `ARC_SLUG` constant still hardcodes `"shibuya-incident-arc"`
+(no other arc can receive real submissions yet), and `ARC_NAV` (the arc
+page's own chip strip) is still fully hardcoded (Session 18 work, per the
+Session 24 task scope) — see "Known issues" below.
 
 ### What's real vs. hardcoded, per page
 
-- **`/` (home)** — 100% hardcoded (`NAV_LINKS`, `HERO_STATS`, `TRENDING_ARCS`, `POPULAR_SERIES`, `TRENDING_MOMENTS`, `FEATURES`). `HeroSearch` navigation (Enter / chip click → `/search?q=...`) is real and works. `TRENDING_ARCS`' own hardcoded slugs still don't line up with the Session 23 seed data (its `"rumbling-arc"` card, notably, is not the same slug as the seeded `"the-rumbling-arc"`) — `shibuya-incident-arc` remains the only `TRENDING_ARCS` link that lands on real data. (Separately, the arc page's own `ARC_NAV` chip strip already happened to hardcode a `"vs-mahito-arc"` slug before Session 23 — that one now coincidentally matches a real seeded arc; see the arc page bullet below.)
-- **`/arc/[slug]`** — Supabase beats/intensity-chart/content-cards are real for any of the 5 seeded arc slugs as of Session 23 (`shibuya-incident-arc`, `vs-mahito-arc`, `control-devil-arc`, `the-rumbling-arc`, `marley-arc`) — keyed by `params.slug`, the one place this page genuinely drives a query from the URL. AniList series name/description/characters are real but keyed by a hardcoded `ANILIST_SERIES_ID` (always `113415`, Jujutsu Kaisen), not `params.slug` — correct by coincidence for `shibuya-incident-arc` and `vs-mahito-arc` (both JJK arcs), wrong for `control-devil-arc` (Chainsaw Man) and `the-rumbling-arc`/`marley-arc` (Attack on Titan), which render JJK's AniList description/characters above their own real beats. `ARC_NAV`, `ARC`'s own fields (name, episodes, badges, breadcrumb[1], stats), and `TABS` are hardcoded regardless of slug — all 5 real arcs still show "Shibuya Incident Arc" / "Episodes 38–47" as the page header. Any slug outside those 5 falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS` mockup data — the page never breaks, it just isn't real for that slug. Real content cards additionally show: a "✦ Yours" badge (own submissions, signed in), a "⏳ Pending review" badge + "Confirm placement" button (pending items, no auth needed), and a flag button (any real item) — confirming and flagging both write genuinely to Supabase and update the page instantly, client-side, no reload.
+- **`/` (home)** — 100% hardcoded (`NAV_LINKS`, `HERO_STATS`, `TRENDING_ARCS`, `POPULAR_SERIES`, `TRENDING_MOMENTS`, `FEATURES`). `HeroSearch` navigation (Enter / chip click → `/search?q=...`) is real and works. `TRENDING_ARCS`' Attack on Titan card slug was fixed in Session 24 (`"rumbling-arc"` → `"the-rumbling-arc"`, matching the seeded slug) — its link, and `shibuya-incident-arc`'s, now both land on real arc-page data. The other four `TRENDING_ARCS` cards (`bomb-girl-arc`/Chainsaw Man, `swordsmith-village-arc`/Demon Slayer, `onigashima-raid`/One Piece, `chimera-ant-arc`/Hunter × Hunter) still point at unseeded slugs — none matches `control-devil-arc`, `vs-mahito-arc`, or `marley-arc`. (Separately, the arc page's own `ARC_NAV` chip strip already happened to hardcode a `"vs-mahito-arc"` slug before Session 23 — that one also lands on real data; see the arc page bullet below.)
+- **`/arc/[slug]`** — As of Session 24, real for any of the 5 seeded arc slugs (`shibuya-incident-arc`, `vs-mahito-arc`, `control-devil-arc`, `the-rumbling-arc`, `marley-arc`): the page header's name and episode range (via a new `getArcMeta(params.slug)` lookup against the `arcs` table) and the AniList series description/characters (via that row's own real `anilist_series_id`, not a hardcoded constant) are now genuinely correct per slug — `/arc/control-devil-arc` shows Chainsaw Man's real AniList data, `/arc/the-rumbling-arc` and `/arc/marley-arc` show Attack on Titan's, each under its own real Supabase beats/content. `ARC`'s remaining fields (badges, seasonPart, dateRange, stats), `ARC_NAV`, and `TABS` are still hardcoded regardless of slug — deliberately out of scope for Session 24 (`ARC_NAV` is explicitly Session 18 work; see "Known issues"). Any slug outside the 5 seeded ones falls back entirely to the original hardcoded `ARC`/`INTENSITY_BEATS`/`BEATS`/`FALLBACK_ANILIST_SERIES_ID` (113415, JJK) mockup data — the page never breaks, it just isn't real for that slug. Real content cards additionally show: a "✦ Yours" badge (own submissions, signed in), a "⏳ Pending review" badge + "Confirm placement" button (pending items, no auth needed), and a flag button (any real item) — confirming and flagging both write genuinely to Supabase and update the page instantly, client-side, no reload.
 - **`/search`** — Real: the series panel (title, format, genres, score, popularity, episodes, poster), driven by `?q=`. Hardcoded regardless of query: `ARCS` (11-arc Chainsaw Man placeholder list), `CHARACTERS`, `TOP_CONTENT`, `FILTERS`, `ALSO_FOUND`, `RESULTS_SUMMARY`.
 - **`/series/[slug]`** — Real: everything about the series itself (title, description, genres, score, format/year/episodes/status, banner/poster) and the top-10 character cast, both keyed directly by the numeric AniList id in the URL — the only page where the URL's dynamic segment drives every real value shown. Hardcoded: `ARCS` (same placeholder list as the search page, duplicated not shared).
 - **`/submit`** — Real: step 1's link detection (`/api/og-fetch` — title/thumbnail/platform/creator, debounced 500ms), step 2's beat selector (real `beats` rows for the Shibuya arc), and the final submission (a real `content_items` insert, with a real `submitted_by` — the signed-in user's id, or `"anonymous"` when signed out). Hardcoded: `SERIES_DETECTED`/`ARC_DETECTED` (always Jujutsu Kaisen/Shibuya regardless of the pasted link's actual content), `INITIAL_CHARACTERS` (always one pre-checked "Gojo Satoru" chip), `CONTENT_TYPE_OPTIONS` (just labels). Structurally locked to the one seeded arc via `ARC_SLUG`.
@@ -401,8 +399,8 @@ sessions (verified by mock/browser-driven testing, as noted):
 1. Home → arc card / quick-search chip / hero search → correct navigation.
 2. `/search?q=<title>` → real AniList series panel for any real anime title.
 3. `/series/<anilist-id>` → real series detail + real top-10 cast for any real AniList id; "Browse arcs" from a search result correctly threads the real id through.
-4. `/arc/shibuya-incident-arc` → real AniList series description/characters + real Supabase beats/intensity chart/content cards, with real submitted items appearing under their correct beat.
-5. Any `/arc/<slug>` outside the 5 seeded arcs → clean fallback to the original hardcoded Shibuya mockup, no crash, no partial/mixed state. (The 4 arcs seeded in Session 23 are a different case, not covered by this item — see "Known issues": their real beats/content render, but mixed with the hardcoded Shibuya header and, for 2 of the 4, the wrong AniList series data.)
+4. Any of the 5 seeded `/arc/<slug>`s (`shibuya-incident-arc`, `vs-mahito-arc`, `control-devil-arc`, `the-rumbling-arc`, `marley-arc`) → since Session 24, a correct real page header (name, episode range) and correct real AniList series description/characters for that specific arc's series, plus real Supabase beats/intensity chart/content cards, with real submitted items appearing under their correct beat. Verified by direct code reading this session (`getArcMeta` → `anilist_series_id` → `getSeriesById`/`getSeriesCharacters`), not yet click-tested against the live Supabase project from this sandbox (see "Known issues" for this project's standing verification caveat).
+5. Any `/arc/<slug>` outside the 5 seeded arcs → clean fallback to the original hardcoded Shibuya mockup, no crash, no partial/mixed state.
 6. `/submit` full wizard: paste a URL → real title/thumbnail/platform/creator auto-detected → pick a real story beat → review (real `ContentCard` preview) → submit → real row lands in `content_items` → visible on the arc page under the correct beat on the next load.
 7. Every page's nav "Sign in" link genuinely navigates to `/auth`; with a real or injected session, the nav correctly shows the signed-in email + a working "Sign out" button, persisted across a full page reload.
 8. `/submit`'s real `submitted_by` (signed-in user id, or `"anonymous"` signed out) and the arc page's "✦ Yours" badge, both verified against injected/mocked sessions in prior sessions.
@@ -429,7 +427,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 
 ### Known issues / cleanup needed
 
-- **Since Session 23, the arc page shows a genuinely wrong pairing of real data for 4 of its 5 seeded arcs.** `getArcBeats`/`getArcContent` resolve real Supabase data for any seeded `params.slug`, but `ANILIST_SERIES_ID` and the `ARC` header object (`app/arc/[slug]/page.jsx`) are hardcoded to Jujutsu Kaisen/Shibuya and never vary by slug. Concretely: `/arc/control-devil-arc` and `/arc/the-rumbling-arc`/`/arc/marley-arc` show real Chainsaw Man/Attack on Titan beats and content cards underneath Jujutsu Kaisen's real AniList description and character list, and all 5 arcs — including `shibuya-incident-arc` itself — show the hardcoded "Shibuya Incident Arc" / "Episodes 38–47" header regardless of which arc's data is actually below it. Nothing crashes and no data is corrupted (this is a display-layer mismatch, not a database problem), but it's a real, visible bug for any visitor to the 4 new slugs. Fix is Phase 6+ roadmap items 5–6: derive both the AniList id and the header fields from the real `arcs`/`series` rows (the schema already has `arcs.anilist_series_id` for exactly this, unused since Session 9) instead of the hardcoded consts.
+- **The arc page's header still has hardcoded fields Session 24 deliberately left out of scope.** `ARC`'s badges, `seasonPart`, `dateRange`, and `stats` (fan-item/save/contributor counts) are still always Shibuya's regardless of `params.slug` — only `name` and `episodes` were switched to real per-arc data this session, per the task's explicit scope. `ARC_NAV` (the arc-chip strip) is also still fully hardcoded — explicitly deferred as Session 18 work. None of this causes a wrong-series mismatch the way the pre-Session-24 bug did (badges/stats/dateRange were never series-specific claims to begin with), but it's still a visible seam on the 4 non-Shibuya real arcs.
 - **`next.config.mjs`'s `images.remotePatterns`** allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere — all images render via plain CSS `background`/`backgroundImage`. Inert until a future session adopts `next/image`.
 - **`og-fetch`'s SSRF protection is a hostname-literal blocklist**, not DNS-resolution-aware — doesn't defend against a public domain that resolves to a private IP (DNS rebinding). An accepted, explicit trade-off, not an oversight.
 - **`og-fetch` has no response-size cap**, only an 8-second timeout.
@@ -443,7 +441,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 - **No admin/moderation queue view.** `content_items.status` now genuinely moves between `'pending'`/`'confirmed'`/`'flagged'`, and the arc page visually distinguishes pending from confirmed (flagged items don't render at all) — but nothing lists flagged items for review, there's no permissions model for who's allowed to moderate, and there's no way to un-flag or un-confirm anything once it happens. A mistaken flag is permanent today.
 - **No tab/filter-pill filtering** on any page — clicking "Edits & Video," "Fan Art," an arc's content-type filter, etc. does nothing.
 - **No pagination or "+N more" expansion** — every "+N more" affordance is static text.
-- **No real per-arc/per-series routing** — `ARC_NAV` (arc page) and `ARCS` (search + series pages) are still fully hardcoded placeholder arc lists unrelated to whatever series/arc is actually being viewed. This is now a real gap rather than a moot one: 5 arcs across 3 series exist in Supabase as of Session 23, but the arc page's own header/AniList lookup still can't route to the right one — see "Known issues."
+- **No real arc-list/series-list routing** — `ARC_NAV` (arc page) and `ARCS` (search + series pages) are still fully hardcoded placeholder arc lists unrelated to whatever series/arc is actually being viewed — clicking a chip in `ARC_NAV` does not necessarily land on a seeded arc. (As of Session 24, the arc page's own header and AniList lookup do correctly route per `params.slug` once you're on a real arc's URL — see "What's real vs. hardcoded" — this bullet is specifically about the chip-list/browse UI still not reflecting real data.)
 - **No manual correction UI on `/submit`** — no way to edit a wrong auto-detected title, pick a different series/arc, or add a character beyond the one hardcoded pre-filled chip.
 - **No thumbnail images anywhere except real submitted content** — every hardcoded card still uses a CSS gradient placeholder.
 - **No per-visitor confirmation/flag ledger** — nothing stops the same browser confirming or flagging the same item repeatedly.
@@ -459,8 +457,8 @@ most other things":
 2. **A real moderation/flagged-items view** — even a minimal one (a `/admin` or `?status=flagged` view listing flagged `content_items`, with a button to un-flag or genuinely delete) closes the biggest gap Phase 5 left open: flagging is currently permanent and unreviewable. This is also where a permissions model (who's allowed to moderate) needs to get decided.
 3. **A per-visitor confirmation/flag ledger** (or, short of that, at least a same-visitor guard) — nothing stops one browser confirming or flagging the same item repeatedly today. Worth prioritizing once this app has real, potentially adversarial traffic.
 4. **A "my submissions" view** — `content_items.submitted_by` already holds a real user id for signed-in submitters; a page listing "content I've submitted" is a small, natural next step (the Session 14 RLS policy, once confirmed run, already supports the query this would need).
-5. **Fix the mismatch Session 23's seeding exposed on the arc page** — `app/arc/[slug]/page.jsx`'s `ANILIST_SERIES_ID` and `ARC` header object (name, episode range, badges, breadcrumb, stats) need to be derived from the real `arcs`/`series` rows for `params.slug` (the schema's `arcs.anilist_series_id` column exists for exactly this, unused since Session 9) instead of always assuming Jujutsu Kaisen/Shibuya. This is now higher priority than it was through Session 22: 5 real arcs across 3 series exist to route to, and 4 of them currently render a visibly wrong header/AniList pairing (see "Known issues") rather than the old, harmless "falls back to the mockup" behavior a not-yet-seeded slug gets.
-6. **Real arc-level routing** — once item 5 exists, replace `ARC_NAV`/search & series pages' `ARCS` with a real per-series `arcs` query instead of the current hardcoded placeholder lists.
+5. ~~Fix the mismatch Session 23's seeding exposed on the arc page~~ — **done in Session 24**: `app/arc/[slug]/page.jsx` now derives its AniList series id and its header's `name`/`episodes` from the real `arcs` row for `params.slug` (via new `getArcMeta`), instead of always assuming Jujutsu Kaisen/Shibuya. `ARC`'s remaining fields (badges, seasonPart, dateRange, stats) and `ARC_NAV` were left hardcoded, deliberately out of this session's scope — see "Known issues."
+6. **Finish real arc-level routing** — replace `ARC_NAV` (arc page) and `ARCS` (search + series pages) with a real per-series `arcs` query, so the chip strips themselves reflect the 5 (soon more) real seeded arcs instead of a fixed placeholder list. Also revisit `ARC`'s remaining hardcoded header fields (badges/seasonPart/dateRange/stats) now that item 5 has established the pattern for pulling per-arc data from Supabase.
 7. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden.
 8. **Extend `/submit` beyond its single hardcoded `ARC_SLUG`** so a submission can target any of the 5 now-seeded arcs, not just Shibuya — the natural next step once item 5/6 give the app a real way to know which arc is which. Until this lands, the 4 arcs Session 23 seeded can never accumulate real `content_items` through the app itself.
 9. **Confirm a real magic-link round trip against the live Supabase project** from outside this sandbox — the one piece of the auth/identity chain never verified against anything other than a mock or an injected session.
@@ -3107,6 +3105,65 @@ for how this is now tracked, and Phase 6+ roadmap items 5–6 for the fix.
 and still hardcodes `"shibuya-incident-arc"` — real submissions can still
 only ever land on that one arc. The four new arcs have real beats but, by
 construction, cannot yet have real `content_items` through the app itself.
+
+## Session 24
+
+Fixes the display-layer mismatch Session 23 exposed (see that session's
+own log entry above for the full diagnosis): `app/arc/[slug]/page.jsx`
+hardcoded `ANILIST_SERIES_ID` (always `113415`, Jujutsu Kaisen) and the
+`ARC` header object (always Shibuya Incident Arc's name/episodes)
+regardless of `params.slug`, so 4 of the 5 arcs seeded in Session 23
+rendered real Supabase beats/content under the wrong AniList series data
+and the wrong page header.
+
+**Code changes**:
+- `lib/supabase.js` — added `getArcMeta(arcSlug)`, exported. Selects
+  `title, episode_start, episode_end, anilist_series_id` from the `arcs`
+  table for a given slug; returns `null` for an unseeded slug (same
+  convention as `getArcBeats`/`getArcContent`), rethrows on any other
+  error. This is what makes `arcs.anilist_series_id` — a column that has
+  existed in the schema since Session 9 specifically so an arc's series
+  is "always recoverable even without a join," per that session's own
+  note — actually used by the app for the first time.
+- `app/arc/[slug]/page.jsx` — the old single `Promise.allSettled` that
+  fired both AniList calls and both Supabase calls together no longer
+  works, since the AniList calls now depend on `getArcMeta`'s result.
+  Split into two sequential steps: first `Promise.allSettled([getArcMeta,
+  getArcBeats, getArcContent])` (still parallel with each other — none of
+  these three depend on one another, matching the existing pattern), then
+  a second `Promise.allSettled([getSeriesById, getSeriesCharacters])`
+  once `arcMeta?.anilist_series_id` is known. `ANILIST_SERIES_ID` was
+  renamed `FALLBACK_ANILIST_SERIES_ID` and its comment rewritten — it's
+  now used only when `params.slug` doesn't match a seeded arc, not as the
+  primary source. `arc.name`/`arc.episodes` now come from `arcMeta` when
+  present (`Episodes {start}–{end}`, matching the original hardcoded
+  string's exact en-dash formatting), falling back to `ARC.name`/
+  `ARC.episodes` otherwise. `arcFoundInDb` (governs the intensity
+  chart/beat sections) is unchanged — still based on `realArcBeats`/
+  `realArcContent` alone, per the task's explicit scope.
+- **Deliberately not touched**, per the task's explicit scope (called out
+  as Session 18 work, or simply out of scope): `ARC_NAV` (the arc-chip
+  strip) is still hardcoded, and `ARC`'s badges/`seasonPart`/`dateRange`/
+  `stats` fields still don't vary by slug — only `name` and `episodes`
+  were switched to real per-arc data.
+- `app/page.jsx` — fixed `TRENDING_ARCS`' Attack on Titan card slug,
+  `"rumbling-arc"` → `"the-rumbling-arc"`, to match the arc actually
+  seeded in Session 23 (this typo meant the card's link 404'd against the
+  real arc — well, fell through to the hardcoded-fallback path, same as
+  any unseeded slug — rather than reaching it).
+
+**Verification**: `rm -rf .next && npm install && npm run build` (a fresh
+`npm install` was needed — `node_modules` wasn't present at the start of
+this session) compiles cleanly with no new errors and the same route
+table as Session 22/23 (`next build`'s static/dynamic split for `/arc/
+[slug]` is unchanged: still `ƒ` dynamic, as `revalidate = 0` requires).
+This sandbox still cannot reach the live Supabase/AniList endpoints (see
+"Known issues"), so this is a code-reading/build-time verification only —
+nobody has click-tested `/arc/control-devil-arc` or `/arc/marley-arc`
+against the live project yet to confirm the correct Chainsaw Man/Attack on
+Titan AniList data actually renders. Whoever picks this up next, outside
+this sandbox: visit all 5 seeded arc URLs and confirm each shows its own
+series' real name/episodes/description/characters, not Jujutsu Kaisen's.
 
 ## Database schema
 
