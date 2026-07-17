@@ -312,7 +312,7 @@ export default async function ArcPage({ params }) {
           Search series, arcs, characters…
         </div>
         <div className="nav-right">
-          <button className="btn btn-ghost">Browse</button>
+          <button className="btn btn-ghost nav-browse-btn">Browse</button>
           <NavAuth signInClassName="btn btn-primary" />
         </div>
       </nav>

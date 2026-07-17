@@ -285,6 +285,25 @@ nav {
   .tabs { flex-wrap: wrap; }
 }
 
+@media (max-width: 640px) {
+  /* Session 34: the actual cause of the real-device mobile overflow that
+     Sessions 29-33 never reproduced. NavAuth's signed-in state (email +
+     Sign out button) only renders once a real Supabase session exists —
+     this sandbox has no live Supabase credentials, so every prior test
+     pass (Playwright, DevTools emulation) only ever exercised the
+     signed-out "Sign in" link, never this state. `nav` has no
+     `flex-wrap` and its `.nav-right` children (Browse button, email
+     span, Sign out button) all keep their default `flex-shrink: 0`, so
+     signed in on a narrow phone, `.logo` + `.search-bar` + `.nav-right`
+     summed wider than the viewport with nothing able to give — that's
+     the nav (and its full-bleed background) pushing past 100vw, not any
+     of the page-body content the last five sessions checked. Hide the
+     email (Sign out alone is enough to act on) and the arc page's
+     decorative, non-functional Browse button. */
+  .nav-auth-email { display: none; }
+  .nav-browse-btn { display: none; }
+}
+
 @media (max-width: 480px) {
   /* Arc page hero title (ArcHero.jsx). Its clamp(26px, 4vw, 42px) was
      already fluid and not literally broken at 390px (renders at its

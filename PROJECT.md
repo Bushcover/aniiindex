@@ -429,7 +429,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 
 ### Known issues / cleanup needed
 
-- **Mobile responsiveness has taken five sessions (29–33) and still isn't confirmed against an actual physical device.** Every fix across all five was verified via Playwright/Chromium viewport emulation (`scrollWidth`/`clientWidth` measurement, element bounding-rect checks, and — after Session 30's own regression — before/after-scroll sticky-position checks), never a real phone. Sessions 29–32 each found something the previous one's emulation-based verification missed; Session 33 is the first to come up empty on new findings — see its own bullet below for why that's meaningful, not just a dead end:
+- **Mobile responsiveness took six sessions (29–34) before the real, root cause was found and fixed.** Every fix across all six was verified via Playwright/Chromium viewport emulation (`scrollWidth`/`clientWidth` measurement, element bounding-rect checks, and — after Session 30's own regression — before/after-scroll sticky-position checks), never a real phone. Sessions 29–32 each found something the previous one's emulation-based verification missed; Session 33 came up empty on new findings; **Session 34 found and fixed the actual cause** — see its own bullet below.
   - Session 29 added `@media (max-width: ...)` rules that tested clean under emulation but (per Session 30's finding) likely never matched on a real device at all, because the root layout had no viewport meta tag — without it, a real mobile browser assumes an ~980px desktop-sized layout viewport and zooms the page to fit, while emulation sets the rendering viewport directly and never depended on that tag being present.
   - Session 30 added the viewport meta tag, plus `overflow-wrap` on real-content text fields (a long unbroken creator handle can visually spill past its box, a failure mode this app's own short mock test strings never trigger) — and its own first two attempts at an `overflow-x: hidden` fix each broke `nav`'s `position: sticky`, an interaction bug a simple `scrollWidth` check can't reveal at all, only caught by directly measuring nav's position across a scroll before pushing.
   - Session 31, reported still broken after all of that: fixed two missing `min-width: 0`/`width: 100%` flexbox gaps on the search page (content clipped by an already-existing `overflow: hidden` rather than reflowing), and — the more structural fix — replaced the arc page's content-tabs horizontal-scroll with `flex-wrap: wrap`, removing a nested-scrollable-region-inside-a-`position:sticky`-element pattern entirely rather than continuing to harden it, since a real touch device's gesture handling for exactly that pattern is something this sandbox has no way to test directly and is the most likely explanation for "the page sliding sideways" that a pure CSS-overflow check would never surface. Also added `overscroll-behavior-x: contain` to both horizontal-scroll rows (`.arc-strip-wrap`, `.tabs-wrap`) — the CSS property specifically designed to stop a nested scrollable region's touch/scroll gesture from chaining out to the whole page.
@@ -437,7 +437,9 @@ sessions (verified by mock/browser-driven testing, as noted):
   
   - Session 33, reported broken a fifth time, now specifically described as "background bleeding," with an explicit instruction to compare the home page's wrapper structure against arc/search's to find a wrapper div with an explicit width. Did that comparison thoroughly — re-read every page's full JSX return, grepped every `background:` declaration in `globals.css`, checked every relevant component for inline `style={{width...}}` — and **found no wrapper-div width bug**. Every page (home included) uses the identical structure: a bare `<>` Fragment with `<nav>` followed by flat sibling sections, no extra wrapping div anywhere, no explicit `width`/`min-width` on any container beyond what Sessions 29–32 already addressed. The one real, if minor, gap found: `.tabs-wrap`'s `overflow-x: hidden` (Session 31) was only inside the `max-width: 768px` media query, not unconditional — made it unconditional (harmless on desktop, closes a gap for viewports just over that boundary). Re-confirmed via direct measurement that this didn't affect `.tabs-wrap`'s own `position: sticky` (a scroll-distance-corrected test: `.tabs-wrap.top === 56` once scrolled far enough to actually engage it — an initial 500px-scroll check falsely read "not pinned" because 500px wasn't enough scroll distance to reach this element's sticky engagement point at all, a test methodology gap, not a regression). This was reported as an honest non-finding, not dressed up as a fix — see this session's own log entry for the full reasoning on why a stale/cached deployment is now the more likely remaining explanation than an undiscovered CSS rule.
 
-  No session has tested landscape orientation, very small phones (<375px), phablets, or — the recurring theme — an actual physical device of any kind. Five consecutive sessions of increasingly aggressive, well-verified CSS changes (culminating in a universal `max-width: 100%` reset in Session 32, and a from-scratch structural re-comparison in Session 33 that found nothing new) not resolving a report strongly suggests the cause is no longer a CSS layout issue this codebase can fix — the highest-value next step, if reported again, is confirming the tester is actually looking at the latest deployed commit (not a stale Vercel preview URL, browser cache, or CDN-cached response) and/or getting a real-device screen recording, rather than another round of speculative CSS changes.
+  - **Session 34 found the actual root cause: `NavAuth.jsx`'s signed-in state was never once exercised by any of the previous five sessions' testing.** The user pinpointed it directly — a real signed-in user's nav renders the email address (`.nav-auth-email`) plus a "Sign out" button alongside the existing logo/search-bar/other nav-right content, and `nav` has no `flex-wrap` while every `.nav-right` child keeps its default `flex-shrink: 0`. This sandbox has no live Supabase credentials (`lib/supabase.js` always falls back to the `placeholder.supabase.co` URL), so `getSession()` always resolves to `null` and every single prior Playwright/DevTools test run — Sessions 29 through 33, all of them — only ever rendered the signed-out "Sign in" link. Nobody was testing the actual state a real logged-in mobile user sees. Confirmed by temporarily hardcoding a fake session into `NavAuth.jsx` (reverted before commit, `git diff` confirmed byte-identical after) and measuring `document.documentElement.scrollWidth` at a 375px viewport: **signed in and un-fixed, the arc page overflowed to 552px, search to 518px, and even the home page — previously believed unaffected — overflowed to 428px**, all against a 375px viewport. This is the first session in the whole saga to reproduce the bug directly rather than inferring a cause from static-code review. Fix: added a `@media (max-width: 640px)` block hiding `.nav-auth-email` (Sign out button alone remains, per the task's own "Sign out or a small avatar" allowance) and a new `.nav-browse-btn` class on the arc page's decorative, non-functional "Browse" button (also hidden at this breakpoint; the home page's own Browse link was already hidden below 768px since Session 29, and the search page has no Browse button at all). Re-ran the same signed-in-session measurement after the fix: all three pages back to `scrollWidth === clientWidth === 375`. Also re-confirmed `nav`'s `position: sticky` is unaffected (`nav.top === 0` before and after a 2000px scroll, signed-in state).
+
+  No session tested landscape orientation, very small phones (<375px), or phablets — those remain open. But the core "page slides sideways on mobile" report across Sessions 29–33 is now believed genuinely fixed, not just re-investigated: the earlier sessions' CSS hardening (viewport meta tag, `overflow-wrap`, flex `min-width: 0` fixes, the Session 32 universal `max-width: 100%` reset) were all real, necessary fixes for real gaps, but none of them could have touched this one, since none of them touched the signed-in-only nav markup. If this is reported broken again, the priority is confirming which auth state the tester is in and getting a real-device screen recording — this sandbox still cannot test actual touch input or real Supabase auth end to end.
 - **The arc page's header still has hardcoded fields Session 24 deliberately left out of scope.** `ARC`'s badges, `seasonPart`, `dateRange`, and `stats` (fan-item/save/contributor counts) are still always Shibuya's regardless of `params.slug` — only `name` and `episodes` were switched to real per-arc data. None of this causes a wrong-series mismatch the way the pre-Session-24 bug did (badges/stats/dateRange were never series-specific claims to begin with), but it's still a visible seam on the 4 non-Shibuya real arcs.
 - **Real arc chips/rows (`ArcNav`, `ArcList` on the series page) show no fan-item count or intensity sparkline** — Session 25 deliberately omitted these rather than fabricate them, since no per-arc content-count or beat-intensity rollup query exists yet. The hardcoded placeholder data these replace did have those numbers (fake), so real arc chips/rows look slightly sparser than the mockup ones next to them.
 - **`next.config.mjs`'s `images.remotePatterns`** allowlists `i.ytimg.com`/`s4.anilist.co` for `next/image`, but `next/image` isn't used anywhere — all images render via plain CSS `background`/`backgroundImage`. Inert until a future session adopts `next/image`.
@@ -3929,6 +3931,90 @@ zero overflow, `nav` pinned at `top: 0`, `.tabs-wrap` pinned at `top: 56`
 once scrolled far enough to engage — the one file this session actually
 changed, tested correctly for its sticky implications, not skipped.
 
+## Session 34
+
+Reported broken a sixth time, but this time with a specific, correct
+diagnosis instead of another symptom description: the signed-in nav
+(logo + search bar + Browse + email address + Sign out button) is what's
+pushing the nav — and with it the page's full-bleed background — wider
+than the mobile viewport. Requested fix: hide the email on screens below
+640px (Sign out button or an avatar/icon is enough), hide the
+non-functional "Browse" link at the same breakpoint, done as media query
+rules in `NavAuth.jsx`/CSS.
+
+**This was the real bug, and Sessions 29–33 never had a chance to find
+it.** `nav` has no `flex-wrap`, and every child of `.nav-right` (the
+Browse button, the email `<span>`, the Sign out button) keeps the
+flexbox default `flex-shrink: 0` — none of them, nor `.search-bar`
+beyond its own text-wrap, can give up space, so once the signed-in nav
+has more children than the signed-out one, the row simply grows past the
+viewport. The reason five prior sessions of thorough CSS auditing missed
+this: this sandbox has never had live Supabase credentials
+(`lib/supabase.js` always falls back to `placeholder.supabase.co`), so
+`getSession()` always resolves to `null` and `NavAuth` always rendered
+the signed-out "Sign in" link in every Playwright/DevTools test run to
+date. Nobody — across six sessions — had ever actually rendered the
+state a real logged-in mobile user sees.
+
+**Fix**:
+- `app/globals.css` — new `@media (max-width: 640px)` block:
+  `.nav-auth-email { display: none; }` and `.nav-browse-btn { display:
+  none; }`. Placed as its own block (the existing breakpoints are 768px
+  and 480px; the task specified 640px explicitly).
+- `app/arc/[slug]/page.jsx` — the nav's `<button>Browse</button>` now
+  also carries a `nav-browse-btn` class. Needed because the Sign out
+  button also uses `.btn-ghost`; without a distinct class, a selector
+  broad enough to hide Browse would have hidden Sign out too. (The home
+  page's own "Browse" — part of `NAV_LINKS`/`.navLinks` — was already
+  hidden below 768px since Session 29, so it needed no change. The
+  search page's nav has no Browse button at all.)
+- `NavAuth.jsx` itself needed no code change — `.nav-auth-email` was
+  already a distinct, targetable class name.
+
+**Verified by actually reproducing the bug, not just reasoning about
+it** — a first for this saga. Temporarily hardcoded a fake signed-in
+session into `NavAuth.jsx` (bypassing the real `getSession()`/
+`onAuthStateChange` calls, which this sandbox's placeholder Supabase
+client would otherwise immediately overwrite back to `null`), then
+measured `document.documentElement.scrollWidth` at a 375px Playwright
+viewport:
+- **Before the fix**: arc page `scrollWidth` 552px, search page 518px,
+  home page 428px — all against a 375px viewport. The home page
+  overflowing too is a new finding beyond what was reported: Session
+  29's `.navLinks { display: none }` fix only ever addressed the
+  signed-out state there.
+- **After the fix**: all three pages back to `scrollWidth === clientWidth
+  === 375`, `.nav-auth-email` and `.nav-browse-btn` (arc page)
+  confirmed `display: none`, Sign out button still visible.
+- Also re-confirmed `nav`'s `position: sticky` is unaffected in the
+  signed-in state: `nav.top === 0` both before and after a 2000px
+  scroll.
+
+The temporary `NavAuth.jsx` test edit (hardcoded session, disabled
+`getSession()`/`onAuthStateChange` calls) was fully reverted before
+committing — confirmed via `git diff components/NavAuth.jsx` showing no
+output (byte-identical to before).
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly
+(same 11-route table as every prior session). Playwright was
+temporarily reinstalled for this session's testing and removed before
+finishing (`npm uninstall playwright`, confirmed via `git diff --stat
+package.json package-lock.json` showing no diff). `git status --short`
+before commit showed only `app/arc/[slug]/page.jsx`, `app/globals.css`,
+and `PROJECT.md` modified.
+
+This is treated as the real fix, not another round of hardening: unlike
+Sessions 29–33, this session reproduced the exact reported symptom
+(background/page wider than viewport) under test, then confirmed it
+gone after the change — the first time in this saga that's been
+possible. If mobile overflow is reported again, worth checking whether
+it's this same nav in some state still untested (e.g. a very long real
+email address wider than the `.nav-auth-email` component ever exercised
+before it was hidden — mitigated already since it's `overflow: hidden;
+text-overflow: ellipsis` even above 640px, but combined with even more
+`.nav-right` children than exist today it could resurface) before
+assuming a new cause.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -4103,10 +4189,10 @@ where arcs.slug = 'shibuya-incident-arc';
 ```
 app/
   layout.jsx            Root layout: loads Syne + Inter from Google Fonts, imports globals.css
-  globals.css           All shared page styles, copied from the arc-page mockup's <style> block
+  globals.css           All shared page styles, copied from the arc-page mockup's <style> block. (Session 34) New `@media (max-width: 640px)` block hides `.nav-auth-email` and `.nav-browse-btn` — the real cause of the mobile overflow saga (see "Known issues").
   page.jsx               The home page. Holds all hardcoded data consts and composes the components below.
   page.module.css        Styles unique to the home page (see Session 4 notes above)
-  arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below.
+  arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below. (Session 34) Its nav's "Browse" button now carries a `nav-browse-btn` class so mobile CSS can target it without also hiding NavAuth's Sign out button (both share `.btn-ghost`).
   search/page.jsx        The search results page. Async Server Component — fetches the series panel from AniList (Session 6); ARCS/CHARACTERS/TOP_CONTENT are still hardcoded consts.
   search/search.module.css  Styles unique to the search page (see Session 3 notes above)
   submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above). Step 1 debounces real Open Graph auto-detection via /api/og-fetch (see Session 12 notes above). (Session 14) Reads the session via supabase.auth.getSession() on mount and saves session.user.id as submitted_by, falling back to "anonymous" when signed out.
@@ -4135,7 +4221,7 @@ components/
   SearchNav.jsx        Client component: search page's nav — logo link, functional search input/icon/clear. (Session 13) Also renders NavAuth.
   CharacterChips.jsx   Character chip list (photo or colored-initials fallback, optional mention count) — used by ArcHero and the series page
   ArcList.jsx          Arc-row list with sparklines (imports search.module.css) — used by the search page and the series page
-  NavAuth.jsx           (Session 13) Client component: the signed-in/signed-out slice of a page's nav — used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx
+  NavAuth.jsx           (Session 13) Client component: the signed-in/signed-out slice of a page's nav — used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx. (Session 34) No code change here — the mobile-overflow fix is CSS-only (globals.css); this file's signed-in markup (`.nav-auth-email` + Sign out button) is what the new mobile media query targets.
   YoursBadge.jsx        (Session 14) Client component nested inside ContentCard: renders a "✦ Yours" pill if the current session's user id matches the submittedBy prop, else nothing
 jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
 ```
