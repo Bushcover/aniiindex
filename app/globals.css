@@ -98,6 +98,13 @@ nav {
 .btn-ghost { background: transparent; color: var(--t2); }
 .btn-primary { background: var(--accent); color: #fff; }
 .nav-auth-email { font-size: 12px; color: var(--t2); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Session 35: `.nav-submit-icon`/`.nav-submit-text` — SearchNav.jsx's
+   "Submit content" button collapses to a bare "+" below 640px (see the
+   mobile media query) rather than disappearing outright, since unlike
+   the arc page's decorative "Browse" button this one is a real,
+   functional primary CTA. Hidden by default so desktop (which never
+   hits that media query) renders the plain text button unchanged. */
+.nav-submit-icon { display: none; font-size: 16px; line-height: 1; }
 
 /* ── Arc strip ── */
 /* Session 31: `overscroll-behavior-x: contain` added — a nested
@@ -302,6 +309,20 @@ nav {
      decorative, non-functional Browse button. */
   .nav-auth-email { display: none; }
   .nav-browse-btn { display: none; }
+
+  /* Session 35: reported still overflowing on the search/series pages
+     (both render via SearchNav.jsx, a separate implementation from the
+     arc page's own inline `<nav>` fixed last session) — the signed-in
+     nav there also carries a real `<input>`-based search bar
+     (`.searchWrap`) plus a "Submit content" button, on top of the
+     Sign out button Session 34 already accounted for. Collapse
+     "Submit content" to an icon-only button rather than hiding it
+     outright, since — unlike the arc page's decorative Browse button —
+     this is a real, functional primary CTA every signed-in and
+     signed-out visitor can use. */
+  .nav-submit-text { display: none; }
+  .nav-submit-icon { display: inline; }
+  .nav-submit-btn { padding: 6px 10px; }
 }
 
 @media (max-width: 480px) {
