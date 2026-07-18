@@ -2,7 +2,44 @@ import Link from "next/link";
 import Sparkline from "@/components/Sparkline";
 import HeroSearch from "@/components/HeroSearch";
 import NavAuth from "@/components/NavAuth";
+import { getTrendingArcs } from "@/lib/supabase";
 import styles from "./page.module.css";
+
+// Session 37: forces this route to render dynamically on every request
+// rather than being eligible for static/ISR caching — same reasoning as
+// the arc page's own `export const revalidate = 0` (see app/arc/[slug]/
+// page.jsx), needed now that this page reads live data via
+// getTrendingArcs instead of only hardcoded consts.
+export const revalidate = 0;
+
+// A small, fixed set of the app's existing accent-family hex colors
+// (reused from ArcHero's character-chip palette and the old hardcoded
+// TRENDING_ARCS data), hashed by arc id purely for visual variety on the
+// series-badge dot — decorative only, not a claim about real data the way
+// a fabricated stat number would be.
+const SERIES_DOT_PALETTE = ["#7B6CF6", "#F0706A", "#6AF0A8", "#F0A96A", "#F06AC8", "#6AC8F0", "#6AF0C8"];
+function seriesDotColor(arcId) {
+  return SERIES_DOT_PALETTE[arcId % SERIES_DOT_PALETTE.length];
+}
+
+// Maps a content_items.platform value to a dot color + label for the
+// trending-arc cards — mirrors ContentCard.jsx's own PLATFORM_META (same
+// five known platforms, same "unrecognized value" fallback philosophy),
+// but as a plain hex color rather than a CSS class, matching how the old
+// hardcoded TRENDING_ARCS.platforms[].color was already consumed by
+// `.pltDot`'s inline `style`.
+const PLATFORM_DOT_META = {
+  yt: { color: "#FF0000", label: "YouTube" },
+  youtube: { color: "#FF0000", label: "YouTube" },
+  tt: { color: "#010101", label: "TikTok" },
+  tiktok: { color: "#010101", label: "TikTok" },
+  x: { color: "#1D9BF0", label: "Twitter" },
+  ig: { color: "#E1306C", label: "Instagram" },
+  instagram: { color: "#E1306C", label: "Instagram" },
+  rd: { color: "#FF4500", label: "Reddit" },
+  reddit: { color: "#FF4500", label: "Reddit" },
+};
+const DEFAULT_PLATFORM_DOT = { color: "#666", label: "Link" };
 
 const NAV_LINKS = [
   { label: "Browse", active: true },
@@ -16,139 +53,6 @@ const HERO_STATS = [
   { value: "892K", label: "Fan items" },
   { value: "2.1M", label: "Saves" },
   { value: "48K", label: "Contributors" },
-];
-
-const TRENDING_ARCS = [
-  {
-    slug: "shibuya-incident-arc",
-    seriesDotColor: "#7B6CF6",
-    seriesLabel: "Jujutsu Kaisen · S2",
-    name: "Shibuya Incident Arc",
-    metaLine: "Episodes 38–47 · Oct 2023",
-    spark: [
-      { heightPct: 28, tier: "normal" },
-      { heightPct: 35, tier: "normal" },
-      { heightPct: 55, tier: "high" },
-      { heightPct: 62, tier: "high" },
-      { heightPct: 87, tier: "peak" },
-      { heightPct: 70, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 78, tier: "high" },
-      { heightPct: 42, tier: "normal" },
-    ],
-    count: 2847,
-    platforms: [
-      { color: "#FF0000", label: "YouTube" },
-      { color: "#010101", label: "TikTok" },
-      { color: "#1D9BF0", label: "Twitter" },
-    ],
-    peakLabel: "Peak: Yuji's breakdown",
-  },
-  {
-    slug: "the-rumbling-arc",
-    seriesDotColor: "#F0706A",
-    seriesLabel: "Attack on Titan · Final Season",
-    name: "Rumbling Arc",
-    metaLine: "Episodes 87–96 · Jan 2023",
-    spark: [
-      { heightPct: 55, tier: "high" },
-      { heightPct: 65, tier: "high" },
-      { heightPct: 90, tier: "peak" },
-      { heightPct: 75, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 80, tier: "high" },
-      { heightPct: 95, tier: "peak" },
-      { heightPct: 72, tier: "high" },
-      { heightPct: 50, tier: "normal" },
-    ],
-    count: 3412,
-    platforms: [{ color: "#FF0000" }, { color: "#010101" }, { color: "#FF4500" }],
-    peakLabel: "Peak: The Titans march",
-  },
-  {
-    slug: "bomb-girl-arc",
-    seriesDotColor: "#F0706A",
-    seriesLabel: "Chainsaw Man · S1",
-    name: "Bomb Girl Arc",
-    metaLine: "Episodes 7–9 · Nov 2022",
-    spark: [
-      { heightPct: 30, tier: "normal" },
-      { heightPct: 52, tier: "high" },
-      { heightPct: 68, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 78, tier: "high" },
-      { heightPct: 40, tier: "normal" },
-      { heightPct: 32, tier: "normal" },
-      { heightPct: 28, tier: "normal" },
-      { heightPct: 22, tier: "normal" },
-    ],
-    count: 1893,
-    platforms: [{ color: "#010101" }, { color: "#E1306C" }, { color: "#1D9BF0" }],
-    peakLabel: "Peak: Reze's reveal",
-  },
-  {
-    slug: "swordsmith-village-arc",
-    seriesDotColor: "#6AF0C8",
-    seriesLabel: "Demon Slayer · S3",
-    name: "Swordsmith Village Arc",
-    metaLine: "Episodes 45–55 · Apr 2023",
-    spark: [
-      { heightPct: 22, tier: "normal" },
-      { heightPct: 34, tier: "normal" },
-      { heightPct: 58, tier: "high" },
-      { heightPct: 72, tier: "high" },
-      { heightPct: 80, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 85, tier: "high" },
-      { heightPct: 65, tier: "high" },
-      { heightPct: 40, tier: "normal" },
-    ],
-    count: 2109,
-    platforms: [{ color: "#FF0000" }, { color: "#010101" }, { color: "#E1306C" }],
-    peakLabel: "Peak: Hantengu's true form",
-  },
-  {
-    slug: "onigashima-raid",
-    seriesDotColor: "#F0A96A",
-    seriesLabel: "One Piece · Wano Country Arc",
-    name: "Onigashima Raid",
-    metaLine: "Episodes 954–1008 · 2021–22",
-    spark: [
-      { heightPct: 35, tier: "normal" },
-      { heightPct: 60, tier: "high" },
-      { heightPct: 70, tier: "high" },
-      { heightPct: 65, tier: "high" },
-      { heightPct: 95, tier: "peak" },
-      { heightPct: 80, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 74, tier: "high" },
-      { heightPct: 48, tier: "normal" },
-    ],
-    count: 4201,
-    platforms: [{ color: "#FF0000" }, { color: "#FF4500" }, { color: "#1D9BF0" }],
-    peakLabel: "Peak: Luffy's awakening",
-  },
-  {
-    slug: "chimera-ant-arc",
-    seriesDotColor: "#6AC8F0",
-    seriesLabel: "Hunter × Hunter · 2011",
-    name: "Chimera Ant Arc",
-    metaLine: "Episodes 76–136 · 2013–14",
-    spark: [
-      { heightPct: 25, tier: "normal" },
-      { heightPct: 38, tier: "normal" },
-      { heightPct: 55, tier: "high" },
-      { heightPct: 70, tier: "high" },
-      { heightPct: 78, tier: "high" },
-      { heightPct: 82, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 95, tier: "peak" },
-      { heightPct: 60, tier: "high" },
-    ],
-    count: 3788,
-    platforms: [{ color: "#FF0000" }, { color: "#FF4500" }, { color: "#1D9BF0" }],
-    peakLabel: "Peak: Meruem & Komugi",
-  },
 ];
 
 const POPULAR_SERIES = [
@@ -211,7 +115,15 @@ const FEATURES = [
   { icon: "✦", title: "Attribution first", text: "Creator credit is part of every card, always" },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Session 37: real arcs with real submitted content, most recent first —
+  // replaces the old TRENDING_ARCS, a fully hardcoded list of 6 fake arcs
+  // from shows this app doesn't even have real data for. Returns fewer
+  // than 6 (possibly zero) when fewer real arcs have content yet; the
+  // empty-state placeholders below fill out the remaining grid slots
+  // rather than this page inventing fake arcs to pad the row back to 6.
+  const trendingArcs = await getTrendingArcs(6);
+
   return (
     <>
       <nav>
@@ -265,37 +177,49 @@ export default function HomePage() {
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <div className={styles.sectionTitle}>Trending arcs</div>
-            <div className={styles.sectionSub}>Most active in the last 7 days</div>
+            <div className={styles.sectionSub}>Most recently added content</div>
             <div className={styles.sectionLink}>View all →</div>
           </div>
           <div className={styles.arcGrid}>
-            {TRENDING_ARCS.map((arc) => (
+            {trendingArcs.map((arc) => (
               <Link key={arc.slug} href={`/arc/${arc.slug}`} className={styles.arcCard}>
                 <div className={styles.arcCardTop}>
                   <div className={styles.arcSeriesBadge}>
-                    <div className={styles.arcSeriesDot} style={{ background: arc.seriesDotColor }}></div>
-                    <div className={styles.arcSeriesName}>{arc.seriesLabel}</div>
+                    <div className={styles.arcSeriesDot} style={{ background: seriesDotColor(arc.id) }}></div>
+                    {arc.seriesTitle && <div className={styles.arcSeriesName}>{arc.seriesTitle}</div>}
                   </div>
-                  <div className={styles.arcName}>{arc.name}</div>
-                  <div className={styles.arcMetaLine}>{arc.metaLine}</div>
-                  <Sparkline bars={arc.spark} width="100%" height="36px" />
+                  <div className={styles.arcName}>{arc.title}</div>
+                  {(arc.episodeStart || arc.episodeEnd) && (
+                    <div className={styles.arcMetaLine}>
+                      Episodes {arc.episodeStart}–{arc.episodeEnd}
+                    </div>
+                  )}
+                  {arc.spark.length > 0 && <Sparkline bars={arc.spark} width="100%" height="36px" />}
                 </div>
                 <div className={styles.arcCardBottom}>
                   <span className={styles.arcCount}>{arc.count.toLocaleString("en-US")}</span>
                   <span className={styles.arcCountLabel}>items</span>
                   <div className={styles.arcPlatforms}>
-                    {arc.platforms.map((platform, i) => (
-                      <div
-                        key={i}
-                        className={styles.pltDot}
-                        style={{ background: platform.color }}
-                        title={platform.label}
-                      ></div>
-                    ))}
+                    {arc.platforms.map((platform, i) => {
+                      const meta = PLATFORM_DOT_META[platform] || DEFAULT_PLATFORM_DOT;
+                      return (
+                        <div
+                          key={i}
+                          className={styles.pltDot}
+                          style={{ background: meta.color }}
+                          title={meta.label}
+                        ></div>
+                      );
+                    })}
                   </div>
-                  <div className={styles.arcPeak}>✦ {arc.peakLabel}</div>
+                  {arc.peakLabel && <div className={styles.arcPeak}>✦ {arc.peakLabel}</div>}
                 </div>
               </Link>
+            ))}
+            {Array.from({ length: Math.max(0, 6 - trendingArcs.length) }).map((_, i) => (
+              <div key={`empty-${i}`} className={styles.arcCardEmpty}>
+                <span>More trending arcs coming soon</span>
+              </div>
             ))}
           </div>
         </div>

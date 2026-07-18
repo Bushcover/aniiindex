@@ -295,6 +295,27 @@
   border-radius: 50%;
 }
 
+/* Session 37: fills any of the 6 "Trending arcs" grid slots real data
+   doesn't cover yet (fewer than 6 arcs with content, or a Supabase-read
+   failure returning zero) — a plain dashed placeholder rather than
+   padding the row with fake arcs the way the old hardcoded list did.
+   min-height roughly matches a real .arcCard's rendered height so the
+   grid doesn't visibly jump between rows that have real cards and rows
+   that don't. */
+.arcCardEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 158px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r);
+  color: var(--t3);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* ── Series cards (horizontal scroll) ── */
 .seriesScroll {
   display: flex;

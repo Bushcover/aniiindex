@@ -58,12 +58,6 @@ const ARC = {
     { initials: "NK", color: "#F06AC8", name: "Nobara Kugisaki", count: 334 },
     { initials: "SC", color: "#6AC8F0", name: "Pseudo-Geto", count: 278 },
   ],
-  stats: [
-    { value: "2,847", label: "Fan items" },
-    { value: "14,209", label: "Saves" },
-    { value: "891", label: "This week" },
-    { value: "38", label: "Contributors" },
-  ],
 };
 
 const TABS = [
@@ -274,6 +268,39 @@ export default async function ArcPage({ params }) {
   const description = series?.description || ARC.description;
   const characters = realCharacters?.length ? realCharacters : ARC.characters;
 
+  // `getArcBeats`/`getArcContent` both resolve to `null` specifically when
+  // `params.slug` doesn't match a seeded arc — treated as one signal so the
+  // page never mixes real beats with hardcoded content or vice versa.
+  const arcFoundInDb = realArcBeats !== null && realArcContent !== null;
+
+  // Session 37: the hero stats bar (Fan items/Saves/This week/Contributors)
+  // used to always render `ARC.stats` — four numbers hardcoded from the
+  // Phase 1 mockup, shown regardless of which arc (real or fallback) was
+  // actually being viewed. "Fan items" is the one figure this app can
+  // actually compute: `realArcContent` (fetched above via getArcContent,
+  // same `arc_id` + visible-status filter used everywhere else on this
+  // page) already *is* the exact set of items this count needs — no
+  // separate query required. The other three were never tracked by any
+  // table this project has (no "save" action exists at all; "this week"
+  // and "contributors" would need created_at-windowed / distinct-
+  // submitted_by aggregation this project has no view or RPC for yet) —
+  // shown as a plain dash rather than inventing a number, per the
+  // project's standing "don't fabricate data" convention (see e.g. the
+  // arc nav/series arc list omitting fan-item counts in Session 25).
+  // Applies even on the hardcoded-fallback path (`arcFoundInDb` false,
+  // i.e. `params.slug` doesn't match any seeded arc) — that path already
+  // renders fake mockup beats/content elsewhere, but a fake *stat number*
+  // specifically is exactly what this task was about removing, so it
+  // isn't reintroduced here just because the rest of that fallback page
+  // is still a mockup.
+  const fanItemsCount = arcFoundInDb ? realArcContent.length : 0;
+  const heroStats = [
+    { value: fanItemsCount.toLocaleString("en-US"), label: "Fan items" },
+    { value: "—", label: "Saves" },
+    { value: "—", label: "This week" },
+    { value: "—", label: "Contributors" },
+  ];
+
   const arc = {
     ...ARC,
     name: arcMeta?.title || ARC.name,
@@ -281,12 +308,8 @@ export default async function ArcPage({ params }) {
     breadcrumb: [seriesName, ARC.breadcrumb[1]],
     description,
     characters,
+    stats: heroStats,
   };
-
-  // `getArcBeats`/`getArcContent` both resolve to `null` specifically when
-  // `params.slug` doesn't match a seeded arc — treated as one signal so the
-  // page never mixes real beats with hardcoded content or vice versa.
-  const arcFoundInDb = realArcBeats !== null && realArcContent !== null;
 
   const intensityBeats = arcFoundInDb
     ? realArcBeats.map((beat) => ({
