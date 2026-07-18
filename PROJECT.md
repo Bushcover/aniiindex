@@ -194,7 +194,7 @@ app/
   auth/auth.module.css            Styles for auth/page.jsx and auth/callback/page.jsx (imported by both).
   auth/callback/page.jsx          Magic-link redirect handler (`/auth/callback`) — client component, wrapped in <Suspense> (required for useSearchParams in a statically-rendered page). Exchanges the URL's `code` for a session via exchangeCodeForSession, or falls back to checking for an already-parsed hash-based session (implicit-flow links), then redirects to `/` or shows an error. Genuinely load-bearing — every real magic-link click passes through this page.
 lib/
-  anilist.js                      searchSeries(query, {perPage}) / getSeriesById(id) / getSeriesCharacters(id, {perPage}) / getSeriesWithRelations(id) — real AniList GraphQL calls via a shared postToAniList() helper, each cached via Next's fetch cache (next: { revalidate: 3600 }). All four throw on request/GraphQL failure; getSeriesById/getSeriesWithRelations strip AniList's HTML markup out of `description` before returning. Unchanged since Session 8.
+  anilist.js                      searchSeries(query, {perPage}) / getSeriesById(id) / getSeriesCharacters(id, {perPage}) / getSeriesWithRelations(id) — real AniList GraphQL calls via a shared postToAniList() helper, each cached via Next's fetch cache (next: { revalidate: 3600 }). All four throw on request/GraphQL failure; getSeriesById/getSeriesWithRelations strip AniList's HTML markup out of `description` before returning. searchSeries unchanged since Session 8 through Session 42; as of Session 43, its query sorts by `POPULARITY_DESC` (was `SEARCH_MATCH`) and adds a `popularity_greater: $minPopularity` filter (a new `MIN_SEARCH_POPULARITY = 1000` constant) — fixes a real bug where AniList's own relevance ranking put an obscure, unrelated title ahead of the actual popular series a query almost always means (searching "Demon Slayer" returned "Onigiri," AniList id 21612, ahead of the real "Kimetsu no Yaiba," id 101922, confirmed live against AniList's API both before and after this fix). `type: ANIME` (present since Session 6, unchanged) is what already restricts results to anime rather than manga.
   supabase.js                     Exports the shared `supabase` client (createClient with a placeholder-URL fallback so a missing env var can't crash next build; a custom fetch wrapper opts every request out of Next's server fetch cache) plus getArcMeta(slug) (added Session 24 — selects `title, episode_start, episode_end, anilist_series_id` from the arc's own row; returns null for an unseeded slug, same convention as the two below; this is what lets the arc page derive a real header/AniList id per slug instead of always assuming Shibuya/JJK), getArcsBySeries(anilistSeriesId) (added Session 25 — selects `slug, title, episode_start, episode_end, order_index` for every arc row matching a given AniList series id, ordered by order_index; always returns an array, `[]` on no match or query error, never null, unlike the slug-keyed lookups below — used by the arc page's nav strip and the series page's arc list; as of Session 30 also checks a small hardcoded `ANILIST_ID_ALIASES` map — currently just `{145064: [113415]}`, since AniList gives Jujutsu Kaisen Season 2 its own separate id (145064) from the one this project's real arcs are actually seeded under (Season 1's 113415, confirmed live against AniList's API), so a user who searches "JJK Season 2" specifically would otherwise see zero real arcs on the series page), getArcBeats(slug), getArcContent(slug) (both return null for an unseeded slug, an array otherwise; getArcContent's select list includes submitted_by; its `.in('status', ['confirmed','pending'])` allowlist is also what excludes flagged items, with no separate filtering step needed), confirmContentItem(id), flagContentItem(id), and getTrendingArcs(limit=6) (added Session 37 — fetches the most recent visible content_items, embedding each item's arc/series, and collapses to one entry per arc_id in JS (a Map preserves the newest-first insertion order, so no separate aggregate query is needed), then a second query for those arcs' real beats to build a genuine sparkline/peak-label; always returns an array, `[]` on a query error or when nothing has content yet — no fake data ever padded in, that's the home page's own job via its empty-state placeholder). As of Session 25, the internal `getArcRowBySlug` helper (used by getArcBeats/getArcContent) and getArcMeta both use `.limit(1).maybeSingle()` instead of `.single()` — defends against a duplicate-slug row (this table is seeded entirely by hand via the SQL editor) making `.single()` throw and taking every caller down with it, rather than degrading to "use the first match." getArcMeta's Session 25 temporary diagnostic `console.log` (added to chase a missing-beats bug on `/arc/control-devil-arc`) was removed in Session 27 once that bug was confirmed fixed live. confirmContentItem: select-then-update, no-ops if the row isn't currently 'pending', chains `.select().maybeSingle()` onto its update and throws + console.errors if the result is null (an RLS-blocked UPDATE matches zero rows silently — this is what let Session 18's original version report false success). flagContentItem (rewritten in Session 21): does an initial select to confirm the id exists/is readable, then performs the update and trusts its own `{ error }` result alone — no post-update verification select, specifically because that verification technique (tried two different ways across Sessions 19–20) kept hitting a genuine Postgres `42501` permission error on a row whose new status ('flagged') isn't covered by the read policy. Logs the resolved Supabase URL/key-presence once at module load (safe — never logs the actual key). As of Session 39 (Phase 7), also exports searchSeries(query) (case-insensitive `ilike` partial match on `series.title`, up to 10 rows, blank query short-circuits to `[]` without querying; never throws, same best-effort convention as getArcsBySeries/getTrendingArcs) and getAllArcsForSeries(seriesId) (every `arcs` row for a given `series.id` foreign key, ordered by order_index; always an array, `[]` on no match or error) — both added for `/submit`'s new manual series/arc picker. As of Session 42, also exports getSeriesByAnilistId(anilistId) (resolves a `series` row from its AniList numeric id, `.limit(1).maybeSingle()`, same duplicate-row defense as getArcRowBySlug/getArcMeta; returns null when unseeded — used by the search page as the first step before getAllArcsForSeries, since a search result only ever carries an AniList id, not the internal `series.id` that function needs) and getArcSparkline(arcId) (an arc's own beats ordered by order_index, shaped directly as Sparkline bars — `{heightPct, tier}`, same intensity/is_peak-derived tier logic getTrendingArcs already uses — keyed by the arc's own row id rather than its slug, since every caller already has a real `arcs` row in hand; always an array, `[]` on no beats seeded yet or a query error, with no fallback baked in — the search page decides what to render instead). **Naming collision worth knowing about**: `lib/anilist.js` has its own, unrelated `searchSeries(query, {perPage})` (a live AniList GraphQL search, unchanged since Session 6) — same function name, different module, different backing data (AniList's catalog vs. this project's own seeded `series` table). No file imports both today (`app/search/page.jsx` imports AniList's; `app/submit/page.jsx` imports this one), so there's no runtime clash, but a future session adding a new call site should double-check which `searchSeries` it's importing from `@/lib/anilist` vs. `@/lib/supabase` — the two are not interchangeable.
   auth.js                         signInWithEmail(email) — supabase.auth.signInWithOtp with emailRedirectTo pointed at /auth/callback (a genuine magic link, see the Session 15/16 history for why not a code). signOut() and getSession() — thin wrappers, getSession() swallows its own error and returns null rather than throwing. All three exported; no other functions in this file.
 components/
@@ -4737,6 +4737,58 @@ confirmed all three states. Playwright installed temporarily
 (`playwright-core`, `npm install --no-save`) and uninstalled after —
 confirmed via `git status` showing no diff on `package.json`/
 `package-lock.json`.
+
+## Session 43
+
+Bug fix, requested directly: searching "Demon Slayer" on `/search`
+returned the wrong series — AniList's own `SEARCH_MATCH` sort ranked
+"Onigiri" (AniList id 21612, an obscure short whose alternate titles
+happen to include "Demon Slayer") ahead of "Kimetsu no Yaiba" (id
+101922, the real Demon Slayer TV series, ~100x more popular). Confirmed
+live against AniList's real API before touching any code — `curl`ing the
+exact GraphQL query `lib/anilist.js`'s `searchSeries` was already sending
+reproduced the bug exactly (Onigiri first, popularity 8,872; the real
+series fourth, popularity 972,447).
+
+**Investigated the task's literal instruction before implementing it,
+since one part of it was invalid AniList syntax**: the task asked to "add
+`format: ANIME` to the search variables." AniList's schema has two
+separate axes — `type` (`MediaType`: `ANIME`/`MANGA`) and `format`
+(`MediaFormat`: `TV`/`TV_SHORT`/`MOVIE`/`OVA`/`ONA`/`SPECIAL`/`MUSIC`) —
+and `ANIME` isn't a valid `MediaFormat` value at all. Confirmed this
+directly against the live API: sending `format: ANIME` as a `MediaFormat`
+variable gets a real GraphQL validation error (`Variable "$format" got
+invalid value "ANIME"; Expected type MediaFormat.`), which would have
+broken every search on the page, not fixed anything. The actual "restrict
+to anime, not manga" intent behind that request is already fully covered
+by `type: ANIME`, present in this query since Session 6 and left
+unchanged — so `format` was deliberately not added, rather than adding
+something that doesn't compile just to match the letter of the request.
+
+**What was actually changed, in `lib/anilist.js`'s `searchSeries`**:
+- `sort: SEARCH_MATCH` → `sort: POPULARITY_DESC` — this alone fixes the
+  reported case: the real, popular series a search almost always means
+  now outranks a coincidentally-similarly-named obscure one, rather than
+  AniList's own text-relevance score doing the ranking.
+- Added `popularity_greater: $minPopularity` to the query, with a new
+  `MIN_SEARCH_POPULARITY = 1000` constant (matching the task's requested
+  threshold) — excludes any result under that popularity outright, not
+  just ranking it lower. Confirmed live against AniList's real API that
+  `popularity_greater` is a real, valid filter argument on `Media`
+  (unlike the invalid `format: ANIME` above) before relying on it.
+
+**Verification**: `npm run build` compiles cleanly. Ran `next dev` and
+hit the real `/search` route directly (this sandbox can reach AniList's
+live API, confirmed again this session) for the exact reported query —
+confirmed the series panel now shows "Demon Slayer: Kimetsu no Yaiba"
+(real id 101922, popularity 972,447, `/series/101922`), not Onigiri.
+Also re-ran three other known-good searches (Jujutsu Kaisen, Attack on
+Titan, One Piece, Chainsaw Man) to confirm the sort change didn't
+regress any series this app already seeds real arcs against — all four
+still resolve to the correct real series. Directly `curl`ed the exact
+GraphQL query/variables the updated code sends, independent of the Next
+app, to confirm AniList's response ordering matches what the code now
+relies on rather than trusting the rendered page alone.
 
 ## Database schema
 
