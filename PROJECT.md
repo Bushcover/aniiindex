@@ -163,9 +163,19 @@ Always confirm with `git log --oneline -1` rather than assuming.
   trending arcs going from hardcoded mockup numbers to real Supabase
   queries (37). See "What's changed since Session 22's audit" above for
   the summary and "Known issues"/the session log below for full detail.
-- **Phase 7 roadmap**: not started. See "Phase 7 roadmap" at the end of
-  this section for what's next, roughly ordered by what unblocks the most
-  other things.
+- **Phase 7** (Sessions 39–44, plus further arc seeding after Session 44
+  done outside any logged session): closed as of Session 45, per direct
+  instruction — see that session's own log entry for what's confirmed vs.
+  merely reported. This bullet and the "Phase 7 roadmap" section below it
+  both still said "not started"/"nothing has been started yet" through
+  Session 44 despite Sessions 39–44 being exactly that phase's real work —
+  stale top-section drift Session 45 corrected as part of its own edit,
+  not a full re-audit (only Sessions 17/22/38 have done those).
+- **Phase 8** (Session 45, in progress): real per-page SEO metadata and
+  Open Graph/Twitter previews. See "Backlog (post-Phase 7)" at the end of
+  this section for what Phase 7's own roadmap left open — closing Phase 7
+  does not mean every item on that list is done; most remain open and are
+  carried forward as general backlog, not resolved by the phase ending.
 
 ### Complete file inventory
 
@@ -370,7 +380,7 @@ removed the dependency on this widening entirely instead of keeping the
 SQL, since permanently widening the public read policy is a bigger,
 longer-lived change than that one bug fix needed, and it would work
 *against* a legitimate future need (a moderation view that specifically
-wants to query flagged rows — see "Phase 7 roadmap"). If it was already
+wants to query flagged rows — see "Backlog (post-Phase 7)"). If it was already
 run against the live project, it's harmless to leave in place.
 
 **No new RLS is needed for `getTrendingArcs` (added Session 37)** — it
@@ -480,7 +490,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 - ~~`character_tags`/character detection on `/submit` never reflects the real pasted content — always the one hardcoded Gojo Satoru chip~~ — **fixed, Session 40**. There was never real *detection* to begin with (no session has attempted parsing character names out of a pasted link/caption) and still isn't — but the field is no longer hardcoded, either: it's real free-text now, the user types whatever names actually apply and those are exactly what get saved.
 - **Auth has never completed a real magic-link round trip from this sandbox.** Every piece was verified individually against mocked Supabase responses — the real `signInWithOtp` call, the error/retry path, the signed-in nav state (verified with an injected fake session) — but no session has clicked a real emailed magic link end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, click the link, confirm it lands on `/auth/callback` and then `/` with the nav showing the signed-in state. This is also the one remaining gap for confirming a genuine (not mocked/injected) `auth.uid()`-shaped UUID landing in `content_items.submitted_by`.
 - **A 6-digit-code sign-in email was tried (Session 15) and reverted (Session 16)** — needs a Supabase-project setting (a paid-plan-only email-template editor, or custom SMTP) this app's code has no control over. Revisit only if the project moves off the free plan.
-- **Session 14's `"Users can read their own submissions"` RLS policy is presumed not yet run** — no feature has ever depended on it (there's no "my submissions" view yet — see "Phase 7 roadmap"), so there's no behavioral signal either way, unlike the Session 18 grant/policy. Harmless either way today, since every row is currently `'pending'`/`'confirmed'`/`'flagged'` and none of those states need this policy to be visible.
+- **Session 14's `"Users can read their own submissions"` RLS policy is presumed not yet run** — no feature has ever depended on it (there's no "my submissions" view yet — see "Backlog (post-Phase 7)"), so there's no behavioral signal either way, unlike the Session 18 grant/policy. Harmless either way today, since every row is currently `'pending'`/`'confirmed'`/`'flagged'` and none of those states need this policy to be visible.
 - **Nothing beyond `/submit` and the arc page's cards reads/uses the signed-in identity.** No "my submissions" list, no way to edit or delete your own submission, no moderation view of any kind.
 - **The Session 18 grant + update policy SQL is presumed (not formally confirmed) applied to the live Supabase project** — see the Database schema section above for the behavioral evidence and the diagnostic query nobody has run and reported back yet. If `/api/confirm`/`/api/flag` ever appear broken again, check Vercel's function logs for `[confirmContentItem]`/`[flagContentItem]`/`[api/confirm]`/`[api/flag]` lines before assuming a new code bug — this exact SQL is the first thing to rule out.
 - **Confirming isn't atomic and has no per-visitor ledger.** `confirmContentItem` does a plain select-then-update, not a single atomic statement — a real (if narrow) race exists if two confirms land on the exact same row at the same instant. More importantly, nothing stops the same browser confirming the same item twice and single-handedly promoting it to `confirmed` — there's no auth requirement (by design) and no ledger tracking who confirmed what.
@@ -528,16 +538,24 @@ sessions (verified by mock/browser-driven testing, as noted):
 - **No thumbnail images anywhere except real submitted content** — every hardcoded card still uses a CSS gradient placeholder.
 - **No per-visitor confirmation/flag ledger** — nothing stops the same browser confirming or flagging the same item repeatedly.
 
-### Phase 7 roadmap
+### Backlog (post-Phase 7)
 
 Phases 1–4 are closed. Phase 5 (quality control) is stable — confirming
 and flagging both work end to end in production. Phase 6 (Sessions
-22–37 — real multi-arc/multi-series data, real tab filtering, a full
-mobile-responsive layout, real arc-page/home-page stats) is closed as of
-this audit; see "What's changed since Session 22's audit" above for the
-summary. **Nothing under Phase 7 has been started yet** — this section
-is a full roadmap, not a partial one. Roughly in order of "unblocks the
-most other things":
+22–37) and Phase 7 (Sessions 39–44, plus further real arc/series seeding
+done directly against the live project after Session 44 — see Session
+45's own log entry) are both closed. Phase 8 (Session 45, SEO metadata +
+Open Graph previews) is in progress — see the Session 45 log entry for
+what it actually covers.
+
+**This section was originally written as "Phase 7 roadmap" in Session 38,
+before Phase 7's own work (Sessions 39–44) happened, and was never
+updated after** — every item below was Phase 7's own itemized backlog,
+not a later phase's. Renamed here (Session 45) to reflect what it
+actually is now: the items Phase 7 didn't get to, carried forward rather
+than resolved by that phase closing. Items already struck through below
+(5, 6, 8) were finished during Phase 7 itself; every other item remains
+genuinely open. Roughly in order of "unblocks the most other things":
 
 1. **Formally confirm the Session 18 grant + policy SQL is applied**, using the diagnostic query in the Database schema section above, rather than relying on behavioral inference from bug reports — cheap to do, and removes the last piece of "presumed" from this file's Supabase state.
 2. **A real moderation/flagged-items view** — even a minimal one (a `/admin` or `?status=flagged` view listing flagged `content_items`, with a button to un-flag or genuinely delete) closes the biggest gap Phase 5 left open: flagging is currently permanent and unreviewable. This is also where a permissions model (who's allowed to moderate) needs to get decided.
@@ -4874,6 +4892,153 @@ plus both badges), confirming the fallback path is untouched. Screenshot-
 confirmed both. Playwright installed temporarily (`playwright-core`,
 `npm install --no-save`) and uninstalled after — confirmed via `git
 status` showing no diff on `package.json`/`package-lock.json`.
+
+## Session 45
+
+Phase 8, first session — real per-page SEO meta tags and Open Graph/
+Twitter previews, requested directly. Opened with two corrections from
+the user, neither independently verifiable from this sandbox (same
+standing limitation as every other live-Supabase fact in this file — no
+real credentials have ever been available here): **Phase 7 is closed**,
+not in-progress as this file's own "Phase 7 roadmap" intro paragraph
+still said (that paragraph was written in Session 38, before Sessions
+39–44 — the actual Phase 7 work — happened, and was never updated after;
+that section is renamed "Backlog (post-Phase 7)" this session, see its
+own updated intro); and **the database was seeded further after Session
+44**, now 21 arcs across 7 series (Jujutsu Kaisen, Attack on Titan,
+Chainsaw Man, Demon Slayer, Hunter × Hunter, Vinland Saga, Fullmetal
+Alchemist: Brotherhood), with the AniList ids for Hunter × Hunter and
+Demon Slayer corrected after testing — done directly against the live
+Supabase project, outside any session logged in this file, so it's
+recorded here as reported rather than independently confirmed. Closing
+Phase 7 does **not** mean its own itemized backlog is done — the
+moderation view, per-visitor ledger, "my submissions" view, manual
+correction UI, real magic-link round-trip test, `next/image` adoption,
+search filter pills, and trending-ranking items are all still open; see
+"Backlog (post-Phase 7)" above, which carries them forward rather than
+treating the phase's closure as resolving them.
+
+**Scope, clarified with the user before writing any code**: this project
+had no metadata beyond a single static site-wide `<title>` before this
+session, and every page has a very different real-vs-hardcoded data
+shape, so which pages get real per-page tags and what backs the OG image
+were both genuine open decisions. Answered: every page gets real
+metadata, including the three that only ever had the root layout's
+single static title before (home, `/submit`, `/auth`); Open Graph
+preview images reuse AniList's own real poster/banner URLs wherever a
+page has one, rather than generating branded cards (no
+`next/og`/`ImageResponse` route was added) — matches this project's
+standing "omit rather than fabricate" convention, since there's no
+logo/social-card asset anywhere in this repo (no `public/` directory
+exists at all) to build a generated card around anyway.
+
+**`app/layout.jsx`** — the previous single static `{title, description}`
+export became a real site-wide default: `metadataBase` (a `SITE_URL`
+constant, `NEXT_PUBLIC_SITE_URL` → Vercel's own `VERCEL_URL` → a
+localhost dev fallback — no custom domain is configured anywhere in this
+project, confirmed against `package.json` and this file's own "Default
+branch" note — same graceful-fallback shape as `lib/supabase.js`'s own
+placeholder-URL convention rather than throwing when nothing's
+configured), `title: { default, template: "%s · Aniindex" }` (a child
+page sets just its own short title and gets " · Aniindex" appended; the
+home page deliberately doesn't set its own title at all, so it inherits
+`default` instead of templating against itself), and site-wide
+`openGraph`/`twitter` fields (`siteName`, `type`, `locale`, a `summary`
+card default). Deliberately **no** site-wide `openGraph.images` — this
+app has no image asset to default to, and per the "omit rather than
+fabricate" convention, only pages with a real image (below) set one.
+
+**Per-page metadata**:
+- **`app/page.jsx` (home)** — a real `description`/`openGraph`/
+  `alternates.canonical` matching the hero copy, no title override (see
+  above), no image (no single real image represents the whole home
+  page).
+- **`app/arc/[slug]/page.jsx`** — new `generateMetadata({ params })`:
+  fetches `getArcMeta(params.slug)` then `getSeriesById(...)` (the same
+  two calls the page component itself makes, independently — Metadata
+  API functions can't share locals with the page component, but both
+  hit the same Next fetch-cache entry via `lib/anilist.js`'s existing
+  `next: { revalidate: 3600 }`, so this doesn't cost a second live
+  AniList request once either has warmed that cache entry). Title is
+  `"{arc name} — {series name}"`; description is the real AniList series
+  description, truncated to ~200 chars with an ellipsis (a new local
+  `truncateDescription` helper); `openGraph.images`/`twitter.images` use
+  the series' real `bannerImage` (preferred, widescreen) or
+  `coverImage.large` as a fallback, omitted entirely if the AniList call
+  itself failed. Both the real seeded-arc slugs and any unseeded slug
+  (which falls back to the hardcoded Shibuya/JJK mockup data, same as
+  the page body) get real, non-empty metadata — the unseeded path's
+  `FALLBACK_ANILIST_SERIES_ID` (JJK, 113415) already resolves a real
+  series via AniList, so its fallback metadata is real AniList data, not
+  empty; `alternates.canonical` always reflects the actually-requested
+  slug, even on the fallback path.
+- **`app/series/[slug]/page.jsx`** — new `generateMetadata({ params })`:
+  `getSeriesWithRelations(anilistId)`, same title/description/image
+  shape as the arc page; a series AniList can't resolve renders a
+  `noindex` "Series not found" title, mirroring the page body's own
+  "Couldn't load this series" error state rather than fabricating
+  metadata for a series that isn't actually loading.
+- **`app/search/page.jsx`** — new `generateMetadata({ searchParams })`:
+  a bare `/search` (no `?q=`) gets a generic indexable title/description;
+  a query gets its own `searchSeries(query)` call (`lib/anilist.js`'s
+  own function — not `lib/supabase.js`'s same-named-but-unrelated one,
+  per this file's own Session 39 naming-collision note) resolving the
+  same top match the page body uses, with `robots: { index: false }` on
+  a query with no real match (thin/duplicate content — every no-match
+  query would otherwise look identical to a search engine) and real
+  title/description/image for one that does match. Doesn't fetch the
+  matched series' full description for this — that would be a second,
+  distinct AniList round trip purely for metadata that the arc/series
+  pages don't need (they already fetch the full series object for the
+  page body itself) — uses a short generated sentence instead.
+  `lib/anilist.js`'s `SEARCH_SERIES_QUERY` gained a `bannerImage` field
+  (it already had `coverImage.large`) so this page's OG image can be the
+  same widescreen banner the arc/series pages use, instead of a portrait
+  poster.
+- **`app/submit/page.jsx`, `app/auth/page.jsx`,
+  `app/auth/callback/page.jsx`** — all three are client components
+  (`"use client"`), and the Metadata API only works from a Server
+  Component — a file can't be both `"use client"` and export `metadata`.
+  Added `app/submit/layout.jsx` and `app/auth/layout.jsx` (new files,
+  the standard Next.js pattern for exactly this: a plain Server
+  Component sibling in the same route segment that exports `metadata`
+  and renders `{children}` unchanged). `/auth`'s layout also covers
+  `/auth/callback` (no route-specific override needed, both are "the
+  sign-in flow") and sets `robots: { index: false, follow: false }` —
+  deliberate: a sign-in form and a magic-link redirect handler have
+  nothing worth ranking, and indexing the callback risks a search engine
+  treating a stale `?code=` URL as a real page. `/submit` stays
+  indexable (a real, useful page to land on directly).
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table (static/dynamic split) as Session 44 left it. Beyond that,
+verified server-rendered `<head>` output directly via `curl` against a
+running `next dev` — no Playwright needed, since this is server-rendered
+markup, not client interaction. This sandbox can reach AniList's live
+API directly (re-confirmed this session, consistent with Session 26's
+original finding), so the arc/series/search checks ran against real
+AniList data end to end, not a mock: home's title/description/`og:*`/
+`twitter:*` with no `og:image`; a real seeded arc slug
+(`shibuya-incident-arc`) with a real truncated AniList description and a
+real `s4.anilist.co` banner URL as both `og:image` and `twitter:image`,
+`twitter:card` correctly `summary_large_image`; an unseeded arc slug
+still resolving real (JJK) fallback metadata rather than an empty one,
+with `alternates.canonical` correctly reflecting the actually-requested
+(unseeded) slug, not the fallback data's own slug; the series page for a
+real AniList id showing the same real title/image; `/search?q=Chainsaw+
+Man` resolving a real match with a real banner image; a plain `/search`
+(no query) and a genuinely no-match query both rendering correctly, the
+latter with `robots: noindex, follow`; `/submit` and `/auth` both
+templating to `"... · Aniindex"`, and `/auth`/`/auth/callback` both
+correctly `noindex, nofollow`. Supabase itself still has no live
+credentials available here, so the arc page's real/fallback metadata
+branching was cross-checked against this project's standing local
+mock-PostgREST-server convention (Sessions 18–21, 39, 42, 44), seeded
+with one real-shaped arc row — sufficient for confirming
+`getArcMeta`-driven branching in `generateMetadata`, not a substitute
+for confirming metadata against the actual 21-arc/7-series seed
+described above, which remains unverified from this sandbox. Playwright
+was not installed this session — nothing here needed a real browser.
 
 ## Database schema
 

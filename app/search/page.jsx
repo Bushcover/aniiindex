@@ -93,6 +93,81 @@ function formatLabel(format) {
   return format ? format.replaceAll("_", " ") : null;
 }
 
+// Phase 8 (Session 45): real per-query SEO metadata + Open Graph/Twitter
+// preview. Deliberately resolves its own top AniList match rather than
+// sharing the page component's own `series` variable below — the
+// Metadata API calls generateMetadata as a separate function that can't
+// see the page component's locals, so this repeats the same
+// `searchSeries(query)` call the page makes; both hit the same Next
+// fetch-cache entry (`next: { revalidate: 3600 }`, lib/anilist.js), so
+// this doesn't cost a second live AniList request once one of the two
+// has populated that cache. Doesn't fetch the matched series' full
+// description (getSeriesById/getSeriesWithRelations) just for this —
+// that would be a second, distinct AniList round trip purely for
+// metadata, so this uses a short generated sentence instead of the real
+// AniList synopsis the arc/series pages' own metadata gets (both of
+// which already fetch that full series object for the page itself, at
+// no extra cost).
+export async function generateMetadata({ searchParams }) {
+  const rawQuery = Array.isArray(searchParams?.q) ? searchParams.q[0] : searchParams?.q;
+  const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
+
+  if (!query) {
+    return {
+      title: "Search",
+      description: "Search aniindex for an anime series to browse its arcs, characters, and fan content.",
+      alternates: { canonical: "/search" },
+    };
+  }
+
+  const canonical = `/search?q=${encodeURIComponent(query)}`;
+
+  let series = null;
+  try {
+    const results = await searchSeries(query);
+    series = results[0] || null;
+  } catch (err) {
+    series = null;
+  }
+
+  // No real series match — a "no results" page has nothing worth a
+  // search engine indexing (thin/duplicate content across every
+  // no-match query), unlike a query that did resolve a real series
+  // below, which is real, query-specific content worth indexing.
+  if (!series) {
+    return {
+      title: `"${query}"`,
+      description: `Search results for "${query}" on Aniindex.`,
+      alternates: { canonical },
+      robots: { index: false, follow: true },
+    };
+  }
+
+  const seriesName = series.title.english || series.title.romaji;
+  const title = `${seriesName} — search results for "${query}"`;
+  const description = `${seriesName}'s arcs, characters, and fan content on Aniindex.`;
+  const image = series.bannerImage || series.coverImage?.large || null;
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "website",
+      ...(image && { images: [{ url: image }] }),
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(image && { images: [image] }),
+    },
+  };
+}
+
 export default async function SearchPage({ searchParams }) {
   const rawQuery = Array.isArray(searchParams?.q) ? searchParams.q[0] : searchParams?.q;
   const query = typeof rawQuery === "string" ? rawQuery.trim() : "";

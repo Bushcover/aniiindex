@@ -228,6 +228,74 @@ function buildBeatSections(beats, content) {
   });
 }
 
+// Trims an AniList description down to a meta-description-friendly
+// length. AniList's own text can run to several paragraphs (already
+// HTML-stripped by lib/anilist.js); search engines and social previews
+// both truncate well past ~160-200 characters anyway, so this just does
+// it deliberately with an ellipsis rather than letting it get cut off
+// mid-sentence by whatever's rendering it.
+function truncateDescription(text, maxLength = 200) {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength).trim()}…`;
+}
+
+// Phase 8 (Session 45): real per-arc SEO metadata + Open Graph/Twitter
+// preview. Runs as a separate function from the page component below
+// (required by the Metadata API) but fetches the same two calls
+// (getArcMeta, getSeriesById) the page itself makes — not wired together
+// on purpose, since generateMetadata and the page component can't share
+// local variables, but each call independently hits Next's fetch cache
+// (`next: { revalidate: 3600 }` on every lib/anilist.js call), so this
+// doesn't cost a second live AniList round trip once either one has
+// warmed that cache entry. Mirrors the page component's own
+// error-tolerant style (`.catch(() => null)` instead of letting a
+// Supabase/AniList failure take down metadata generation, which would
+// otherwise surface as a page-level error) rather than the throw-on-
+// error contract getArcMeta/getSeriesById normally have.
+export async function generateMetadata({ params }) {
+  const arcMeta = await getArcMeta(params.slug).catch(() => null);
+  const anilistSeriesId = arcMeta?.anilist_series_id ?? FALLBACK_ANILIST_SERIES_ID;
+  const series = await getSeriesById(anilistSeriesId).catch(() => null);
+
+  const arcName = arcMeta?.title || ARC.name;
+  const seriesName = series ? series.title.english || series.title.romaji : ARC.breadcrumb[0];
+  const description = truncateDescription(series?.description) || ARC.description;
+  // AniList's bannerImage (widescreen) is preferred over coverImage
+  // (portrait) for a social-preview card — same preference order as the
+  // series page's own generateMetadata. Real seeded arcs and the
+  // hardcoded-fallback path (an unseeded slug, still using JJK's real
+  // AniList id) both resolve a real `series` here, so this only omits
+  // `images` entirely if the AniList call itself failed.
+  const image = series?.bannerImage || series?.coverImage?.large || null;
+  const title = `${arcName} — ${seriesName}`;
+  const url = `/arc/${params.slug}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "article",
+      ...(image && { images: [{ url: image }] }),
+    },
+    twitter: {
+      // A "summary_large_image" card with no image is invalid per
+      // Twitter's own card spec — falls back to the smaller "summary"
+      // card (no image) rather than claiming a large-image card this
+      // page can't back up.
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(image && { images: [image] }),
+    },
+  };
+}
+
 export default async function ArcPage({ params }) {
   // Looked up first, in its own round trip, because the series lookup
   // below depends on its result (`arcMeta.anilist_series_id`) — it can't

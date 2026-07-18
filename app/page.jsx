@@ -12,6 +12,27 @@ import styles from "./page.module.css";
 // getTrendingArcs instead of only hardcoded consts.
 export const revalidate = 0;
 
+// Phase 8 (Session 45): no `title` here deliberately — this page has no
+// title more specific than the site itself, so it inherits
+// `metadata.title.default` from the root layout ("Aniindex — Fan Content
+// Index for Anime Arcs") rather than templating a redundant "Aniindex ·
+// Aniindex". `description`/`openGraph` mirror the hero copy below rather
+// than the root layout's more generic site-wide description. No
+// `openGraph.images` — this page has no single real image to point at
+// (see app/layout.jsx's own comment on why no site-wide placeholder
+// image was added either).
+const HOME_DESCRIPTION =
+  "Fan edits, art, breakdowns, and discussion for anime story arcs — organized by story beat. Not hosted, just found.";
+
+export const metadata = {
+  description: HOME_DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    description: HOME_DESCRIPTION,
+    url: "/",
+  },
+};
+
 // A small, fixed set of the app's existing accent-family hex colors
 // (reused from ArcHero's character-chip palette and the old hardcoded
 // TRENDING_ARCS data), hashed by arc id purely for visual variety on the

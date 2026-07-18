@@ -136,6 +136,61 @@ function statusLabel(status) {
   return status ? status.replaceAll("_", " ").toLowerCase() : null;
 }
 
+// Same trim as app/arc/[slug]/page.jsx's own generateMetadata — kept as a
+// separate local copy rather than a shared lib export, matching this
+// codebase's existing convention of small per-page helpers duplicated
+// across files rather than a shared utils module (see formatLabel, which
+// this file and app/search/page.jsx both already define identically).
+function truncateDescription(text, maxLength = 200) {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength).trim()}…`;
+}
+
+// Phase 8 (Session 45): real per-series SEO metadata + Open Graph/Twitter
+// preview. `getSeriesWithRelations` failing here means the page itself
+// renders its own "Couldn't load this series" error state (see below) —
+// mirrored here as a noindex "Series not found" title rather than a
+// fabricated title/description for a series that isn't actually loading.
+export async function generateMetadata({ params }) {
+  const anilistId = Number(params.slug);
+  const series = await getSeriesWithRelations(anilistId).catch(() => null);
+  const url = `/series/${params.slug}`;
+
+  if (!series) {
+    return {
+      title: "Series not found",
+      robots: { index: false, follow: false },
+      alternates: { canonical: url },
+    };
+  }
+
+  const seriesName = series.title.english || series.title.romaji;
+  const description =
+    truncateDescription(series.description) || `Browse ${seriesName}'s arcs and top characters on Aniindex.`;
+  const image = series.bannerImage || series.coverImage?.large || null;
+
+  return {
+    title: seriesName,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title: seriesName,
+      description,
+      url,
+      type: "website",
+      ...(image && { images: [{ url: image }] }),
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: seriesName,
+      description,
+      ...(image && { images: [image] }),
+    },
+  };
+}
+
 export default async function SeriesPage({ params }) {
   const anilistId = Number(params.slug);
 
