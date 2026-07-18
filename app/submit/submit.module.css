@@ -503,33 +503,17 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-.charChipDetected {
+.charChip {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px 5px 5px;
+  padding: 5px 10px 5px 12px;
   background: var(--surface-2);
-  border: 1px solid rgba(106, 240, 168, 0.25);
+  border: 1px solid var(--border-mid);
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
   color: var(--t1);
-}
-.charAv {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
-  font-weight: 700;
-  color: #fff;
-  flex-shrink: 0;
-}
-.charChipConfirm {
-  font-size: 10px;
-  color: var(--green);
 }
 .charChipRemove {
   font-size: 12px;
@@ -543,19 +527,25 @@
 .charChipRemove:hover {
   color: var(--red, #f0706a);
 }
-.addChar {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
+.charInput {
+  flex: 1;
+  min-width: 140px;
+  height: 30px;
   background: transparent;
   border: 1px dashed var(--border-mid);
   border-radius: 20px;
+  padding: 0 12px;
   font-size: 12px;
-  color: var(--t2);
-  cursor: pointer;
-  transition: all 0.15s;
   font-family: var(--body);
+  color: var(--t1);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.charInput:focus {
+  border-color: rgba(123, 108, 246, 0.5);
+}
+.charInput::placeholder {
+  color: var(--t3);
 }
 .addChar:hover {
   border-color: var(--accent);
@@ -686,6 +676,7 @@
   color: #fff;
   cursor: pointer;
   font-family: var(--body);
+  text-decoration: none;
   transition: background 0.15s;
   flex-shrink: 0;
 }
@@ -748,6 +739,11 @@
   color: var(--green);
   font-size: 12px;
   font-weight: 500;
+}
+.successActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
 }
 .submitErrorMsg {
   padding: 10px 14px;

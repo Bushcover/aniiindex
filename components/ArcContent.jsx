@@ -14,6 +14,20 @@ import ContentTabs from "@/components/ContentTabs";
 import IntensityChart from "@/components/IntensityChart";
 import BeatSection from "@/components/BeatSection";
 
+// Bug fix: a confirmed item's "you confirmed it" optimistic state used to
+// live inside ContentCard's own local useState, seeded once from its
+// `status` prop on mount. That broke the moment the active content tab
+// changed to one this item doesn't match — BeatSection stops rendering
+// that ContentCard at all (unmounted), and switching back to a tab that
+// shows it again mounts a *new* ContentCard instance that re-seeds its
+// local state from the original (still-'pending') server prop, silently
+// reverting the badge/button to "pending" even though the confirm POST
+// genuinely succeeded earlier. ArcContent itself never unmounts across a
+// tab switch — switching tabs is just its own `activeLabel` state
+// changing — so tracking confirmed ids here instead, keyed by id and
+// threaded down through BeatSection to ContentCard, survives every
+// tab-filter remount underneath it.
+
 // Maps each tab label to the content-type bucket it filters to. `null`
 // means "no filter" (All). Keys match TABS' labels in
 // app/arc/[slug]/page.jsx exactly.
@@ -56,6 +70,15 @@ function itemMatchesBucket(item, bucket) {
 
 export default function ArcContent({ tabs, intensityBeats, beatSections }) {
   const [activeLabel, setActiveLabel] = useState(tabs.find((tab) => tab.active)?.label ?? tabs[0]?.label ?? "All");
+  const [confirmedIds, setConfirmedIds] = useState(() => new Set());
+
+  function handleItemConfirmed(id) {
+    setConfirmedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }
 
   const activeBucket = TAB_BUCKETS[activeLabel] ?? null;
   const tabsWithActive = tabs.map((tab) => ({ ...tab, active: tab.label === activeLabel }));
@@ -87,7 +110,14 @@ export default function ArcContent({ tabs, intensityBeats, beatSections }) {
               <Link href="/submit">submit some</Link>.
             </div>
           ) : (
-            filteredBeatSections.map((beat) => <BeatSection key={beat.title} beat={beat} />)
+            filteredBeatSections.map((beat) => (
+              <BeatSection
+                key={beat.title}
+                beat={beat}
+                confirmedIds={confirmedIds}
+                onItemConfirmed={handleItemConfirmed}
+              />
+            ))
           )}
         </div>
 

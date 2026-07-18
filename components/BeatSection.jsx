@@ -11,7 +11,7 @@
 import { useState } from "react";
 import ContentCard from "@/components/ContentCard";
 
-export default function BeatSection({ beat }) {
+export default function BeatSection({ beat, confirmedIds, onItemConfirmed }) {
   const [flaggedIds, setFlaggedIds] = useState(() => new Set());
 
   function handleFlagged(id) {
@@ -36,7 +36,14 @@ export default function BeatSection({ beat }) {
       </div>
       <div className="cards">
         {visibleItems.map((item, i) => (
-          <ContentCard key={item.id ?? i} beatLabel={beat.title} {...item} onFlagged={handleFlagged} />
+          <ContentCard
+            key={item.id ?? i}
+            beatLabel={beat.title}
+            {...item}
+            onFlagged={handleFlagged}
+            locallyConfirmed={Boolean(item.id) && confirmedIds?.has(item.id)}
+            onConfirmed={() => onItemConfirmed?.(item.id)}
+          />
         ))}
       </div>
     </div>

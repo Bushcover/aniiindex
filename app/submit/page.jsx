@@ -34,8 +34,6 @@ const PLATFORM_LABELS = {
 // beat anymore (Session 5/10's old default assumed the Shibuya arc's own
 // beat order), so selection always starts at index 0 and the user picks.
 
-const INITIAL_CHARACTERS = [{ name: "Gojo Satoru", initials: "GS", color: "#7B6CF6" }];
-
 const CONTENT_TYPE_OPTIONS = ["Edit / AMV", "Fan art", "Discussion", "Breakdown", "OST / Music", "Other"];
 const DEFAULT_CONTENT_TYPE = "Edit / AMV";
 
@@ -56,7 +54,8 @@ export default function SubmitPage() {
   const [arcsLoadStatus, setArcsLoadStatus] = useState("idle"); // idle | loading | success
   const [selectedArc, setSelectedArc] = useState(null); // { id, slug, title, episode_start, episode_end } | null
   const [selectedBeatIndex, setSelectedBeatIndex] = useState(0);
-  const [characters, setCharacters] = useState(INITIAL_CHARACTERS);
+  const [characters, setCharacters] = useState([]); // free-text names, no auto-detection
+  const [characterInput, setCharacterInput] = useState("");
   const [contentType, setContentType] = useState(DEFAULT_CONTENT_TYPE);
   const [check1, setCheck1] = useState(true);
   const [check2, setCheck2] = useState(false);
@@ -252,7 +251,24 @@ export default function SubmitPage() {
   }
 
   function handleRemoveCharacter(name) {
-    setCharacters((prev) => prev.filter((c) => c.name !== name));
+    setCharacters((prev) => prev.filter((c) => c !== name));
+  }
+
+  function addCharacterFromInput() {
+    const name = characterInput.trim();
+    if (!name) return;
+    setCharacters((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setCharacterInput("");
+  }
+
+  // Enter or comma commits the current input as a chip — comma is
+  // prevented from being inserted into the input at all (rather than
+  // typed then stripped), the standard free-text-tag-input pattern.
+  function handleCharacterInputKeyDown(e) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addCharacterFromInput();
+    }
   }
 
   async function handleSubmit() {
@@ -269,7 +285,7 @@ export default function SubmitPage() {
         platform: effectiveLink.platform,
         thumbnail_url: effectiveLink.thumbnailUrl,
         content_type: contentType,
-        character_tags: characters.map((c) => c.name),
+        character_tags: characters,
         status: "pending",
         submitted_by: session?.user?.id || "anonymous",
       });
@@ -566,26 +582,29 @@ export default function SubmitPage() {
               <div className={styles.field}>
                 <div className={styles.fieldLabel}>Characters in this content</div>
                 <div className={styles.charChips}>
-                  {characters.map((char) => (
-                    <div key={char.name} className={styles.charChipDetected}>
-                      <div className={styles.charAv} style={{ background: char.color }}>
-                        {char.initials}
-                      </div>
-                      {char.name}
-                      <span className={styles.charChipConfirm}>✦ detected</span>
+                  {characters.map((name) => (
+                    <div key={name} className={styles.charChip}>
+                      {name}
                       <button
                         className={styles.charChipRemove}
-                        onClick={() => handleRemoveCharacter(char.name)}
-                        aria-label={`Remove ${char.name}`}
+                        onClick={() => handleRemoveCharacter(name)}
+                        aria-label={`Remove ${name}`}
                       >
                         ×
                       </button>
                     </div>
                   ))}
-                  <button className={styles.addChar}>+ Add character</button>
+                  <input
+                    className={styles.charInput}
+                    type="text"
+                    placeholder="Type a character name…"
+                    value={characterInput}
+                    onChange={(e) => setCharacterInput(e.target.value)}
+                    onKeyDown={handleCharacterInputKeyDown}
+                  />
                 </div>
                 <div className={styles.detectNote} style={{ marginTop: 4 }}>
-                  Add any other characters who appear in this content
+                  Press Enter or comma to add a character
                 </div>
               </div>
 
@@ -672,7 +691,7 @@ export default function SubmitPage() {
                     platform={effectiveLink.platform}
                     thumbnailUrl={effectiveLink.thumbnailUrl}
                     contentType={[contentType]}
-                    characterTags={characters.map((c) => c.name)}
+                    characterTags={characters}
                     sourceUrl={url || "#"}
                     beatLabel={selectedBeat.title}
                   />
@@ -700,6 +719,16 @@ export default function SubmitPage() {
               {submitStatus === "success" && (
                 <div className={styles.submitSuccess}>
                   ✓ Submitted — this content is now pending review.
+                </div>
+              )}
+              {submitStatus === "success" && selectedArc && (
+                <div className={styles.successActions}>
+                  <Link href={`/arc/${selectedArc.slug}`} className={styles.btnContinue}>
+                    View arc page →
+                  </Link>
+                  <Link href="/" className="btn btn-ghost">
+                    Back to home
+                  </Link>
                 </div>
               )}
               {submitStatus === "error" && (

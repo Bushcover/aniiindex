@@ -26,13 +26,16 @@ export default function ConfirmButton({ id, onConfirmed }) {
       });
       if (!res.ok) throw new Error("Confirm failed");
       setState("done");
-      // Session 20: tells ContentCard to flip its local status
-      // optimistically, hiding the pending badge and this button
-      // immediately — ContentCard re-renders with isPending false before
-      // this component's own "done" branch below ever gets painted, so in
+      // Session 20 (moved up to ArcContent in a later bug fix — see its
+      // own comment): tells the caller to record this id as confirmed,
+      // hiding the pending badge and this button immediately —
+      // ContentCard re-renders with isPending false before this
+      // component's own "done" branch below ever gets painted, so in
       // practice this button disappears rather than showing "✓ Confirmed".
       // That branch stays as a defensive fallback for any future caller
-      // that doesn't wire up onConfirmed.
+      // that doesn't wire up onConfirmed. Only called after the fetch
+      // above has resolved and res.ok has been checked — never
+      // optimistically ahead of the API call itself.
       onConfirmed?.();
     } catch {
       setState("error");
