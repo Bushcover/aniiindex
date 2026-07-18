@@ -301,11 +301,31 @@ export default async function ArcPage({ params }) {
     { value: "—", label: "Contributors" },
   ];
 
+  // `seasonPart`/`dateRange`/`badges` have no real per-arc equivalent in
+  // this schema — `arcs` only has episode_start/episode_end (episode
+  // numbers, not air dates), and nothing tracks a season/part label or an
+  // intensity/spoiler classification at all. Deriving a real "Oct – Dec
+  // 2023"-style date range or a real "Season 2, Part 2" label from just
+  // two episode numbers isn't possible, so for any real seeded arc
+  // (arcMeta present) these are omitted entirely rather than left
+  // showing Shibuya's own hardcoded values regardless of which arc is
+  // actually being viewed — the same "omit rather than fabricate"
+  // convention this project already uses elsewhere (ArcNav's optional
+  // count, ArcList's optional count/spark/peak). The hardcoded-fallback
+  // path (arcMeta null, i.e. params.slug isn't seeded) keeps the full
+  // original mockup values unchanged, same as every other still-hardcoded
+  // field on that path. The breadcrumb's second segment ("Season 2") is
+  // the same kind of fabricated season claim, so it's dropped the same
+  // way — a real arc's breadcrumb is just [seriesName], not
+  // [seriesName, "Season 2"].
   const arc = {
     ...ARC,
     name: arcMeta?.title || ARC.name,
     episodes: arcMeta ? `Episodes ${arcMeta.episode_start}–${arcMeta.episode_end}` : ARC.episodes,
-    breadcrumb: [seriesName, ARC.breadcrumb[1]],
+    breadcrumb: arcMeta ? [seriesName] : [seriesName, ARC.breadcrumb[1]],
+    seasonPart: arcMeta ? null : ARC.seasonPart,
+    dateRange: arcMeta ? null : ARC.dateRange,
+    badges: arcMeta ? [] : ARC.badges,
     description,
     characters,
     stats: heroStats,

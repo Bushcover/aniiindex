@@ -19,11 +19,19 @@ export default function ArcHero({ arc }) {
 
         <div className="hero-meta">
           <span>{arc.episodes}</span>
-          <span className="dot">·</span>
-          <span>{arc.seasonPart}</span>
-          <span className="dot">·</span>
-          <span>{arc.dateRange}</span>
-          {arc.badges.map((badge) => (
+          {arc.seasonPart && (
+            <>
+              <span className="dot">·</span>
+              <span>{arc.seasonPart}</span>
+            </>
+          )}
+          {arc.dateRange && (
+            <>
+              <span className="dot">·</span>
+              <span>{arc.dateRange}</span>
+            </>
+          )}
+          {(arc.badges ?? []).map((badge) => (
             <span key={badge.label} className={`badge badge-${badge.type}`}>
               {badge.label}
             </span>

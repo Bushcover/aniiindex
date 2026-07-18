@@ -261,7 +261,7 @@
   margin-bottom: 16px;
 }
 
-.noArcsMessage {
+.emptyColMessage {
   padding: 20px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -424,21 +424,6 @@
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
-}
-.charCount {
-  color: var(--t3);
-  font-size: 11px;
-}
-.moreChars {
-  padding: 5px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  font-size: 12px;
-  color: var(--t2);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
 }
 
 /* ── Right column: top content ── */

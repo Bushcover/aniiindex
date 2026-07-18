@@ -2,15 +2,32 @@ import Link from "next/link";
 import ContentCard from "@/components/ContentCard";
 import ArcList from "@/components/ArcList";
 import SearchNav from "@/components/SearchNav";
-import { searchSeries } from "@/lib/anilist";
+import { searchSeries, getSeriesCharacters } from "@/lib/anilist";
 import { getSeriesByAnilistId, getAllArcsForSeries, getArcSparkline } from "@/lib/supabase";
 import styles from "./search.module.css";
 
 // Hardcoded placeholder counts for the sections that aren't wired to real
-// data yet (characters/content — see the CHARACTERS/TOP_CONTENT comments
-// below; the arc list itself is real as of Session 42). Not derived from
-// whatever series is actually searched.
+// data yet (content — see the TOP_CONTENT comment below; the arc list
+// became real in Session 42, the character grid in Session 44). Not
+// derived from whatever series is actually searched.
 const RESULTS_SUMMARY = "11 arcs · 22 characters · 6,847 fan items";
+
+// A small rotating palette for a real character's avatar when AniList has
+// no portrait image for them — same palette ArcHero's own hardcoded
+// character list already uses, reused here rather than inventing a
+// second one. Cycled by index, not tied to any specific character's
+// identity (AniList doesn't provide a color), so it isn't guaranteed
+// stable across searches — purely a neutral visual fallback.
+const CHAR_AVATAR_COLORS = ["#7B6CF6", "#F0706A", "#6AF0A8", "#F0A96A", "#F06AC8", "#6AC8F0"];
+
+function getInitials(name) {
+  return (name ?? "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join("");
+}
 
 const FILTERS = [
   { label: "All", count: 6847, active: true },
@@ -32,21 +49,6 @@ const ALSO_FOUND = [
   { type: "OST", name: "Chainsaw Man Original Soundtrack", count: "304 items" },
   { type: "Related", name: "Tatsuki Fujimoto Works", count: "Fire Punch · Look Back · +3" },
 ];
-
-// Still hardcoded — no per-series real character/content-count data has
-// ever been wired up here (the arc list itself became real in Session 42).
-const CHARACTERS = [
-  { initials: "DE", color: "#CC2828", name: "Denji", count: 1892 },
-  { initials: "PO", color: "#D45E8A", name: "Power", count: 1543 },
-  { initials: "MA", color: "#6A3A3A", name: "Makima", count: 2101 },
-  { initials: "AK", color: "#4A6A8A", name: "Aki Hayakawa", count: 1234 },
-  { initials: "KO", color: "#8A7A2A", name: "Kobeni", count: 678 },
-  { initials: "KI", color: "#5A6A5A", name: "Kishibe", count: 445 },
-  { initials: "RE", color: "#3A6A6A", name: "Reze", count: 891 },
-  { initials: "QU", color: "#6A3A8A", name: "Quanxi", count: 567 },
-];
-
-const MORE_CHARACTERS_COUNT = 14;
 
 const TOP_CONTENT = [
   {
@@ -133,6 +135,24 @@ export default async function SearchPage({ searchParams }) {
           };
         });
       }
+    }
+  }
+
+  // Real AniList characters for the matched series — replaces the old
+  // hardcoded Chainsaw Man CHARACTERS list (unrelated to whatever series
+  // was actually searched). Uses the same getSeriesCharacters the arc
+  // page and series page already call, keyed by the series' own AniList
+  // id (already in hand from the search match above — no extra Supabase
+  // round trip needed, unlike the arc list). A separate try/catch from
+  // the series search above: a characters-fetch failure shouldn't take
+  // down the series panel/arc list that already resolved successfully,
+  // it should just leave this one section empty.
+  let realCharacters = [];
+  if (series) {
+    try {
+      realCharacters = await getSeriesCharacters(series.id);
+    } catch (err) {
+      realCharacters = [];
     }
   }
 
@@ -264,7 +284,7 @@ export default async function SearchPage({ searchParams }) {
                 {realArcs.length > 0 ? (
                   <ArcList arcs={realArcs} />
                 ) : (
-                  <div className={styles.noArcsMessage}>No arcs indexed yet for this series.</div>
+                  <div className={styles.emptyColMessage}>No arcs indexed yet for this series.</div>
                 )}
 
                 <div className={styles.alsoFound}>
@@ -288,17 +308,31 @@ export default async function SearchPage({ searchParams }) {
                 <div className={styles.colSub} style={{ marginBottom: 14 }}>
                   Filter any arc page by character
                 </div>
-                <div className={styles.charsGrid}>
-                  {CHARACTERS.map((char) => (
-                    <a key={char.name} className={styles.charChip} href="#">
-                      <div className={styles.charAv} style={{ background: char.color }}>
-                        {char.initials}
-                      </div>
-                      {char.name} <span className={styles.charCount}>{char.count.toLocaleString("en-US")}</span>
-                    </a>
-                  ))}
-                  <div className={styles.moreChars}>+{MORE_CHARACTERS_COUNT} more</div>
-                </div>
+                {realCharacters.length > 0 ? (
+                  <div className={styles.charsGrid}>
+                    {realCharacters.map((char, i) => (
+                      <a key={char.id} className={styles.charChip} href="#">
+                        <div
+                          className={styles.charAv}
+                          style={
+                            char.image
+                              ? {
+                                  backgroundImage: `url(${char.image})`,
+                                  backgroundSize: "cover",
+                                  backgroundPosition: "center",
+                                }
+                              : { background: CHAR_AVATAR_COLORS[i % CHAR_AVATAR_COLORS.length] }
+                          }
+                        >
+                          {!char.image && getInitials(char.name)}
+                        </div>
+                        {char.name}
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={styles.emptyColMessage}>No characters listed for this series.</div>
+                )}
 
                 <div style={{ height: 1, background: "var(--border)", marginBottom: 20 }}></div>
 
