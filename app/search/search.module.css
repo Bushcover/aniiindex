@@ -261,6 +261,16 @@
   margin-bottom: 16px;
 }
 
+.noArcsMessage {
+  padding: 20px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .arcList {
   display: flex;
   flex-direction: column;

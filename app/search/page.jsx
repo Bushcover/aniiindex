@@ -3,11 +3,13 @@ import ContentCard from "@/components/ContentCard";
 import ArcList from "@/components/ArcList";
 import SearchNav from "@/components/SearchNav";
 import { searchSeries } from "@/lib/anilist";
+import { getSeriesByAnilistId, getAllArcsForSeries, getArcSparkline } from "@/lib/supabase";
 import styles from "./search.module.css";
 
 // Hardcoded placeholder counts for the sections that aren't wired to real
-// data yet (arcs/characters/content — see the ARCS/CHARACTERS/TOP_CONTENT
-// comments below). Not derived from whatever series is actually searched.
+// data yet (characters/content — see the CHARACTERS/TOP_CONTENT comments
+// below; the arc list itself is real as of Session 42). Not derived from
+// whatever series is actually searched.
 const RESULTS_SUMMARY = "11 arcs · 22 characters · 6,847 fan items";
 
 const FILTERS = [
@@ -19,127 +21,11 @@ const FILTERS = [
   { label: "Discussion", count: 1612 },
 ];
 
-// TODO(Session 8): AniList has no arc-level data, so this arc list is still
-// hardcoded placeholder content (originally authored for Chainsaw Man) and
-// isn't tied to whichever series the search above actually resolves. Replace
-// this with real per-series arc data once the series page is built.
-const ARCS = [
-  {
-    slug: "introduction-arc",
-    num: "01",
-    name: "Introduction Arc",
-    count: 341,
-    peak: false,
-    spark: [
-      { heightPct: 30, tier: "normal" },
-      { heightPct: 55, tier: "high" },
-      { heightPct: 70, tier: "high" },
-      { heightPct: 45, tier: "normal" },
-      { heightPct: 35, tier: "normal" },
-    ],
-  },
-  {
-    slug: "bat-devil-arc",
-    num: "02",
-    name: "Bat Devil Arc",
-    count: 456,
-    peak: false,
-    spark: [
-      { heightPct: 28, tier: "normal" },
-      { heightPct: 50, tier: "high" },
-      { heightPct: 85, tier: "peak" },
-      { heightPct: 60, tier: "high" },
-      { heightPct: 40, tier: "normal" },
-    ],
-  },
-  {
-    slug: "eternity-devil-arc",
-    num: "03",
-    name: "Eternity Devil Arc",
-    count: 678,
-    peak: false,
-    spark: [
-      { heightPct: 25, tier: "normal" },
-      { heightPct: 38, tier: "normal" },
-      { heightPct: 62, tier: "high" },
-      { heightPct: 90, tier: "peak" },
-      { heightPct: 65, tier: "high" },
-    ],
-  },
-  {
-    slug: "katana-man-arc",
-    num: "04",
-    name: "Katana Man Arc",
-    count: 1102,
-    peak: true,
-    spark: [
-      { heightPct: 55, tier: "high" },
-      { heightPct: 88, tier: "peak" },
-      { heightPct: 70, tier: "high" },
-      { heightPct: 95, tier: "peak" },
-      { heightPct: 72, tier: "high" },
-    ],
-  },
-  {
-    slug: "bomb-girl-arc",
-    num: "05",
-    name: "Bomb Girl Arc",
-    count: 1893,
-    peak: true,
-    spark: [
-      { heightPct: 30, tier: "normal" },
-      { heightPct: 52, tier: "high" },
-      { heightPct: 68, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 78, tier: "high" },
-    ],
-  },
-  {
-    slug: "international-assassins-arc",
-    num: "06",
-    name: "International Assassins Arc",
-    count: 934,
-    peak: false,
-    spark: [
-      { heightPct: 48, tier: "high" },
-      { heightPct: 62, tier: "high" },
-      { heightPct: 70, tier: "high" },
-      { heightPct: 92, tier: "peak" },
-      { heightPct: 74, tier: "high" },
-    ],
-  },
-  {
-    slug: "hell-arc",
-    num: "07",
-    name: "Hell Arc",
-    count: 1120,
-    peak: true,
-    dividerAfter: true,
-    spark: [
-      { heightPct: 55, tier: "high" },
-      { heightPct: 65, tier: "high" },
-      { heightPct: 90, tier: "peak" },
-      { heightPct: 78, tier: "high" },
-      { heightPct: 60, tier: "high" },
-    ],
-  },
-  {
-    slug: "control-devil-arc",
-    num: "08",
-    name: "Control Devil Arc",
-    count: 2341,
-    peak: true,
-    spark: [
-      { heightPct: 60, tier: "high" },
-      { heightPct: 95, tier: "peak" },
-      { heightPct: 78, tier: "high" },
-      { heightPct: 100, tier: "peak" },
-      { heightPct: 82, tier: "high" },
-    ],
-  },
-];
-
-const MORE_ARCS_LABEL = "+ 3 more arcs — Part 2 manga arcs";
+// Used only when a real seeded arc has no beats yet (getArcSparkline
+// returns []) — a flat, equal-height line rather than an empty chart, per
+// the task's explicit fallback request. Not a guess at real intensity
+// data, just a neutral placeholder shape.
+const FLAT_SPARKLINE = Array.from({ length: 5 }, () => ({ heightPct: 50, tier: "normal" }));
 
 const ALSO_FOUND = [
   { type: "Manga", name: "Chainsaw Man Part 2", count: "4 arcs · 2,341 items" },
@@ -147,8 +33,8 @@ const ALSO_FOUND = [
   { type: "Related", name: "Tatsuki Fujimoto Works", count: "Fire Punch · Look Back · +3" },
 ];
 
-// Also still hardcoded (Session 6 only wires the series panel to real data;
-// characters and top content remain placeholders until a real backend exists).
+// Still hardcoded — no per-series real character/content-count data has
+// ever been wired up here (the arc list itself became real in Session 42).
 const CHARACTERS = [
   { initials: "DE", color: "#CC2828", name: "Denji", count: 1892 },
   { initials: "PO", color: "#D45E8A", name: "Power", count: 1543 },
@@ -222,6 +108,33 @@ export default async function SearchPage({ searchParams }) {
   }
 
   const seriesName = series ? series.title.english || series.title.romaji : null;
+
+  // Real arc list for the matched series — replaces the old hardcoded
+  // ARCS placeholder entirely (it was never tied to whatever series was
+  // actually searched). Goes through the series table by the matched
+  // series' own AniList id, then that series row's real arcs, then each
+  // arc's real beats for its sparkline — either real seeded arcs render,
+  // or an honest "nothing indexed yet" message does; never a fake list.
+  let realArcs = [];
+  if (series) {
+    const seriesRow = await getSeriesByAnilistId(series.id);
+    if (seriesRow) {
+      const arcs = await getAllArcsForSeries(seriesRow.id);
+      if (arcs.length > 0) {
+        const sparklines = await Promise.all(arcs.map((arc) => getArcSparkline(arc.id)));
+        realArcs = arcs.map((arc, i) => {
+          const spark = sparklines[i].length > 0 ? sparklines[i] : FLAT_SPARKLINE;
+          return {
+            slug: arc.slug,
+            num: String(arc.order_index).padStart(2, "0"),
+            name: arc.title,
+            spark,
+            peak: spark.some((bar) => bar.tier === "peak"),
+          };
+        });
+      }
+    }
+  }
 
   return (
     <>
@@ -348,7 +261,11 @@ export default async function SearchPage({ searchParams }) {
                   Each bar shows community response intensity across story beats
                 </div>
 
-                <ArcList arcs={ARCS} moreLabel={MORE_ARCS_LABEL} />
+                {realArcs.length > 0 ? (
+                  <ArcList arcs={realArcs} />
+                ) : (
+                  <div className={styles.noArcsMessage}>No arcs indexed yet for this series.</div>
+                )}
 
                 <div className={styles.alsoFound}>
                   <div className={styles.colTitle} style={{ marginBottom: 12 }}>
