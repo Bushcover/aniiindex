@@ -261,11 +261,8 @@ export default function SubmitPage() {
     setCharacterInput("");
   }
 
-  // Enter or comma commits the current input as a chip — comma is
-  // prevented from being inserted into the input at all (rather than
-  // typed then stripped), the standard free-text-tag-input pattern.
   function handleCharacterInputKeyDown(e) {
-    if (e.key === "Enter" || e.key === ",") {
+    if (e.key === "Enter") {
       e.preventDefault();
       addCharacterFromInput();
     }
@@ -604,7 +601,7 @@ export default function SubmitPage() {
                   />
                 </div>
                 <div className={styles.detectNote} style={{ marginTop: 4 }}>
-                  Press Enter or comma to add a character
+                  Press Enter to add
                 </div>
               </div>
 
