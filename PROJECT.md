@@ -1,35 +1,43 @@
 # aniindex
 
 A fan content index for anime series. Started as a single hardcoded
-mockup page; as of Session 22 it has a real Next.js App Router
+mockup page; as of Session 38 it has a real Next.js App Router
 structure, real AniList GraphQL data on several pages, a real
 Supabase database with a working (if narrowly-scoped) submission
 pipeline, real Supabase Auth magic-link sign-in (a 6-digit-code
 variant was tried in Session 15 and reverted in Session 16 — the
 Supabase free plan doesn't allow the email template edit that a code
 requires; see the Session 16 notes for the full story), submissions
-that are genuinely tied to the signed-in user who made them, and a
+that are genuinely tied to the signed-in user who made them, a
 no-auth community quality-control layer (Session 18, bug-fixed across
 Sessions 19–21) — pending items are visibly marked, any viewer can
 confirm a pending placement (two confirmations promote it to
 `confirmed`) or flag an item outright, and both actions update the
-arc page instantly, client-side, with no reload required. See
-"Current State — Handoff Audit" immediately below for a full, current
-snapshot; the session-by-session log after it is the historical
-record of how each piece got built.
+arc page instantly, client-side, with no reload required — real
+multi-arc/multi-series data seeded across Sessions 23–25, a real
+client-side content-type tab filter (Session 28), a real mobile-
+responsive layout on every page (an eight-session saga, 29–36), and
+real (not hardcoded) arc-page fan-item counts and home-page trending
+arcs (Session 37). See "Current State — Handoff Audit" immediately
+below for a full, current snapshot; the session-by-session log after
+it is the historical record of how each piece got built.
 
-**A note on session numbering**: Session 18's task was framed as "Session
-15," but that number was already used (see the Session 15 log entry below
-— the email-OTP detour). The project's own history already ran through
-Session 17 (a full audit) at that point, so that work was logged as
-**Session 18**; the three bug-fix sessions since are **Session 19**,
-**Session 20**, and **Session 21**. **Session 22 is this file's second
-full audit** (the first was Session 17) — every file in `app/`,
+**A note on session numbering**: this file's session count has been
+mislabeled by incoming tasks more than once — a task framed as "Session
+15" turned out to collide with an already-used number (the email-OTP
+detour, see that log entry below), so the work was logged as **Session
+18** instead; later, a task framed as "Session 20" collided the same way
+and was logged as **Session 37**. The rule applied consistently every
+time this happens: treat the work as new and log it under the next
+actually-available sequential number, without renumbering anything
+already written. **Full project audits have been done three times**:
+Session 17 (the first), Session 22 (the second, "every file in `app/`,
 `components/`, and `lib/`, plus every config file, was re-read directly
-from disk to confirm this section, not carried forward from Sessions
-18–21's incremental patches.
+from disk"), and **Session 38 (this one, the third)** — same standard:
+every file re-read fresh from disk, not reconstructed from Sessions
+23–37's incremental patches to this section.
 
-## Current State — Handoff Audit (as of Session 22, full project audit)
+## Current State — Handoff Audit (as of Session 38, full project audit)
 
 This section is a complete, current-state snapshot of the project, written
 as a handoff for whichever session picks this up next. The session-by-
@@ -38,39 +46,69 @@ project got here and *why* specific decisions were made — read this section
 first for orientation, then the log for the reasoning behind any specific
 piece of code.
 
-**Session 22 is this file's second full audit** (the first was Session
-17). Every file in `app/`, `components/`, and `lib/` — 37 files — plus all
-4 root config files (`next.config.mjs`, `jsconfig.json`, `package.json`,
+**Session 38 is this file's third full audit** (the first was Session 17,
+the second Session 22). Every file in `app/`, `components/`, and `lib/` —
+38 files (37 through Session 22's own count; `components/ArcContent.jsx`
+was added in Session 28, after that count was taken) — plus all 4 root
+config files (`next.config.mjs`, `jsconfig.json`, `package.json`,
 `.gitignore`) were re-read directly from disk this session, not
-reconstructed from Sessions 18–21's incremental patches to this section.
-**Nothing in the application code changed this session** — this is a
-documentation-only pass, same convention as Session 17. Where this section
-disagrees with something a session log below says, this section is the
-current truth — the logs are history, not a live source.
+reconstructed from Sessions 23–37's incremental patches to this section.
+Two small staleness corrections came out of that re-read, noted here since
+they're the kind of drift a documentation-only audit exists to catch:
+`lib/supabase.js` has **one** module-load `console.log` call (a single
+multi-line statement), not two as this section previously said; and only
+**one** `TODO`-marked comment remains in the codebase
+(`app/search/page.jsx`'s hardcoded-arc-list note) — the series page has an
+equivalent, similarly-tracked comment but it doesn't use the literal `TODO`
+marker, so counting it as a second `TODO` was inaccurate bookkeeping, not
+a discovered gap. **Nothing in the application code changed this
+session** — this is a documentation-only pass, same convention as Sessions
+17 and 22. Where this section disagrees with something a session log below
+says, this section is the current truth — the logs are history, not a live
+source.
 
-**What's changed since Session 17's audit**: Phase 5 (Sessions 18–21) added
-a no-auth quality-control layer — a "pending review" badge, a "confirm
-placement" button (two confirmations promote an item to `confirmed`), and a
-flag button — to the arc page's content cards, then spent three sessions
-fixing real production bugs in it. In order: Session 18 built it. Session
-19 found that a Postgres RLS-blocked `UPDATE` fails *silently* (zero rows,
-no error) rather than raising a permission error, which is exactly why
-Session 18's confirm/flag writes could report success while doing nothing;
-fixed by detecting and logging that case. Session 20 added instant,
-client-side updates for both actions (previously both needed a full reload
-to reflect a change) and, separately, rewrote how `flagContentItem`
-verified a flag had actually applied. Session 21 found that Session 19 and
-20's shared assumption — that a blocked write always fails silently — was
-itself wrong for a *different* query shape: a plain `SELECT` against a row
-outside a read policy's allowlist raises a genuine `42501` permission
-error, not a silent empty result, and Session 20's verification technique
-was hitting exactly that on every successful flag. Session 21 removed
-post-update verification from `flagContentItem` entirely, trusting
-`update()`'s own error result — a deliberate, documented trade-off (see
-"Partially working" below). Phase 5 is now considered stable: confirming
-and flagging have each been independently confirmed working end to end in
-production (real writes persisting, real UI updates, per user reports
-across Sessions 19–21).
+**What's changed since Session 22's audit** (the high-level summary — see
+each session's own log entry below for the full reasoning and diagnostic
+detail):
+- **Sessions 23–25 — real multi-arc/multi-series data**: seeded a second
+  and third series (Attack on Titan, Chainsaw Man) and 4 more arcs beyond
+  the original single Shibuya seed, then made the arc page (`getArcMeta`),
+  the arc-chip nav strip and series-page arc list (`getArcsBySeries`) all
+  derive their header/routing data from whichever real `arcs`/`series` row
+  actually matches the current URL, instead of always assuming Jujutsu
+  Kaisen/Shibuya. Session 26 found (and Session 27 fixed) a real data bug
+  this exposed: Chainsaw Man's seeded `anilist_series_id` was wrong.
+- **Session 28 — real tab filtering**: the arc page's content-type tabs
+  (All/Edits & Video/Fan Art/Discussion/OST & Music) went from decorative
+  to a genuine client-side filter, via a new client component
+  (`ArcContent.jsx`) that owns the active-tab state the server-rendered
+  page itself can't hold.
+- **Sessions 29–36 — mobile responsiveness, an eight-session saga**: a
+  real-device "page slides sideways on mobile" report that took eight
+  rounds to fully close, because most of the real causes (a missing
+  viewport meta tag, two different sticky-positioning regressions, a
+  signed-in-only nav overflow invisible to every session that only ever
+  tested signed-out, and an unrelated card-grid `minmax()` overflow) were
+  each invisible to the testing technique that had worked for the
+  previous cause. See "Known issues" below for the full blow-by-blow —
+  it's kept there rather than summarized away, since the specific reasons
+  each round's verification missed the next bug are the actually useful
+  part of that history for whoever hits a mobile report next.
+- **Session 37 — the arc page's hero stats and the home page's "Trending
+  arcs" stopped being fake numbers**: the arc page's Fan items count is
+  now a real `content_items` count (Saves/This week/Contributors show a
+  dash — nothing tracks them); the home page's 6 trending-arc cards are
+  now real arcs with real item counts and real per-arc beat intensity,
+  via a new `getTrendingArcs` query, with an honest empty-state
+  placeholder for any slot real data doesn't fill rather than fake arcs
+  padding the row back to 6.
+
+Phase 5 (Sessions 18–21, quality control) remains stable and unchanged
+since Session 22's audit — confirming and flagging both still work end to
+end in production. See "Phases" below for the current phase list, which
+now names a **Phase 6** (Sessions 22–37, closed as of this audit) covering
+everything summarized above, and a **Phase 7 roadmap** (renamed from the
+old "Phase 6+ roadmap") for what's next.
 
 **Stack**: Next.js 14.2.35 (App Router), plain JavaScript/JSX (no
 TypeScript), no CSS framework (global stylesheet ported 1:1 from the
@@ -112,15 +150,27 @@ Always confirm with `git log --oneline -1` rather than assuming.
   review" badge, a "confirm placement" button, and a flag button on the
   arc page's content cards, backed by two new API routes (`/api/confirm`,
   `/api/flag`). Built in Session 18; hardened against three real
-  production bugs across Sessions 19–21 (see above). Both actions are
-  confirmed working end to end against the live Supabase project as of
-  this audit. See "Phase 6+ roadmap" at the end of this section for what's
-  next.
+  production bugs across Sessions 19–21. Both actions are confirmed
+  working end to end against the live Supabase project.
+- **Phase 6 — real data expansion + platform hardening (Sessions 22–37),
+  closed as of this audit**: Session 22's own full audit, then real
+  multi-arc/multi-series seeding and per-slug routing (23–25, including a
+  real production data bug found and fixed — Chainsaw Man's wrong
+  `anilist_series_id`, 26–27), a real client-side content-type tab filter
+  on the arc page (28), an eight-session mobile-responsiveness effort that
+  eventually found and fixed every real cause of a "page slides sideways
+  on mobile" report (29–36), and the arc page's hero stats / home page's
+  trending arcs going from hardcoded mockup numbers to real Supabase
+  queries (37). See "What's changed since Session 22's audit" above for
+  the summary and "Known issues"/the session log below for full detail.
+- **Phase 7 roadmap**: not started. See "Phase 7 roadmap" at the end of
+  this section for what's next, roughly ordered by what unblocks the most
+  other things.
 
 ### Complete file inventory
 
 Every file in `app/`, `components/`, and `lib/`, confirmed by reading each
-one directly from disk this session (37 files total, plus 4 root config
+one directly from disk this session (38 files total, plus 4 root config
 files):
 
 ```
@@ -179,14 +229,19 @@ Supabase URL + anon key) exists locally in any environment that's actually
 been configured against the live project, but is gitignored and was never
 committed. **Zero `console.log`/`TODO`/`FIXME` sweep, run fresh this
 session**: every remaining `console.*` call in the codebase is intentional
-operational logging with a clear comment explaining why it's permanent
-(the two module-load logs in `lib/supabase.js`, the per-function error
-logs in `confirmContentItem`/`flagContentItem`, the route-level catch logs
-in both API routes, and `NavAuth`'s sign-out failure log) — no leftover
-temporary debug logging exists anywhere. The only two `TODO` comments in
-the codebase are long-standing, known, already-tracked items (the
-hardcoded arc lists on the search and series pages — see "Explicitly not
-built" below), not anything newly discovered.
+operational logging with a clear comment explaining why it's permanent —
+one module-load log in `lib/supabase.js` (URL/key presence, never the key
+itself), and per-failure `console.error`s in `lib/auth.js`'s `getSession`,
+`lib/supabase.js`'s `getArcsBySeries`/`getTrendingArcs`/
+`confirmContentItem`/`flagContentItem`, both API routes' catch blocks
+(`/api/confirm`, `/api/flag`), and `NavAuth`'s sign-out failure handler —
+no leftover temporary debug logging exists anywhere. **Only one `TODO`
+comment remains** in the codebase, `app/search/page.jsx`'s
+hardcoded-arc-list note — the series page has an equivalent, similarly-
+tracked gap (see "Explicitly not built" below) but its own comment doesn't
+use the literal `TODO` marker, so it doesn't show up in a `TODO` grep;
+worth knowing if a future session runs that same sweep and gets a
+different count than this section states.
 
 ### Design tokens (globals.css `:root`)
 
@@ -316,8 +371,13 @@ removed the dependency on this widening entirely instead of keeping the
 SQL, since permanently widening the public read policy is a bigger,
 longer-lived change than that one bug fix needed, and it would work
 *against* a legitimate future need (a moderation view that specifically
-wants to query flagged rows — see "Phase 6+ roadmap"). If it was already
+wants to query flagged rows — see "Phase 7 roadmap"). If it was already
 run against the live project, it's harmless to leave in place.
+
+**No new RLS is needed for `getTrendingArcs` (added Session 37)** — it
+only ever performs `SELECT`s (on `content_items`, embedding `arcs` and
+`series`), all already covered by the existing public read policies
+above; it never touches `beats`' or any table's write path.
 
 **No `UPDATE`/`DELETE` policy existed on any table before Session 18** —
 blocked for the anon/public role everywhere by omission (Postgres RLS: no
@@ -418,7 +478,7 @@ sessions (verified by mock/browser-driven testing, as noted):
 - **`character_tags`/character detection on `/submit`** never reflects the real pasted content — always the one hardcoded Gojo Satoru chip.
 - **Auth has never completed a real magic-link round trip from this sandbox.** Every piece was verified individually against mocked Supabase responses — the real `signInWithOtp` call, the error/retry path, the signed-in nav state (verified with an injected fake session) — but no session has clicked a real emailed magic link end to end, since this sandbox can't reach `*.supabase.co` or send/receive real email. Whoever picks this up next, outside this sandbox: submit a real email on `/auth`, click the link, confirm it lands on `/auth/callback` and then `/` with the nav showing the signed-in state. This is also the one remaining gap for confirming a genuine (not mocked/injected) `auth.uid()`-shaped UUID landing in `content_items.submitted_by`.
 - **A 6-digit-code sign-in email was tried (Session 15) and reverted (Session 16)** — needs a Supabase-project setting (a paid-plan-only email-template editor, or custom SMTP) this app's code has no control over. Revisit only if the project moves off the free plan.
-- **Session 14's `"Users can read their own submissions"` RLS policy is presumed not yet run** — no feature has ever depended on it (there's no "my submissions" view yet — see "Phase 6+ roadmap"), so there's no behavioral signal either way, unlike the Session 18 grant/policy. Harmless either way today, since every row is currently `'pending'`/`'confirmed'`/`'flagged'` and none of those states need this policy to be visible.
+- **Session 14's `"Users can read their own submissions"` RLS policy is presumed not yet run** — no feature has ever depended on it (there's no "my submissions" view yet — see "Phase 7 roadmap"), so there's no behavioral signal either way, unlike the Session 18 grant/policy. Harmless either way today, since every row is currently `'pending'`/`'confirmed'`/`'flagged'` and none of those states need this policy to be visible.
 - **Nothing beyond `/submit` and the arc page's cards reads/uses the signed-in identity.** No "my submissions" list, no way to edit or delete your own submission, no moderation view of any kind.
 - **The Session 18 grant + update policy SQL is presumed (not formally confirmed) applied to the live Supabase project** — see the Database schema section above for the behavioral evidence and the diagnostic query nobody has run and reported back yet. If `/api/confirm`/`/api/flag` ever appear broken again, check Vercel's function logs for `[confirmContentItem]`/`[flagContentItem]`/`[api/confirm]`/`[api/flag]` lines before assuming a new code bug — this exact SQL is the first thing to rule out.
 - **Confirming isn't atomic and has no per-visitor ledger.** `confirmContentItem` does a plain select-then-update, not a single atomic statement — a real (if narrow) race exists if two confirms land on the exact same row at the same instant. More importantly, nothing stops the same browser confirming the same item twice and single-handedly promoting it to `confirmed` — there's no auth requirement (by design) and no ledger tracking who confirmed what.
@@ -466,25 +526,31 @@ sessions (verified by mock/browser-driven testing, as noted):
 - **No thumbnail images anywhere except real submitted content** — every hardcoded card still uses a CSS gradient placeholder.
 - **No per-visitor confirmation/flag ledger** — nothing stops the same browser confirming or flagging the same item repeatedly.
 
-### Phase 6+ roadmap
+### Phase 7 roadmap
 
-Phases 1–4 are closed. Phase 5 (quality control) is stable as of this
-audit — confirming and flagging both work end to end in production, three
-rounds of real bugs found and fixed. Roughly in order of "unblocks the
+Phases 1–4 are closed. Phase 5 (quality control) is stable — confirming
+and flagging both work end to end in production. Phase 6 (Sessions
+22–37 — real multi-arc/multi-series data, real tab filtering, a full
+mobile-responsive layout, real arc-page/home-page stats) is closed as of
+this audit; see "What's changed since Session 22's audit" above for the
+summary. **Nothing under Phase 7 has been started yet** — this section
+is a full roadmap, not a partial one. Roughly in order of "unblocks the
 most other things":
 
 1. **Formally confirm the Session 18 grant + policy SQL is applied**, using the diagnostic query in the Database schema section above, rather than relying on behavioral inference from bug reports — cheap to do, and removes the last piece of "presumed" from this file's Supabase state.
 2. **A real moderation/flagged-items view** — even a minimal one (a `/admin` or `?status=flagged` view listing flagged `content_items`, with a button to un-flag or genuinely delete) closes the biggest gap Phase 5 left open: flagging is currently permanent and unreviewable. This is also where a permissions model (who's allowed to moderate) needs to get decided.
 3. **A per-visitor confirmation/flag ledger** (or, short of that, at least a same-visitor guard) — nothing stops one browser confirming or flagging the same item repeatedly today. Worth prioritizing once this app has real, potentially adversarial traffic.
 4. **A "my submissions" view** — `content_items.submitted_by` already holds a real user id for signed-in submitters; a page listing "content I've submitted" is a small, natural next step (the Session 14 RLS policy, once confirmed run, already supports the query this would need).
-5. ~~Fix the mismatch Session 23's seeding exposed on the arc page~~ — **done in Session 24**: `app/arc/[slug]/page.jsx` now derives its AniList series id and its header's `name`/`episodes` from the real `arcs` row for `params.slug` (via new `getArcMeta`), instead of always assuming Jujutsu Kaisen/Shibuya. `ARC`'s remaining fields (badges, seasonPart, dateRange) and `ARC_NAV` were left hardcoded, deliberately out of this session's scope — see "Known issues." (`stats`' "Fan items" was fixed in Session 37; badges/seasonPart/dateRange/`ARC_NAV`'s fallback content remain open.)
-6. ~~Finish real arc-level routing~~ — **mostly done in Session 25**: `ArcNav` (arc page) and the series page's `ArcList` now both query `getArcsBySeries` and render real arcs when any are seeded. Still open: the search page's `ARCS` (an unrelated Chainsaw Man placeholder list) was left untouched — no query connects it to the currently-searched series at all, hardcoded or otherwise. Also still open: `ARC`'s remaining hardcoded header fields (badges/seasonPart/dateRange/stats) — revisit now that Sessions 24–25 have established the pattern for pulling per-arc data from Supabase.
+5. **`ARC`'s remaining hardcoded header fields** (badges, seasonPart, dateRange) and `ARC_NAV`'s fallback content — the arc page's header derives `name`/`episodes` from real data (Session 24) and `stats`' "Fan items" is real (Session 37), but badges/seasonPart/dateRange are still always Shibuya's regardless of which arc is being viewed. A visible seam on the 4 non-Shibuya real arcs, not a wrong-series bug (none of these were ever series-specific claims).
+6. **The search page's `ARCS` (an unrelated Chainsaw Man placeholder list) still isn't connected to whatever series is actually being searched** — unlike the arc page's nav strip and the series page's arc list (both real since Session 25 when a series has seeded arcs), no session has wired the search page's own arc list to `getArcsBySeries` yet.
 7. **Manual correction on `/submit`** — at minimum, editable title/creator text fields that pre-fill from OG detection but can be overridden.
-8. **Extend `/submit` beyond its single hardcoded `ARC_SLUG`** so a submission can target any of the 5 now-seeded arcs, not just Shibuya — the natural next step once item 5/6 give the app a real way to know which arc is which. Until this lands, the 4 arcs Session 23 seeded can never accumulate real `content_items` through the app itself.
+8. **Extend `/submit` beyond its single hardcoded `ARC_SLUG`** so a submission can target any of the 5 seeded arcs, not just Shibuya. Until this lands, the 4 arcs Session 23 seeded can never accumulate real `content_items` through the app itself.
 9. **Confirm a real magic-link round trip against the live Supabase project** from outside this sandbox — the one piece of the auth/identity chain never verified against anything other than a mock or an injected session.
 10. **If this project ever moves off the Supabase free plan (or sets up custom SMTP), revisit the email-OTP flow** — Session 15's application code is reconstructable from git history; the only blocker was ever the dashboard-side email template.
 11. **`next/image` adoption**, now that the `remotePatterns` config exists for it.
-12. ~~Tab/filter-pill filtering~~ — **done for the arc page in Session 28** (client-side, keyword-classified against the still-free-text `content_type`, not a real enum/id — see `ArcContent.jsx`). Still open: the search page's `FILTERS` pills do nothing; a real `content_type` taxonomy decision (enum/id instead of free text) would let both this and the search page's filtering be more precise than keyword matching.
+12. **The search page's `FILTERS` pills still do nothing** — the arc page's own content tabs are real and functional (Session 28), but nothing outside it. A real `content_type` taxonomy decision (enum/id instead of the current free-text column) would let both this and the arc page's own keyword-based tab filtering be more precise.
+13. **Give the home page's "Trending arcs" a real trending/ranking metric** — `getTrendingArcs` (Session 37) orders by most-recently-active, not a genuine weighted-by-recent-velocity ranking; see "Known issues" for the distinction. Would need either a scheduled rollup or a heavier query than this app currently runs on every home page request.
+14. **Track something real for the arc page's Saves/This week/Contributors stats** — Session 37 made "Fan items" real and deliberately left the other three as a dash rather than inventing numbers, since nothing in this schema tracks a save action, a time-windowed count, or a distinct-contributor count. Needs actual feature/schema decisions (does "saving" become a real feature at all?), not just a query.
 
 ## Session 1
 
@@ -4241,6 +4307,86 @@ crashing, though neither can be confirmed against real data from this
 environment (no live Supabase credentials here, same standing limitation
 as every prior session touching this file).
 
+## Session 38
+
+Full project audit, requested explicitly: cover all files/components,
+Supabase schema, all RLS policies, what's real vs. hardcoded per page,
+fully working end-to-end, partially working, known issues, and a Phase 7
+plan. This file's third full audit (the first was Session 17, the second
+Session 22) — same standard both times: every file re-read fresh from
+disk, nothing carried forward from memory of the incremental patches
+between audits.
+
+**Every file in `app/`, `components/`, and `lib/` (38 files) plus all 4
+root config files was read directly from disk this session**, not
+inferred from this file's own prior descriptions of them — including 20
+files no session had re-verified since a prior audit or their own
+introducing session (`app/search/page.jsx`, `app/series/[slug]/page.jsx`,
+`app/submit/page.jsx`, `app/auth/page.jsx`, `app/auth/callback/page.jsx`,
+`app/api/confirm/route.js`, `app/api/flag/route.js`,
+`app/api/og-fetch/route.js`, `lib/anilist.js`, `lib/auth.js`,
+`next.config.mjs`, `package.json`, `jsconfig.json`, and 8 components:
+`ArcNav`, `ArcContent`, `BeatSection`, `ConfirmButton`, `ContentTabs`,
+`FlagButton`, `HeroSearch`, `IntensityChart`, `CharacterChips`,
+`YoursBadge`, `ArcList`, `ContentCard`). Cross-checked every claim in the
+existing "Current State — Handoff Audit" section against what was
+actually on disk, rather than assuming a section that's been kept
+incrementally updated every session since Session 22 was still accurate
+by default.
+
+**Result: the existing audit section held up well** — every page's
+real-vs-hardcoded claims, every component's prop/behavior description,
+and the full RLS/schema section were all confirmed accurate against the
+current source. Two small inaccuracies found and fixed, both minor
+bookkeeping drift rather than anything materially wrong:
+- `lib/supabase.js` has **one** module-load `console.log` (a single
+  multi-line statement), not "two module-load logs" as this section
+  previously said.
+- **Only one** literal `TODO`-marked comment remains in the codebase
+  (`app/search/page.jsx`), not two — the series page has an equivalent,
+  already-tracked gap but its comment doesn't use the `TODO` marker, so
+  a plain grep undercounts it relative to what "Explicitly not built"
+  already documents in prose.
+
+**Structural changes made to this file, not to the application**:
+- **File inventory count corrected 37 → 38** — `components/ArcContent.jsx`
+  (added Session 28) postdates the count Session 22 originally took.
+- **Named a closed Phase 6** (Sessions 22–37: Session 22's own audit,
+  real multi-arc/multi-series data and per-slug routing, a real
+  production data bug found and fixed, real client-side tab filtering,
+  the eight-session mobile-responsiveness effort, and Session 37's real
+  arc-page/home-page stats) — previously ungrouped, sitting between
+  Phase 5 and a roadmap section titled "Phase 6+" as if Phase 6 hadn't
+  started yet, when in fact 15 sessions of real work had already
+  happened under that implicit label.
+- **Renamed "Phase 6+ roadmap" to "Phase 7 roadmap"** and updated its
+  item list: removed items that were already fully done (Session 18's
+  RLS confirmation guidance stayed, since it's still genuinely
+  unconfirmed; tab-filtering and the Session 24 arc-header fix were
+  removed as list items since they're done and already covered in
+  "Known issues"/the phase summary), and added two new forward-looking
+  items this audit's own re-read surfaced as real, currently-untracked
+  gaps: giving "Trending arcs" an actual trending/ranking metric (not
+  just "most recently active"), and deciding whether Saves/This
+  week/Contributors ever become real tracked features at all, since
+  nothing in the current schema supports any of them.
+- **Removed roughly 400 lines of stale, pre-Session-17 reference
+  material** (a separate "Stack" / "File layout" / "What each component
+  does" / "Hardcoded data per page" / "Explicitly not done" block) that
+  had drifted out of sync with the codebase (e.g. it described
+  `lib/supabase.js` as exporting only 2 of its current 8 functions) and
+  fully duplicated what the Current State section above already covers
+  more accurately — replaced with a short pointer explaining the
+  removal. The session-by-session log (Sessions 1–37, unaffected) remains
+  the complete historical record; only the second, parallel reference
+  doc was removed.
+
+**Nothing in the application code changed this session** — documentation-
+only, same convention as Sessions 17 and 22. `rm -rf .next && npm run
+build` re-run to confirm the codebase itself is still in the exact state
+this audit describes: compiles cleanly, same route table as Session 37
+left it.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -4381,402 +4527,27 @@ cross join (values
 where arcs.slug = 'shibuya-incident-arc';
 ```
 
-## Stack
 
-- Next.js 14 (App Router), plain JavaScript/JSX (no TypeScript)
-- No CSS framework — global stylesheet ported 1:1 from the mockup's
-  `<style>` block, using the same class names and CSS custom properties
-  so colors, spacing, and typography match the original exactly
-- No external UI or data libraries
-- **Supabase** (`@supabase/supabase-js`) — added Session 9 as the
-  project's database; see "Database schema" above. `lib/supabase.js`
-  exports a shared client, credentials come from `.env.local`
-  (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`, gitignored).
-  All four tables (`series`, `arcs`, `beats`, `content_items`) are created
-  and confirmed live in the Supabase project, but empty — no page
-  reads/writes Supabase data yet, and every page is still on its
-  Session 1–8 hardcoded data / AniList calls.
-  (**Note**: this paragraph describes Session 9's original state and is
-  stale — by Session 10/11 the tables are genuinely read/written; see the
-  "Current State — Handoff Audit" section at the top of this file for
-  what's actually true today.)
-- **Supabase Auth** (Session 13; briefly a 6-digit code in Session 15;
-  back to a magic link in Session 16) — email sign-in, using the same
-  `@supabase/supabase-js` client's `auth` namespace (no separate package).
-  Session 15's email-OTP code needs a Supabase email-template edit that
-  this project's free-tier plan doesn't allow, so Session 16 reverted to
-  Session 13's original magic link (see the Session 15 follow-up and
-  Session 16 notes for the full story). `lib/auth.js` exports
-  `signInWithEmail`/`signOut`/`getSession`; see the Session 13/16 notes
-  above for the full `/auth` + nav wiring.
+## Stack, file layout, and per-page hardcoded-data reference (superseded)
 
-## File layout
-
-```
-app/
-  layout.jsx            Root layout: loads Syne + Inter from Google Fonts, imports globals.css
-  globals.css           All shared page styles, copied from the arc-page mockup's <style> block. (Session 34) New `@media (max-width: 640px)` block hides `.nav-auth-email` and `.nav-browse-btn` — the real cause of the mobile overflow saga (see "Known issues"). (Session 35) Same media query gained `.nav-submit-text`/`.nav-submit-icon` rules collapsing SearchNav.jsx's "Submit content" button to icon-only at that breakpoint.
-  page.jsx               The home page. Holds all hardcoded data consts and composes the components below. (Session 36) "Submit content" link now uses the same nav-submit-icon/nav-submit-text split as SearchNav.jsx.
-  page.module.css        Styles unique to the home page (see Session 4 notes above). (Session 36) `.arcGrid` gains `grid-template-columns: 1fr` below 480px — its `minmax(300px, 1fr)` column was the real (and previously unfound) cause of the home page's 320px mobile overflow.
-  arc/[slug]/page.jsx   The arc page. Holds all hardcoded data consts and composes the components below. (Session 34) Its nav's "Browse" button now carries a `nav-browse-btn` class so mobile CSS can target it without also hiding NavAuth's Sign out button (both share `.btn-ghost`).
-  search/page.jsx        The search results page. Async Server Component — fetches the series panel from AniList (Session 6); ARCS/CHARACTERS/TOP_CONTENT are still hardcoded consts.
-  search/search.module.css  Styles unique to the search page (see Session 3 notes above)
-  submit/page.jsx         The 3-step "Add content" wizard. Client component; owns all wizard state (see Session 5 notes above). Step 3's submit button writes a real row to Supabase's content_items table (see Session 10 notes above). Step 1 debounces real Open Graph auto-detection via /api/og-fetch (see Session 12 notes above). (Session 14) Reads the session via supabase.auth.getSession() on mount and saves session.user.id as submitted_by, falling back to "anonymous" when signed out.
-  submit/submit.module.css Styles unique to the submit page
-  series/[slug]/page.jsx  The series page — [slug] is an AniList numeric id, not an aniindex slug (see Session 8 notes above)
-  series/[slug]/series.module.css  Styles unique to the series page
-  api/og-fetch/route.js  POST route: fetches a pasted URL server-side and extracts Open Graph metadata + platform/creator (see Session 12 notes above)
-  auth/page.jsx           (Session 13; OTP two-step Session 15; reverted Session 16) Single-step magic-link sign-in card, client component — email input, success screen with a same-device note and a "Back to home" link
-  auth/auth.module.css    (Session 13; churned Session 15/16) Styles for auth/page.jsx and auth/callback/page.jsx
-  auth/callback/page.jsx  (Session 13) Magic-link redirect handler, client component. Never modified by Sessions 15 or 16; load-bearing again as of Session 16's revert
-lib/
-  anilist.js             searchSeries / getSeriesById / getSeriesCharacters / getSeriesWithRelations — AniList GraphQL calls, cached via Next's fetch cache (see Session 6/7/8 notes above)
-  supabase.js             Exports a shared Supabase client (Session 9) plus getArcBeats / getArcContent (Session 11); used by app/submit/page.jsx (Session 10) and app/arc/[slug]/page.jsx (Session 11). (Session 14) getArcContent's select list now includes submitted_by.
-  auth.js                 (Session 13; changed Session 15, reverted Session 16) signInWithEmail / signOut / getSession — wraps the shared client's supabase.auth namespace. Back to sending a magic link (emailRedirectTo) as of Session 16; Session 15's verifyOtp export is gone, no longer called from anywhere.
-components/
-  ArcNav.jsx           Horizontal scrolling arc strip (the row of arc chips under the top nav)
-  ArcHero.jsx          Breadcrumb, arc title, meta line, badges, description, character chips (via CharacterChips), stat row
-  ContentTabs.jsx      Sticky tab bar (All / Edits & Video / Fan Art / Discussion / OST & Music)
-  IntensityChart.jsx   Bar chart of "community response by story beat" with peak-moment markers
-  BeatSection.jsx      One story-beat block: heading + item count + optional "peak" pill + grid of ContentCards
-  ContentCard.jsx      A single fan-content link card (thumbnail, platform badge, title, creator, tags). (Session 14) Optional submittedBy prop renders a nested YoursBadge in the thumbnail corner.
-  ContentCard.module.css  Colocated styles for ContentCard's compact (horizontal) display mode. (Session 14) Added .compactYours.
-  Sparkline.jsx        A small intensity sparkline (5 bars on the search page, 9 on the home page)
-  Sparkline.module.css Colocated styles for Sparkline (normal/high/peak tiers, series-accent override)
-  HeroSearch.jsx       Client component: home page's hero search input + quick-search chips
-  SearchNav.jsx        Client component: search page's nav — logo link, functional search input/icon/clear. (Session 13) Also renders NavAuth. (Session 35) "Submit content" link split into icon/text spans, collapses to icon-only below 640px — this is also the series page's nav (app/series/[slug]/page.jsx imports it directly).
-  CharacterChips.jsx   Character chip list (photo or colored-initials fallback, optional mention count) — used by ArcHero and the series page
-  ArcList.jsx          Arc-row list with sparklines (imports search.module.css) — used by the search page and the series page
-  NavAuth.jsx           (Session 13) Client component: the signed-in/signed-out slice of a page's nav — used by app/page.jsx, app/arc/[slug]/page.jsx, and SearchNav.jsx. (Session 34) No code change here — the mobile-overflow fix is CSS-only (globals.css); this file's signed-in markup (`.nav-auth-email` + Sign out button) is what the new mobile media query targets.
-  YoursBadge.jsx        (Session 14) Client component nested inside ContentCard: renders a "✦ Yours" pill if the current session's user id matches the submittedBy prop, else nothing
-jsconfig.json           Configures the "@/*" import alias used for components (e.g. "@/components/ArcNav")
-```
-
-The top site nav bar (logo, search bar/links, Sign in/Submit content
-buttons) and the footer/feature-pill content are rendered directly in
-each page file rather than split into extra shared components, since nav
-contents differ meaningfully between the arc, search, and home pages
-(different links, different search UI). **One exception, since Session
-13**: the Sign in/Sign out slice specifically is shared via `NavAuth`,
-since that piece — unlike the rest of each nav — needs identical
-client-side session logic everywhere it appears, not just similar-looking
-markup.
-
-## What each component does
-
-- **ArcNav** — renders the horizontal, scrollable strip of arc chips (e.g.
-  "Cursed Child Arc", "Vs. Mahito Arc" …). Takes an `arcs` array and marks
-  whichever entry has `active: true`.
-- **ArcHero** — renders the breadcrumb trail, `<h1>` arc title, the meta
-  row (episode range, season part, date range, intensity/spoiler badges),
-  the description paragraph, the row of character chips, and the
-  four-stat row (fan items, saves, this week, contributors). Each
-  character chip renders a real photo (`char.image`, as a
-  `background-image`) when present, falling back to the colored-initials
-  circle (`char.color` + `char.initials`) otherwise; the small
-  mention-count badge (`char.count`) only renders when the value is
-  present, since real AniList characters (Session 7) don't have one.
-- **ContentTabs** — renders the sticky tab bar. Takes a `tabs` array;
-  whichever tab has `active: true` gets the accent underline.
-- **IntensityChart** — renders the bar chart of ten story beats. Each beat
-  has a `heightPct` (bar height as % of the chart) and a `tier`
-  (`"normal" | "high" | "peak"`) that controls bar color and whether the
-  small accent dot + highlighted label appear above peak bars.
-- **BeatSection** — renders one story-beat's content: the beat title, item
-  count, an optional "peak moment" pill, and a responsive grid of
-  `ContentCard`s. It passes each hardcoded item's fields straight through
-  as props (`<ContentCard beatLabel={beat.title} {...item} />`) — it has
-  no markup or platform logic of its own.
-- **ContentCard** — a single fan-content link card. Always an `<a>` that
-  opens `sourceUrl` in a new tab (`target="_blank" rel="noreferrer"`).
-  Renders a thumbnail (`background: thumbnailUrl`), a platform badge, the
-  title, the creator/engagement line, and tag pills for `contentType`
-  (generic tags, e.g. "Edit", "Lore") followed by `characterTags`
-  (character tags, styled with the accent color). `beatLabel` isn't shown
-  visually — it's folded into the card's `aria-label` for context. The
-  `platform` prop (`"yt" | "tt" | "x" | "ig" | "rd"`) is looked up in a
-  `PLATFORM_META` map at the top of the file, which supplies the badge's
-  icon and display label, plus two CSS classes per platform — one for
-  each visual mode below.
-  - `compact` (boolean, default `false`) picks between two entirely
-    separate markup/style branches: the default tall 16:9-thumbnail
-    vertical card (uses the shared `.card`/`.thumb`/`.cbody`/`.tag-*`
-    classes in `globals.css`, unchanged since Session 1/2) or, when
-    `compact` is true, a horizontal row with an 80×52px thumbnail on the
-    left and text on the right (uses `compact*` classes in the colocated
-    `ContentCard.module.css`). The two variants don't share classes, so
-    styling one can't accidentally affect the other.
-- **Sparkline** — renders a small intensity sparkline: 5 bars at a fixed
-  34×20px on the search page's arc list, 9 bars stretched full-width at
-  36px tall on the home page's trending arc cards. Takes a `bars` array
-  of `{ heightPct, tier }` (same `"normal" | "high" | "peak"` vocabulary
-  as `IntensityChart`'s beats) plus optional `width`/`height`/`gap` props
-  (defaulting to `34px`/`20px`/`1.5px`, the search page's original size,
-  so that call site needed no changes). Bar colors default to the same
-  purple accent as `IntensityChart`, but fall back to whatever
-  `--series-spark-high` / `--series-spark-peak` CSS variables are set on
-  an ancestor element, which is how the search page tints these red for
-  Chainsaw Man without the component needing a `color` prop; the home
-  page doesn't set these, so its bars use the default purple.
-- **HeroSearch** — a client component (`"use client"`). Renders the home
-  page's hero search input and its "Try:" quick-search chips, and owns
-  the input's value as local state so a chip click can visibly populate
-  the field before navigating. Enter in the input, or clicking a chip,
-  calls `router.push('/search?q=...')` via `next/navigation`'s
-  `useRouter`.
-- **SearchNav** — another client component; the search page's entire nav
-  (logo, search input, icon, clear button). Seeds its input from a
-  `query` prop and is remounted (`key={query}`) whenever that prop
-  changes, so it stays in sync across client-side navigations. Enter or
-  clicking the search icon navigates to `/search?q=...`; the clear (×)
-  button clears the field and navigates to `/`.
-- **CharacterChips** — renders a list of character chips (`.chars`/
-  `.char-chip` from `globals.css`). Each chip shows a real photo
-  (`char.image`, as a `background-image`) when present, falling back to
-  a colored-initials circle (`char.color` + `char.initials`) otherwise;
-  the small mention-count badge (`char.count`) only renders when the
-  value is present. Extracted from `ArcHero` in Session 8 so the arc
-  page and the series page render character chips identically.
-- **ArcList** — renders a list of arc rows with sparklines
-  (`.arcList`/`.arcRow`/etc., imported from `search.module.css`). Takes
-  `arcs` (each with `slug`, `num`, `name`, `count`, `peak`, `spark`, and
-  optional `dividerAfter`) and an optional `moreLabel` for a trailing
-  "+N more" row. Each row is a `next/link` to `/arc/${arc.slug}`.
-  Extracted from the search page in Session 8; also used by the series
-  page.
-- **NavAuth** (Session 13) — client component; the signed-in/signed-out
-  slice of a page's `nav-right`. Reads the session via `lib/auth`'s
-  `getSession()` on mount and subscribes to `supabase.auth.onAuthStateChange`
-  to stay live. Renders a `next/link` to `/auth` reading "Sign in" (its
-  class is a `signInClassName` prop, default `"btn btn-ghost"`) when
-  signed out, or the session's email (`.nav-auth-email`) + a "Sign out"
-  button when signed in. Used by `app/page.jsx`, `app/arc/[slug]/page.jsx`,
-  and `SearchNav` (so the search and series pages get it too).
-- **YoursBadge** (Session 14) — client component nested inside
-  `ContentCard`. Takes `{ submittedBy, className }`; on mount, calls
-  `getSession()` once and renders a `✦ Yours` pill (via the passed-in
-  `className` — `.yours-badge` for the default card mode, `.compactYours`
-  for compact) if `session.user.id === submittedBy`, else renders nothing.
-  Exists so `ContentCard` and the arc page (a Server Component) don't need
-  to become client-rendered just for this one id comparison — see the
-  Session 14 notes above for the full reasoning.
-
-## Hardcoded data (in `app/page.jsx`)
-
-- `NAV_LINKS`, `HERO_STATS`, `FEATURES` — static nav links and top-line
-  numbers; `NAV_LINKS`' "active" link is hand-set, not derived from the
-  current route.
-- ~~`TRENDING_ARCS`~~ — **replaced in Session 37** by `getTrendingArcs(6)`
-  (`lib/supabase.js`), so the "Trending arcs" section on the home page now
-  shows real arcs, real item counts, and real per-arc beat intensity —
-  see the Session 37 log entry and "Known issues" for what this does and
-  doesn't cover ("most recently active," not a genuine 7-day trending
-  ranking; no cap beyond a 500-row recent-content window).
-- `POPULAR_SERIES` — the horizontally-scrolling series cards (name,
-  poster gradient, arc count, item count). Links to
-  `/search?q=<series name>`; the search page doesn't actually read that
-  query param yet (`app/search/page.jsx` always renders its own
-  hardcoded Chainsaw Man results regardless of `?q=`), so this link is
-  correct but not yet "wired through."
-- `TRENDING_MOMENTS` — the 5 trending-moment rows (rank, whether it's a
-  top-3 "hot" rank, moment name, series/arc, item count, weekly delta).
-  These rows aren't links yet — there's no destination page for an
-  individual story beat/moment outside of an arc page's beat sections.
-
-## Hardcoded data (in `app/search/page.jsx`)
-
-As of Session 6, the series panel itself is **real data** fetched from
-AniList via `lib/anilist.js` (see the Session 6 notes above) — it's no
-longer a hardcoded const. Still hardcoded, unaffected by the actual
-search query:
-
-- `RESULTS_SUMMARY` and `FILTERS` — the results-count line and the type
-  filter pills with their counts. None of the filter pills actually
-  filter anything yet (only "All" is marked active); wiring them up needs
-  real per-type counts and a query mechanism.
-- `ARCS` — the 8 detailed arc rows (slug, display number, name, item
-  count, sparkline bars, whether it gets a "peak" dot). `slug` is used to
-  build each row's `/arc/[slug]` link. The `dividerAfter` flag on one arc
-  hardcodes where the mockup's visual divider falls — a real version
-  would probably derive that from a "part" grouping instead. `spark`
-  heights/tiers are hand-picked exactly like `INTENSITY_BEATS` on the arc
-  page and will eventually derive from real per-arc engagement data.
-- `MORE_ARCS_LABEL` and `MORE_CHARACTERS_COUNT` — static stand-ins for
-  the "+N more" affordances; today they're plain text, not real
-  expand/pagination.
-- `ALSO_FOUND` — the "Manga / OST / Related" rows; currently static
-  text-only rows (not links) since there's no destination page for a
-  manga part, an OST, or a "related works" listing yet.
-- `CHARACTERS` — the character chips (initials, avatar color, name,
-  mention count). Chip links are still `href="#"` placeholders — no
-  character detail/filter page exists yet.
-- `TOP_CONTENT` — 4 items shaped exactly like `ContentCard`'s props
-  (`title`, `creator`, `platform`, `thumbnailUrl`, `contentType`,
-  `characterTags`, `sourceUrl`). Same caveats as `BEATS` on the arc page:
-  `thumbnailUrl` is a CSS gradient placeholder and `sourceUrl` is `"#"`
-  for every item.
-
-## Hardcoded data (in `app/arc/[slug]/page.jsx`)
-
-As of Session 7, `ANILIST_SERIES_ID` (113415, Jujutsu Kaisen) drives real
-`getSeriesById`/`getSeriesCharacters` calls that override `ARC`'s
-`breadcrumb[0]` (series name), `description`, and `characters` when
-AniList succeeds — see the Session 7 notes above. `ARC.characters` is
-still the fallback used when AniList fails or `params.slug` isn't
-plugged in yet. Everything else below is a plain `const` at the top of
-the page file, standing in for what will eventually come from a
-database/API:
-
-- `ARC_NAV` — the list of arcs shown in the horizontal strip, with fan-item
-  counts and which one is "active". Will come from a per-series "arcs"
-  table/endpoint, keyed by the same `slug` the route already receives via
-  `params.slug`. **`params.slug` itself is now used** (Session 11) — just
-  not here yet; `getArcBeats`/`getArcContent` key off it, but `ARC_NAV`'s
-  own list and `active` flag are still the fixed array above regardless of
-  which slug is in the URL.
-- `ARC` — arc-specific metadata that's still fully hardcoded: name,
-  episode range, season/date line, badges, and the four top-line stats.
-  (`breadcrumb[0]`, `description`, and `characters` are overridden by
-  real AniList data when available — see above.) A real version needs an
-  arc detail endpoint (for the arc-specific fields) that also stores
-  which AniList series id each arc belongs to.
-- `TABS` — tab labels and per-tab item counts. Counts will need to be
-  computed from the real content index; only "All" is meaningful right
-  now since the other tabs don't yet filter anything (no filtering logic
-  has been wired up).
-- `INTENSITY_BEATS` — **fallback only, as of Session 11.** When
-  `params.slug` matches a seeded arc, the intensity chart is built from
-  real `beats` rows via `getArcBeats` instead (see the Session 11 notes
-  above); this hand-picked array only renders for a slug that isn't in
-  the database yet (i.e. everything except `shibuya-incident-arc` today).
-- `BEATS` — **fallback only, as of Session 11**, same as
-  `INTENSITY_BEATS` above. When the arc is found in the database, the
-  beat sections and their `ContentCard`s are built from real
-  `content_items`/`beats` rows via `getArcContent`/`getArcBeats`
-  (`buildBeatSections` in `app/arc/[slug]/page.jsx`) — one section per
-  real beat, including beats with zero submitted items, rather than this
-  three-section, always-populated hardcoded array. `thumbnailUrl` for
-  real content items is still whatever `content_items.thumbnail_url`
-  holds — currently a CSS `linear-gradient(...)` string for the one item
-  seeded/submitted so far (Session 10's `/submit` flow doesn't do real
-  thumbnail extraction either), same caveat as the hardcoded data it
-  replaces: will need to switch to a real `background-image: url(...)`
-  or an `<img>` once actual thumbnail images exist anywhere in the
-  pipeline.
-
-## Hardcoded data (in `app/submit/page.jsx`)
-
-- ~~`RESOLVED_LINK`~~ — **removed in Session 12.** Step 1's link resolution
-  is now genuinely real, via `/api/og-fetch` — see the Session 12 notes
-  above. `DEFAULT_THUMBNAIL` and `PLATFORM_LABELS` remain as the honest
-  fallbacks used when detection hasn't succeeded (still loading, or
-  failed and the user is proceeding manually).
-- `SERIES_DETECTED` / `ARC_DETECTED` — the step 2 "auto-detected" series
-  and arc, always Jujutsu Kaisen / Shibuya Incident Arc regardless of the
-  resolved link. A real version needs actual title/caption parsing (or
-  manual series/arc pickers behind the still-inert "Change" links).
-  `note` is the small "Detected from…" explainer text under each field.
-  Note this is a step *behind* Session 12's link detection now — the link
-  title/platform/creator are real, but which series/arc that content
-  belongs to is still guessed from nothing.
-- ~~`BEATS`~~ — **removed in the Session 11 follow-up.** The 10-bar beat
-  selector now renders from `realBeats`, fetched live via
-  `getArcBeats(ARC_SLUG)` on mount — real titles and real intensities,
-  not a hand-picked hardcoded array. See the Session 11 follow-up notes
-  above.
-- `INITIAL_CHARACTERS` — the one pre-detected character chip (Gojo
-  Satoru). A real version needs actual character detection from the
-  video/caption, plus a working character picker behind "+ Add
-  character" (currently inert).
-- `CONTENT_TYPE_OPTIONS` — the 6 content-type pills; "Edit / AMV" is
-  preselected to match the mockup. These are just labels, not IDs tied to
-  any real taxonomy yet.
-- `ARC_SLUG` (Session 10) — the one arc real submissions can currently be
-  saved against (`"shibuya-incident-arc"`, matching the Part 1 seed
-  data's `arcs.slug`). Not itself hardcoded *display* data like the
-  consts above — it's the lookup key `handleSubmit` uses to find the real
-  `arc_id` at submit time.
-
-## Hardcoded data (in `app/series/[slug]/page.jsx`)
-
-- `ARCS` and `MORE_ARCS_LABEL` — the exact same 8 placeholder arcs (plus
-  "+ 3 more arcs" label) as the search page's `ARCS`/`MORE_ARCS_LABEL`,
-  duplicated rather than imported (see the Session 8 note above on why).
-  Same caveat as everywhere else this data appears: not derived from
-  whichever real series the page is showing.
-- Everything else on this page — hero title, description, genres, score,
-  format/year/episodes/status, and all 10 character chips — is real
-  AniList data keyed off the `[slug]` (an AniList numeric id), the first
-  page in the project where that's true.
-
-## Explicitly not done
-
-- **Partially resolved in Session 11**: `params.slug` now drives real
-  queries (`getArcBeats`/`getArcContent`) for the intensity chart and beat
-  sections — `/arc/shibuya-incident-arc` shows real data, any other slug
-  falls back to the hardcoded Shibuya mockup data (see the Session 11
-  notes above). Still not real: `ARC_NAV`, `ARC`'s own fields (name,
-  episodes, badges, stats), and `TABS` are all still the same fixed data
-  regardless of the URL's `[slug]` — the arc links clicked from the
-  search page and the home page's trending arc cards
-  (`/arc/introduction-arc`, `/arc/rumbling-arc`, etc.) render real beats
-  only if that exact slug happens to be seeded (today, only
-  `shibuya-incident-arc` is), and the hardcoded Shibuya mockup data for
-  everything else on the page regardless.
-- **Resolved in Session 6**: the `?q=` query param on `/search` is now
-  read and drives a real AniList lookup for the series panel. What's
-  still not real: the arc list, characters, "also found," and top
-  content sections all stay fully hardcoded regardless of `?q=` (see the
-  Session 6 notes above) — e.g. searching "Attack on Titan" shows a real
-  AniList series panel over a hardcoded Chainsaw Man arc list.
-- No tab/filter-pill filtering on any page — clicking a tab or a filter
-  pill doesn't change which items are shown.
-- No auth — the nav's "Sign in" buttons and character chip links are
-  still static, non-functional markup. **Partially resolved in Sessions
-  9–11**: a real database (Supabase) now exists, `/submit`'s final step
-  genuinely writes to it, and the arc page reads real beats/content back
-  out for seeded arcs (see below) — but there's still no login/identity
-  system behind `submitted_by` (hardcoded to the string `"anonymous"`),
-  and no moderation UI reads/changes a `content_items` row's `status`
-  beyond the hardcoded `'pending'` every submission is written with.
-  **Further resolved in Session 13**: the nav's "Sign in" button now
-  genuinely links to `/auth`, which sends a real Supabase sign-in email
-  and signs the user in on completion; the nav reflects real
-  signed-in/signed-out state (email + Sign out button vs. Sign in link).
-  Character chip links are still inert (unrelated to auth — no character
-  detail/filter page exists). **Further resolved in Session 14**:
-  `submitted_by` now saves the real signed-in user's id instead of the
-  literal string `"anonymous"` (still falls back to `"anonymous"` when
-  genuinely signed out), and the arc page's content cards show a "Yours"
-  badge on a submission that matches the current session. **Sign-in method
-  churned in Sessions 15–16**: briefly a two-step 6-digit email code
-  (Session 15), reverted back to the original magic link (Session 16)
-  once it turned out the code approach needs a Supabase dashboard setting
-  this project's free plan doesn't allow — see the Session 15 follow-up
-  and Session 16 notes. The underlying identity behavior from Sessions
-  13–14 was unaffected by any of this churn. Still no moderation UI, no
-  "my submissions" list, and no way to edit/delete a submission — Sessions
-  13–16 together built and wired up the identity layer, not a full
-  ownership feature set on top of it (see "Suggested
-  next phase" in the Current State section above).
-- No pagination/infinite scroll for the card grids, and no real
-  expansion behind the "+N more" affordances on the search page.
-- No real series/arc/character *detection* on `/submit` —
-  `SERIES_DETECTED`, `ARC_DETECTED`, and `INITIAL_CHARACTERS` are all
-  still hardcoded regardless of what URL the user actually pastes; the
-  Series/Arc "Change" links, "+ Add character", "Skip this beat", and
-  "How placement works" links are all still inert. **Resolved in Session
-  10**: the final step's submit button is no longer disabled — clicking
-  "Add to aniindex" performs a real Supabase insert into `content_items`
-  using the real (typed) `source_url`, the real selected `content_type`/
-  `character_tags`/beat, and a real, currently hardcoded-to-Shibuya
-  `arc_id`, with genuine success/error feedback (see the Session 10 notes
-  above). Submissions are real database rows now; they just can't yet be
-  placed against any arc other than Shibuya, and nothing downstream (an
-  arc page's moderation view) reads `status` or displays these rows by
-  status yet — the arc page (Session 11) does now display them, just not
-  filtered/grouped by status. **Resolved in Session 12**: link
-  resolution itself is real — `/api/og-fetch` genuinely fetches the
-  pasted URL and extracts its real title/thumbnail/platform/creator (see
-  the Session 12 notes above), replacing what was previously a fully
-  fake, always-the-same-TikTok-item stand-in.
+This file used to carry a separate "Stack" / "File layout" / "What each
+component does" / "Hardcoded data (per page)" / "Explicitly not done"
+reference here, written before Session 17 introduced the "Current State
+— Handoff Audit" section above. Removed in Session 38's audit: every
+piece of real information those sections held is already covered, more
+accurately and without the duplication, by the Current State section's
+own "Complete file inventory," "What's real vs. hardcoded, per page,"
+"Fully working end-to-end," "Partially working," "Known issues," and
+"Explicitly not built" subsections — which are the ones that have
+actually been kept current every session since. This legacy block had
+drifted out of sync (e.g. it still listed `lib/supabase.js` as exporting
+only `getArcBeats`/`getArcContent`, missing the five other functions
+added since) and one of its own paragraphs already said so in place
+("this paragraph describes Session 9's original state and is stale").
+Removing it isn't a loss of history — the session-by-session log earlier
+in this file (Sessions 1 through 37, immediately after the Current State
+section) is unaffected and remains the complete, append-only record of
+how the project got built; this was a second, parallel *reference* doc,
+not part of that log, and keeping two reference docs in sync every
+session was exactly the fragmentation Session 17 was created to fix in
+the first place.
