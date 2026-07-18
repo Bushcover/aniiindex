@@ -4,6 +4,7 @@ import ArcList from "@/components/ArcList";
 import SearchNav from "@/components/SearchNav";
 import { searchSeries, getSeriesCharacters } from "@/lib/anilist";
 import { getSeriesByAnilistId, getAllArcsForSeries, getArcSparkline } from "@/lib/supabase";
+import { buildOpenGraph } from "@/lib/metadata";
 import styles from "./search.module.css";
 
 // Hardcoded placeholder counts for the sections that aren't wired to real
@@ -152,15 +153,25 @@ export async function generateMetadata({ searchParams }) {
     title,
     description,
     alternates: { canonical },
-    openGraph: {
+    // Session 46 fix: see app/arc/[slug]/page.jsx's own generateMetadata
+    // comment — buildOpenGraph (lib/metadata.js) is what keeps
+    // og:site_name/locale from silently disappearing when this branch
+    // defines its own openGraph object (the no-query/no-match branches
+    // above don't set their own openGraph at all, so they already
+    // inherited the root layout's siteName/locale correctly — this was
+    // only broken on the "real match" branch).
+    openGraph: buildOpenGraph({
       title,
       description,
       url: canonical,
       type: "website",
       ...(image && { images: [{ url: image }] }),
-    },
+    }),
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      // Always "summary_large_image" (requested directly, Session 46) —
+      // see the arc page's own comment for why this is no longer
+      // conditional on `image`.
+      card: "summary_large_image",
       title,
       description,
       ...(image && { images: [image] }),

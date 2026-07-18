@@ -5040,6 +5040,109 @@ for confirming metadata against the actual 21-arc/7-series seed
 described above, which remains unverified from this sandbox. Playwright
 was not installed this session — nothing here needed a real browser.
 
+## Session 46
+
+Bug-fix follow-up to Session 45's SEO/Open Graph work, reported directly:
+opengraph.xyz showed the arc page missing `og:title`, `og:image`,
+`twitter:card`, and `og:site_name`, with the browser title falling back
+to plain "Aniindex." The report suggested three specific causes to check
+(`generateMetadata` not a real named export; root layout metadata
+overriding the page; the arc page secretly being a client component) —
+investigated all three directly against the actual source rather than
+assuming any of them, and none held up: `generateMetadata` is a real
+named export in `app/arc/[slug]/page.jsx`, that file has no `"use
+client"` directive anywhere (it's an `async` Server Component, unchanged
+since Session 24), and Next's metadata merging doesn't work the way "root
+overriding the page" would require (see below for what it actually does).
+All three were an honest non-finding, reported as such rather than
+"fixed" to match the request — same convention Session 33 already
+established for this file (an honest non-finding, not dressed up as a
+fix) — but that didn't mean nothing was wrong; two real, distinct issues
+were found by checking the actual rendered output instead:
+
+**Real cause 1 — the production branch never received Session 45 at
+all.** `git log` on `origin/claude/aniindex-arc-page-nextjs-wwizd5` (the
+branch this file's own "Default branch" note says Vercel deploys as
+Production) showed it still sitting at Session 44's commit — Session 45
+was pushed only to `claude/aniindex-continuation-sy3dsp`, per this task's
+own designated-branch instructions, and never reached the branch Vercel
+actually serves. This alone explains `og:title`/`og:image`/`twitter:card`
+being reported missing and the title reading plain "Aniindex": production
+was running Session 44's code, which had no per-page metadata at all
+beyond the single old static site-wide title. Confirmed via `git
+merge-base --is-ancestor` that production is a clean, unmodified ancestor
+of the continuation branch (no divergent work to reconcile) before
+fast-forwarding it — see "Pushed to" below.
+
+**Real cause 2 — `og:site_name` was genuinely missing, on every page that
+defines its own `openGraph` object, even on the correct branch.** Verified
+directly (not assumed) with a local mock-PostgREST + `next dev`, grepping
+specifically for `og:site_name` this time (Session 45's own verification
+never checked for it): present on pages that don't define their own
+`openGraph` at all (bare `/search`, `/submit`) — those fully inherit
+`app/layout.jsx`'s `openGraph.siteName`; **absent** on every page that
+does (home, arc, series, matched-search) — because Next's Metadata API
+does not deep-merge composite fields like `openGraph` across nested
+layouts/pages: a segment that defines its own `openGraph` object replaces
+the parent's *entirely*, not just the fields it overrides. Session 45's
+own per-page `openGraph` objects (title/description/url/images) were
+exactly this pattern, and none of them re-specified `siteName`/`locale`,
+so those two fields silently vanished from every page that had *real*,
+richer Open Graph data — the irony being that the pages with the least
+metadata (submit/auth, via their bare pass-through layouts) were the only
+ones rendering `og:site_name` correctly.
+
+**Fix**: new `lib/metadata.js` — `SITE_NAME` ("aniindex", lowercase,
+matching the literal nav-logo text `ani<span>index</span>` rather than
+the capitalized "Aniindex" this file's `<title>` text already used and
+keeps using unchanged — only `og:site_name` was asked to be lowercase)
+and `buildOpenGraph(fields)`, which merges `{ siteName, locale: "en_US"
+}` under whatever fields a page passes in. Every page-level `openGraph`
+object (`app/layout.jsx`, `app/page.jsx`, `app/arc/[slug]/page.jsx`,
+`app/series/[slug]/page.jsx`, `app/search/page.jsx`'s matched-query
+branch) now goes through this helper instead of a bare object literal —
+routing every future page's `openGraph` through the same helper is what
+actually prevents this bug class recurring the next time a page adds its
+own `openGraph`, not just patching today's five call sites by hand.
+`app/search/page.jsx`'s no-query/no-match branches were already correct
+(they don't define their own `openGraph` at all) and needed no change.
+
+**Also requested directly**: `twitter.card` is now unconditionally
+`"summary_large_image"` everywhere, including pages with no image to back
+it with (previously conditional — `"summary"` when a page had no
+`openGraph.images`, since a large-image card technically isn't backed by
+anything without one; that conditional is gone now, per this request).
+Set once at the root layout (`app/layout.jsx`'s own `twitter.card`) for
+every page that doesn't define its own `twitter` object (home inherits
+it fully now that it has none of its own; `/submit`/`/auth` already
+didn't), and hardcoded directly in each page that does define its own
+`twitter` object (arc/series/search's matched branch — unlike
+`openGraph`, these pages already set `card` explicitly themselves each
+time, so there was no silent-inheritance gap to fix here, just the
+conditional to remove).
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 45 left it. Re-ran this project's standing local
+mock-PostgREST + `next dev` convention and grepped the actual rendered
+`<head>` for every affected page/state — confirmed `og:site_name:
+"aniindex"` and `twitter:card: "summary_large_image"` present on: the
+home page, a real seeded arc page (alongside its still-correct
+`og:image`/`twitter:image` real AniList banner URL, `og:locale` now also
+present for the same reason `og:site_name` is), a matched search query,
+and `/submit` (via its pass-through layout, confirming the root-level
+default still propagates correctly to pages that set no `openGraph`/
+`twitter` of their own). Playwright was not installed this session —
+this is server-rendered `<head>` markup, verified the same way Session 45
+verified it, via direct HTML inspection rather than browser automation.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (the Production
+branch), per direct instruction this session, in addition to this file's
+own designated `claude/aniindex-continuation-sy3dsp` — confirmed via
+`git merge-base --is-ancestor` immediately beforehand that Production was
+a clean ancestor of the continuation branch (Session 44's own commit,
+nothing else), so this was a fast-forward, not a merge or an overwrite of
+any divergent work.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

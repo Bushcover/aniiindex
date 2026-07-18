@@ -3,6 +3,7 @@ import Sparkline from "@/components/Sparkline";
 import HeroSearch from "@/components/HeroSearch";
 import NavAuth from "@/components/NavAuth";
 import { getTrendingArcs } from "@/lib/supabase";
+import { buildOpenGraph } from "@/lib/metadata";
 import styles from "./page.module.css";
 
 // Session 37: forces this route to render dynamically on every request
@@ -21,16 +22,20 @@ export const revalidate = 0;
 // `openGraph.images` — this page has no single real image to point at
 // (see app/layout.jsx's own comment on why no site-wide placeholder
 // image was added either).
+//
+// Session 46 fix: `openGraph` now goes through `buildOpenGraph`
+// (lib/metadata.js) instead of a bare `{ description, url }` object —
+// this page defining its own `openGraph` was silently replacing (not
+// merging with) the root layout's `openGraph.siteName`/`locale`, so
+// `og:site_name` never actually rendered on the home page despite
+// app/layout.jsx defining it — confirmed via direct `<head>` inspection.
 const HOME_DESCRIPTION =
   "Fan edits, art, breakdowns, and discussion for anime story arcs — organized by story beat. Not hosted, just found.";
 
 export const metadata = {
   description: HOME_DESCRIPTION,
   alternates: { canonical: "/" },
-  openGraph: {
-    description: HOME_DESCRIPTION,
-    url: "/",
-  },
+  openGraph: buildOpenGraph({ description: HOME_DESCRIPTION, url: "/" }),
 };
 
 // A small, fixed set of the app's existing accent-family hex colors

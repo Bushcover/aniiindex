@@ -3,6 +3,7 @@ import CharacterChips from "@/components/CharacterChips";
 import SearchNav from "@/components/SearchNav";
 import { getSeriesWithRelations, getSeriesCharacters } from "@/lib/anilist";
 import { getArcsBySeries } from "@/lib/supabase";
+import { buildOpenGraph } from "@/lib/metadata";
 import styles from "./series.module.css";
 
 // Fallback only, as of Session 25 — AniList has no arc-level data, so
@@ -175,15 +176,22 @@ export async function generateMetadata({ params }) {
     title: seriesName,
     description,
     alternates: { canonical: url },
-    openGraph: {
+    // Session 46 fix: see app/arc/[slug]/page.jsx's own generateMetadata
+    // comment — buildOpenGraph (lib/metadata.js) is what keeps
+    // og:site_name/locale from silently disappearing when this page
+    // defines its own openGraph object.
+    openGraph: buildOpenGraph({
       title: seriesName,
       description,
       url,
       type: "website",
       ...(image && { images: [{ url: image }] }),
-    },
+    }),
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      // Always "summary_large_image" (requested directly, Session 46) —
+      // see the arc page's own comment for why this is no longer
+      // conditional on `image`.
+      card: "summary_large_image",
       title: seriesName,
       description,
       ...(image && { images: [image] }),

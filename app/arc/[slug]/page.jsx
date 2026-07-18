@@ -5,6 +5,7 @@ import ArcContent from "@/components/ArcContent";
 import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent, getArcMeta, getArcsBySeries } from "@/lib/supabase";
+import { buildOpenGraph } from "@/lib/metadata";
 
 // Forces this route to always render dynamically and re-fetch on every
 // request — without it, Next can treat this dynamic-segment page as
@@ -276,19 +277,24 @@ export async function generateMetadata({ params }) {
     title,
     description,
     alternates: { canonical: url },
-    openGraph: {
+    // Session 46 fix: routed through buildOpenGraph (lib/metadata.js) —
+    // this object was previously replacing, not merging with, the root
+    // layout's `openGraph.siteName`/`locale`, so `og:site_name` never
+    // actually rendered on this page despite app/layout.jsx defining it.
+    openGraph: buildOpenGraph({
       title,
       description,
       url,
       type: "article",
       ...(image && { images: [{ url: image }] }),
-    },
+    }),
     twitter: {
-      // A "summary_large_image" card with no image is invalid per
-      // Twitter's own card spec — falls back to the smaller "summary"
-      // card (no image) rather than claiming a large-image card this
-      // page can't back up.
-      card: image ? "summary_large_image" : "summary",
+      // Always "summary_large_image" (requested directly, Session 46) —
+      // previously fell back to the smaller "summary" card when there
+      // was no image, since a "summary_large_image" card technically
+      // isn't backed by anything without one; every page now claims it
+      // regardless.
+      card: "summary_large_image",
       title,
       description,
       ...(image && { images: [image] }),
