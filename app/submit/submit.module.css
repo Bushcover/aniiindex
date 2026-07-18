@@ -276,7 +276,7 @@
   color: var(--t1);
   flex: 1;
 }
-.autoBadge {
+.selectedBadge {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -287,6 +287,82 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--green);
+  flex-shrink: 0;
+}
+
+/* Series/arc search + selection (Phase 7) */
+.searchInput {
+  width: 100%;
+  height: 40px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--r-sm);
+  padding: 0 14px;
+  font-size: 13px;
+  font-family: var(--body);
+  color: var(--t1);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.searchInput:focus {
+  border-color: rgba(123, 108, 246, 0.5);
+}
+.searchInput::placeholder {
+  color: var(--t3);
+}
+.searchResults {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.searchChip {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-mid);
+  color: var(--t2);
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.15s;
+  font-family: var(--body);
+}
+.searchChip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.arcList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.arcListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--body);
+  transition: all 0.15s;
+}
+.arcListItem:hover {
+  border-color: var(--border-mid);
+}
+.arcListItemTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t1);
+}
+.arcListItemMeta {
+  font-size: 11px;
+  color: var(--t3);
   flex-shrink: 0;
 }
 .changeLink {

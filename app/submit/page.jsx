@@ -4,13 +4,8 @@ import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ContentCard, { getThumbnailStyle } from "@/components/ContentCard";
-import { supabase, getArcBeats } from "@/lib/supabase";
+import { supabase, getArcBeats, searchSeries, getAllArcsForSeries } from "@/lib/supabase";
 import styles from "./submit.module.css";
-
-// Matches the arc seeded into Supabase in Session 10 (see PROJECT.md's
-// Database schema section for the seed SQL) — the only arc real
-// submissions can currently be saved against.
-const ARC_SLUG = "shibuya-incident-arc";
 
 const STEP_META = [
   { num: 1, label: "Link" },
@@ -33,15 +28,11 @@ const PLATFORM_LABELS = {
   reddit: "Reddit",
 };
 
-const SERIES_DETECTED = { name: "Jujutsu Kaisen", note: 'Detected from "Gojo" in title and caption keywords' };
-const ARC_DETECTED = { name: "Shibuya Incident Arc", note: 'Detected from "Gojo sealed", "Shibuya" in caption' };
-
 // Real beats (id, title, order_index, intensity, is_peak) are fetched from
-// Supabase on mount via getArcBeats(ARC_SLUG) — see the `realBeats` state
-// below. Session 10's seed data keeps "The Sealing" at index 4, so this
-// stays a reasonable initial selection regardless of when the fetch
-// resolves.
-const DEFAULT_BEAT_INDEX = 4; // "The Sealing"
+// Supabase once an arc is selected, via getArcBeats(selectedArc.slug) — see
+// the `realBeats` state below. There's no reasonable arc-agnostic default
+// beat anymore (Session 5/10's old default assumed the Shibuya arc's own
+// beat order), so selection always starts at index 0 and the user picks.
 
 const INITIAL_CHARACTERS = [{ name: "Gojo Satoru", initials: "GS", color: "#7B6CF6" }];
 
@@ -57,7 +48,14 @@ export default function SubmitPage() {
 
   const [step, setStep] = useState(1);
   const [url, setUrl] = useState("");
-  const [selectedBeatIndex, setSelectedBeatIndex] = useState(DEFAULT_BEAT_INDEX);
+  const [seriesQuery, setSeriesQuery] = useState("");
+  const [seriesResults, setSeriesResults] = useState([]);
+  const [seriesSearchStatus, setSeriesSearchStatus] = useState("idle"); // idle | loading | success
+  const [selectedSeries, setSelectedSeries] = useState(null); // { id, anilist_id, title, slug } | null
+  const [arcsForSeries, setArcsForSeries] = useState([]);
+  const [arcsLoadStatus, setArcsLoadStatus] = useState("idle"); // idle | loading | success
+  const [selectedArc, setSelectedArc] = useState(null); // { id, slug, title, episode_start, episode_end } | null
+  const [selectedBeatIndex, setSelectedBeatIndex] = useState(0);
   const [characters, setCharacters] = useState(INITIAL_CHARACTERS);
   const [contentType, setContentType] = useState(DEFAULT_CONTENT_TYPE);
   const [check1, setCheck1] = useState(true);
@@ -141,9 +139,79 @@ export default function SubmitPage() {
     creator: resolvedLink?.creator || "Unknown creator",
   };
 
+  // Debounced series search: waits 300ms after the user stops typing before
+  // querying Supabase, and skips the query entirely once a series is
+  // already selected (the input itself is replaced by the selected-series
+  // summary at that point, so seriesQuery can't change anymore anyway —
+  // this guard is what stops a stale in-flight search from repopulating
+  // seriesResults after handleChangeSeries clears the query back to "").
   useEffect(() => {
+    if (selectedSeries) return;
+
+    const trimmed = seriesQuery.trim();
+    if (trimmed.length === 0) {
+      setSeriesResults([]);
+      setSeriesSearchStatus("idle");
+      return;
+    }
+
+    setSeriesSearchStatus("loading");
     let cancelled = false;
-    getArcBeats(ARC_SLUG)
+    const timeoutId = setTimeout(() => {
+      searchSeries(trimmed).then((results) => {
+        if (cancelled) return;
+        setSeriesResults(results);
+        setSeriesSearchStatus("success");
+      });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [seriesQuery, selectedSeries]);
+
+  // Loads every arc for the selected series once it's chosen — the second
+  // tier of Step 2's manual placement picker (Phase 7). Resets back to
+  // nothing the moment the series selection is cleared, since an arc from
+  // the old series would otherwise linger selected against a new one.
+  useEffect(() => {
+    if (!selectedSeries) {
+      setArcsForSeries([]);
+      setArcsLoadStatus("idle");
+      setSelectedArc(null);
+      return;
+    }
+
+    let cancelled = false;
+    setArcsLoadStatus("loading");
+    getAllArcsForSeries(selectedSeries.id).then((arcs) => {
+      if (cancelled) return;
+      setArcsForSeries(arcs);
+      setArcsLoadStatus("success");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSeries]);
+
+  // Loads real beats for the selected arc — replaces Sessions 5/10's
+  // mount-time fetch against the single hardcoded ARC_SLUG. Resets the
+  // beat selection back to index 0 on every arc change, since a beat index
+  // that made sense for one arc's beat list is meaningless against another
+  // arc's own list.
+  useEffect(() => {
+    setSelectedBeatIndex(0);
+    if (!selectedArc) {
+      setRealBeats(null);
+      setBeatsLoadError("");
+      return;
+    }
+
+    let cancelled = false;
+    setRealBeats(null);
+    setBeatsLoadError("");
+    getArcBeats(selectedArc.slug)
       .then((beats) => {
         if (cancelled) return;
         if (!beats || beats.length === 0) {
@@ -159,9 +227,23 @@ export default function SubmitPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedArc]);
 
   const selectedBeat = realBeats?.[selectedBeatIndex] ?? null;
+
+  function handleSelectSeries(series) {
+    setSelectedSeries(series);
+    setSeriesQuery("");
+    setSeriesResults([]);
+  }
+
+  function handleChangeSeries() {
+    setSelectedSeries(null);
+  }
+
+  function handleChangeArc() {
+    setSelectedArc(null);
+  }
 
   function getBarTier(i) {
     if (i === selectedBeatIndex) return "selected";
@@ -178,20 +260,8 @@ export default function SubmitPage() {
     setSubmitError("");
 
     try {
-      const { data: arc, error: arcError } = await supabase
-        .from("arcs")
-        .select("id")
-        .eq("slug", ARC_SLUG)
-        .single();
-      if (arcError || !arc) {
-        const detail = arcError
-          ? `${arcError.message}${arcError.code ? ` [${arcError.code}]` : ""}`
-          : "query returned no data";
-        throw new Error(`Couldn't find the Shibuya Incident Arc in the database (${detail}).`);
-      }
-
       const { error: insertError } = await supabase.from("content_items").insert({
-        arc_id: arc.id,
+        arc_id: selectedArc.id,
         beat_id: selectedBeat.id,
         source_url: url,
         title: effectiveLink.title,
@@ -270,7 +340,7 @@ export default function SubmitPage() {
             <div className={styles.stepActiveHead}>
               <div className={styles.stepActiveTitle}>Add a link</div>
               <div className={styles.stepActiveSub}>
-                Paste a link to fan content — we&rsquo;ll try to detect the series, arc, and story beat
+                Paste a link to fan content — we&rsquo;ll try to detect the title, thumbnail, and creator
               </div>
             </div>
             <div className={styles.stepBody}>
@@ -340,35 +410,96 @@ export default function SubmitPage() {
             <div className={styles.stepActiveHead}>
               <div className={styles.stepActiveTitle}>Where does this belong?</div>
               <div className={styles.stepActiveSub}>
-                We detected the series and arc from the video title and caption
+                Choose the series, arc, and story beat this content belongs to
               </div>
             </div>
 
             <div className={styles.stepBody}>
               <div className={styles.field}>
                 <div className={styles.fieldLabel}>Series</div>
-                <div className={styles.fieldRow}>
-                  <div className={cx(styles.detectedVal, styles.detectedValConfirmed)}>
-                    <div className={styles.detectedText}>{SERIES_DETECTED.name}</div>
-                    <div className={styles.autoBadge}>✦ auto-detected</div>
+                {selectedSeries ? (
+                  <div className={styles.fieldRow}>
+                    <div className={cx(styles.detectedVal, styles.detectedValConfirmed)}>
+                      <div className={styles.detectedText}>{selectedSeries.title}</div>
+                      <div className={styles.selectedBadge}>✓ selected</div>
+                    </div>
+                    <button className={styles.changeLink} onClick={handleChangeSeries}>
+                      Change
+                    </button>
                   </div>
-                  <button className={styles.changeLink}>Change</button>
-                </div>
-                <div className={styles.detectNote}>{SERIES_DETECTED.note}</div>
+                ) : (
+                  <>
+                    <input
+                      className={styles.searchInput}
+                      type="text"
+                      placeholder="Search for a series…"
+                      value={seriesQuery}
+                      onChange={(e) => setSeriesQuery(e.target.value)}
+                    />
+                    {seriesSearchStatus === "loading" && <div className={styles.detectNote}>Searching…</div>}
+                    {seriesSearchStatus === "success" && seriesResults.length === 0 && (
+                      <div className={styles.detectNote}>No matching series found.</div>
+                    )}
+                    {seriesResults.length > 0 && (
+                      <div className={styles.searchResults}>
+                        {seriesResults.map((series) => (
+                          <button
+                            key={series.id}
+                            className={styles.searchChip}
+                            onClick={() => handleSelectSeries(series)}
+                          >
+                            {series.title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
-              <div className={styles.field}>
-                <div className={styles.fieldLabel}>Arc</div>
-                <div className={styles.fieldRow}>
-                  <div className={cx(styles.detectedVal, styles.detectedValConfirmed)}>
-                    <div className={styles.detectedText}>{ARC_DETECTED.name}</div>
-                    <div className={styles.autoBadge}>✦ auto-detected</div>
-                  </div>
-                  <button className={styles.changeLink}>Change</button>
+              {selectedSeries && (
+                <div className={styles.field}>
+                  <div className={styles.fieldLabel}>Arc</div>
+                  {selectedArc ? (
+                    <div className={styles.fieldRow}>
+                      <div className={cx(styles.detectedVal, styles.detectedValConfirmed)}>
+                        <div className={styles.detectedText}>{selectedArc.title}</div>
+                        <div className={styles.selectedBadge}>✓ selected</div>
+                      </div>
+                      <button className={styles.changeLink} onClick={handleChangeArc}>
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {arcsLoadStatus === "loading" && <div className={styles.detectNote}>Loading arcs…</div>}
+                      {arcsLoadStatus === "success" && arcsForSeries.length === 0 && (
+                        <div className={styles.detectNote}>This series has no arcs seeded yet.</div>
+                      )}
+                      {arcsForSeries.length > 0 && (
+                        <div className={styles.arcList}>
+                          {arcsForSeries.map((arc) => (
+                            <button
+                              key={arc.id}
+                              className={styles.arcListItem}
+                              onClick={() => setSelectedArc(arc)}
+                            >
+                              <span className={styles.arcListItemTitle}>{arc.title}</span>
+                              {(arc.episode_start || arc.episode_end) && (
+                                <span className={styles.arcListItemMeta}>
+                                  Ep. {arc.episode_start}–{arc.episode_end}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div className={styles.detectNote}>{ARC_DETECTED.note}</div>
-              </div>
+              )}
 
+              {selectedArc && (
               <div className={styles.field}>
                 <div className={styles.fieldLabel}>Story beat</div>
                 <div className={styles.detectNote} style={{ marginBottom: 6 }}>
@@ -430,6 +561,7 @@ export default function SubmitPage() {
                   </div>
                 )}
               </div>
+              )}
 
               <div className={styles.field}>
                 <div className={styles.fieldLabel}>Characters in this content</div>
@@ -481,7 +613,11 @@ export default function SubmitPage() {
                 Content stays pending review until a second contributor confirms the placement.{" "}
                 <a>How placement works →</a>
               </div>
-              <button className={styles.btnContinue} onClick={() => setStep(3)} disabled={!selectedBeat}>
+              <button
+                className={styles.btnContinue}
+                onClick={() => setStep(3)}
+                disabled={!selectedSeries || !selectedArc || !selectedBeat}
+              >
                 Continue →
               </button>
             </div>
@@ -494,7 +630,7 @@ export default function SubmitPage() {
             <div className={styles.completedCheck}>✓</div>
             <div className={styles.completedInfo}>
               <div className={styles.completedTitle}>
-                {SERIES_DETECTED.name} · {ARC_DETECTED.name} · {selectedBeat.title}
+                {selectedSeries?.title} · {selectedArc?.title} · {selectedBeat?.title}
               </div>
               <div className={styles.completedMeta}>
                 {contentType} · {characters.length} character{characters.length === 1 ? "" : "s"} tagged
@@ -511,7 +647,7 @@ export default function SubmitPage() {
           <div className={styles.stepUpcoming}>
             <div className={styles.stepUpcomingTitle}>Placement</div>
             <div className={styles.stepUpcomingSub}>
-              We&rsquo;ll detect the series, arc, and story beat once the link is resolved
+              Choose the series, arc, and story beat once the link is resolved
             </div>
           </div>
         )}
