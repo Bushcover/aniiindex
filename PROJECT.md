@@ -5236,6 +5236,132 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` check as Session 46 before
 fast-forwarding, confirming no divergent work on Production to lose.
 
+## Session 48
+
+**Phase 8, Session 2**: IP-based rate limiting on the submission path, to
+guard against spam — requested directly, with a specific design already
+given (in-memory sliding window, 10/hour on `/api/og-fetch`, 5/24h on the
+actual content submission, `x-forwarded-for` for the IP, a 429 on the
+limited route).
+
+**New `lib/rateLimit.js`** — `createRateLimiter({ limit, windowMs })`, a
+factory returning an independent limiter with its own private `Map` (ip
+→ array of request timestamps). `.check(key)` prunes timestamps older
+than the window on every call before counting — a genuine sliding
+window, not a fixed bucket that resets at clock boundaries — and returns
+`{ allowed, remaining, retryAfterMs }`; a rejected call's own timestamp
+is deliberately not recorded, only the pruned array is written back, so
+a spammer hammering the limit doesn't grow the store unboundedly.
+`getClientIp(request)` reads `x-forwarded-for` (the header Vercel's edge
+network sets to the real client IP; this repo has no other proxy in
+front of it), taking the first entry of what can be a comma-separated
+chain, falling back to a shared `"unknown"` bucket rather than throwing
+when the header is absent (local dev without a proxy in front — a known,
+narrow weak spot for that one case, not a reason to disable rate
+limiting when the header's missing). `/api/og-fetch` and the new
+`/api/submit` (below) each call `createRateLimiter` separately with
+their own limit/window, giving them fully independent stores — verified
+directly (not assumed): the same IP, fully rate-limited on `/api/og-fetch`
+via a fast test loop of 11 requests (10th at HTTP 400 for an invalid test
+URL — the limiter runs *before* URL validation, so requests still count
+even when the body itself is bad; 11th at 429), succeeded cleanly on
+`/api/submit` immediately after with no cross-contamination, and vice
+versa; a different IP on the rate-limited route was also confirmed
+unaffected. **Real, documented limitation, not glossed over**: this is
+in-memory and per-serverless-instance — Vercel doesn't guarantee one warm
+instance shared across every request, so concurrent load or a cold
+start/redeploy can land on an instance with an empty store, silently
+resetting that instance's own view of who's already hit the limit. This
+still meaningfully deters the casual/scripted spam this task is actually
+for, but isn't a hard guarantee against a determined, distributed
+attacker; a real guarantee would need a shared external store (Redis,
+Vercel KV), which the task's own "simple in-memory store" instruction
+explicitly ruled out for this pass.
+
+**`app/api/og-fetch/route.js`** — checks the IP against a
+`createRateLimiter({ limit: 10, windowMs: 1 hour })` instance at the very
+top of `POST`, before parsing the request body or validating the URL —
+the whole point is rejecting cheap before doing any real work (this
+route makes a real outbound fetch to whatever URL a client hands it),
+not after. A limited request gets a 429 with a specific message
+("Too many link lookups from this IP — limit is 10 per hour. Try again
+in about N minutes.") and a standard `Retry-After` header in seconds.
+
+**New `app/api/submit/route.js`** — the content submission's actual
+`content_items` insert moved here from `app/submit/page.jsx`'s own
+client-side `supabase.from('content_items').insert(...)` call, since a
+direct browser-to-Supabase insert has no server request in the middle to
+rate-limit at all. Checks IP against its own
+`createRateLimiter({ limit: 5, windowMs: 24 hours })` instance first,
+same "reject before doing real work" ordering as og-fetch; then a
+presence check on the required fields (`arc_id`, `beat_id`, `source_url`,
+`title`, `creator`, `platform`, `content_type` — same baseline-validation
+level as `/api/confirm`/`/api/flag`'s own `if (!id)`, not a full schema
+pass, since a genuinely invalid `arc_id`/`beat_id` still fails at
+Postgres's own foreign-key constraint either way); then builds the
+insert payload explicitly, field by field, rather than spreading the
+request body directly — this is what stops a caller from setting
+`status` to anything other than `'pending'` (hardcoded here, not read
+from the request at all) regardless of what the request body contains,
+verified directly by sending `status: "confirmed"` in the request body
+and confirming the row still inserts as `'pending'` per the route's own
+unconditional assignment. `submitted_by` is still trusted as-sent from
+the client, same as the direct insert this route replaces — this route
+has no server-side session of its own to check it against (no
+`@supabase/ssr`-style cookie auth exists anywhere in this project, only
+the browser client), and `content_items`' own insert RLS policy is
+`with check (true)`, not `submitted_by = auth.uid()` — so this isn't a
+new gap this task introduced, just an unrelated, pre-existing one, noted
+in the route's own comment rather than silently addressed (out of this
+task's stated scope, which was rate limiting, not auth hardening).
+
+**`lib/supabase.js`** gained `createContentItem(payload)` — a thin
+`.insert(payload)` wrapper, throw-on-error, matching
+`confirmContentItem`/`flagContentItem`'s existing convention (every real
+write in this app lives here, not inline in its own API route). Called
+only by the new `app/api/submit/route.js`.
+
+**`app/submit/page.jsx`**'s `handleSubmit` now `fetch("/api/submit", ...)`
+instead of calling `supabase.from("content_items").insert(...)` directly
+— same `res.json()`-then-check-`res.ok` error-propagation pattern the
+same file already uses for `/api/og-fetch`, so a 429's own message (or
+any other server-side error) surfaces through the existing
+`submitError`/"Couldn't submit: ..." UI with no new UI code needed.
+`submitted_by` is still resolved client-side from the session read on
+mount (unchanged) and sent as a plain field in the request body instead
+of going straight into a Supabase insert. The `supabase` import stays —
+still used for `supabase.auth.getSession()`.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly;
+`/api/submit` appears as a new dynamic route. Real HTTP verification via
+`curl` against a running `next dev` and a local mock PostgREST server
+(extended this session to actually accept a `content_items` POST insert
+and echo back a fake row, rather than just returning `[]` for everything
+— this project's standing convention for the server-side-Supabase-call
+verification gap, Sessions 18–21/39/42/44/46): sent 7 submit requests
+from one IP, confirmed exactly the first 5 succeed (`{"ok":true}`) and
+the 6th/7th both return 429 with the stated message and a `Retry-After`
+header (measured at ~86392 seconds, correctly just under the full 24h
+window since a few seconds had elapsed since the first request); sent 11
+og-fetch requests from one IP, confirmed exactly the first 10 reach real
+validation (400, invalid test URL) and the 11th returns 429; confirmed a
+second IP on each route is unaffected by the first IP's limit; confirmed
+the two routes' limiters don't cross-contaminate (an IP fully limited on
+og-fetch submits successfully on `/api/submit` and vice versa); confirmed
+a request missing required fields returns 400 with the specific missing
+field names; confirmed a request that tries to set `status: "confirmed"`
+in the body still inserts as `'pending'`. **Not verified**: real
+behavior across multiple concurrent Vercel serverless instances (this
+sandbox can only run one Node process) — the in-memory-per-instance
+caveat above is a documented, accepted limitation of the design itself,
+not something a single-process sandbox test could disprove or confirm
+either way.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46/47.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

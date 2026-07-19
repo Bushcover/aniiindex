@@ -268,26 +268,39 @@ export default function SubmitPage() {
     }
   }
 
+  // Session 48 (Phase 8, Session 2): posts to /api/submit instead of
+  // calling supabase.from('content_items').insert(...) directly — the
+  // actual insert now happens server-side (lib/supabase.js's
+  // createContentItem, via that route), specifically so it can be
+  // rate-limited by IP before writing. `submitted_by` is still resolved
+  // here, client-side, from the session already read on mount — the new
+  // route has no server-side session of its own, so this is unchanged
+  // from before, just sent as a field in the request body instead of
+  // going straight into a Supabase insert.
   async function handleSubmit() {
     setSubmitStatus("submitting");
     setSubmitError("");
 
     try {
-      const { error: insertError } = await supabase.from("content_items").insert({
-        arc_id: selectedArc.id,
-        beat_id: selectedBeat.id,
-        source_url: url,
-        title: effectiveLink.title,
-        creator: effectiveLink.creator,
-        platform: effectiveLink.platform,
-        thumbnail_url: effectiveLink.thumbnailUrl,
-        content_type: contentType,
-        character_tags: characters,
-        status: "pending",
-        submitted_by: session?.user?.id || "anonymous",
+      const res = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          arc_id: selectedArc.id,
+          beat_id: selectedBeat.id,
+          source_url: url,
+          title: effectiveLink.title,
+          creator: effectiveLink.creator,
+          platform: effectiveLink.platform,
+          thumbnail_url: effectiveLink.thumbnailUrl,
+          content_type: contentType,
+          character_tags: characters,
+          submitted_by: session?.user?.id || "anonymous",
+        }),
       });
-      if (insertError) {
-        throw new Error(`${insertError.message}${insertError.code ? ` [${insertError.code}]` : ""}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Something went wrong. Please try again.");
       }
 
       setSubmitStatus("success");

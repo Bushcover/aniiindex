@@ -6,6 +6,20 @@
 // a DOM/HTML-parsing dependency, matching this project's no-external-
 // libraries convention (see PROJECT.md's Stack section).
 
+import { createRateLimiter, getClientIp } from "@/lib/rateLimit";
+
+// Session 48 (Phase 8, Session 2): 10 lookups per IP per hour. This is
+// the more spam-prone of the two routes this task asked to rate-limit —
+// every call makes a real outbound fetch to whatever URL a client hands
+// it (SSRF-guarded below, but still a real network call this app pays
+// for and exposes to abuse), unlike a rejected submission which never
+// reaches Supabase at all. See lib/rateLimit.js for the sliding-window
+// implementation and its own real caveats (in-memory only, not durable
+// across Vercel's serverless instances).
+const OG_FETCH_LIMIT = 10;
+const OG_FETCH_WINDOW_MS = 60 * 60 * 1000;
+const ogFetchLimiter = createRateLimiter({ limit: OG_FETCH_LIMIT, windowMs: OG_FETCH_WINDOW_MS });
+
 const PLATFORM_HOSTS = [
   { platform: "tiktok", hosts: ["tiktok.com"] },
   { platform: "youtube", hosts: ["youtube.com", "youtu.be"] },
@@ -134,6 +148,19 @@ async function fetchYouTubeOEmbed(targetUrl) {
 }
 
 export async function POST(request) {
+  const ip = getClientIp(request);
+  const rate = ogFetchLimiter.check(ip);
+  if (!rate.allowed) {
+    const retryAfterSec = Math.ceil(rate.retryAfterMs / 1000);
+    const retryAfterMin = Math.max(1, Math.ceil(retryAfterSec / 60));
+    return Response.json(
+      {
+        error: `Too many link lookups from this IP — limit is ${OG_FETCH_LIMIT} per hour. Try again in about ${retryAfterMin} minute${retryAfterMin === 1 ? "" : "s"}.`,
+      },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+    );
+  }
+
   let body;
   try {
     body = await request.json();
