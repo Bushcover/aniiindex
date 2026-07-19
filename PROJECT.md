@@ -5362,6 +5362,51 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46/47.
 
+## Session 49
+
+**Phase 8, Session 3.** Small, direct follow-up to Session 48: made the
+submit route's daily rate limit configurable via a real environment
+variable, `SUBMIT_DAILY_LIMIT`, instead of a hardcoded `5` — so it can be
+raised temporarily (e.g. while seeding a batch of real content from one
+IP, the task's own stated use case) via Vercel's own environment variable
+settings, no code deploy needed.
+
+**`app/api/submit/route.js`**: `SUBMIT_LIMIT` is now
+`parseInt(process.env.SUBMIT_DAILY_LIMIT, 10)`, parsed once at module
+load — same timing as every other env-var read in this app
+(`lib/supabase.js`'s `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY`), so a Vercel
+env var change takes effect on the next deploy/cold start, not
+instantly on an already-warm instance. Falls back to `5` (Session 48's
+original default) both when the variable is unset (the case the task
+asked for) and when it's set to something that doesn't parse to a
+positive integer — e.g. left blank, or a typo like `"five"` — since a
+silently-`NaN` or silently-`0`/negative limit would either break the
+`createRateLimiter` call outright or effectively disable rate limiting,
+not just fail to apply a custom value. Guarding both failure modes the
+same way rather than only the literal "unset" case matches this file's
+existing graceful-fallback convention (`lib/supabase.js`'s
+placeholder-URL handling for a missing/malformed Supabase config)
+instead of trusting an unvalidated `parseInt` result.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 48 left it. Real runtime verification via `curl`
+against a running `next dev` + this project's standing local mock-
+PostgREST-server convention, run three separate times with three
+different `SUBMIT_DAILY_LIMIT` values: `2` — confirmed the limit
+actually becomes 2, not still 5 (2 requests succeed, the 3rd returns 429
+with a message that itself says "limit of 2"); unset entirely — confirmed
+the limit is exactly 5, matching Session 48's original hardcoded
+behavior; and `"five"` (a deliberately malformed value, not just an
+unset one) — confirmed this also falls back to exactly 5 rather than
+crashing the route or silently disabling the limit. All three measured
+by counting exactly how many requests succeed before the first 429, not
+assumed from reading the code alone.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–48.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

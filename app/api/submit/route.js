@@ -13,15 +13,24 @@
 import { createContentItem } from "@/lib/supabase";
 import { createRateLimiter, getClientIp } from "@/lib/rateLimit";
 
-// Session 48 (Phase 8, Session 2): 5 submissions per IP per 24 hours —
-// looser-feeling than og-fetch's 10/hour in raw number, but a much
-// tighter *rate* (5/day vs. 240/day-equivalent), since a real write to
-// content_items is the actual spam this task is guarding against; a
-// spammy og-fetch lookup is just wasted network calls, not junk rows on
-// the arc page. See lib/rateLimit.js for the sliding-window
-// implementation and its own real caveats (in-memory only, not durable
-// across Vercel's serverless instances).
-const SUBMIT_LIMIT = 5;
+// Session 49 (Phase 8, Session 3): the daily limit is now configurable
+// via a real Vercel environment variable, SUBMIT_DAILY_LIMIT, instead of
+// a hardcoded 5 — so this project's own maintainer can temporarily raise
+// it (e.g. while seeding a batch of real content from one IP) without a
+// code deploy. Parsed once at module load, same timing as every other
+// env-var read in this app (lib/supabase.js's NEXT_PUBLIC_SUPABASE_URL/
+// ANON_KEY) — a Vercel env var change takes effect on the next deploy or
+// cold start, not instantly on every request, same as those. Falls back
+// to 5 (Session 48's original hardcoded default) both when the variable
+// is unset and when it's set to something that doesn't parse to a
+// positive integer (e.g. left blank, or a typo like "five") — the task
+// only asked for the "unset" case, but a silently-NaN or silently-zero
+// limit would either break every submission or disable rate limiting
+// entirely, so this guards both failure modes the same graceful-fallback
+// way lib/supabase.js already treats a missing/malformed config value,
+// rather than trusting the parsed number without checking it.
+const parsedSubmitLimit = parseInt(process.env.SUBMIT_DAILY_LIMIT, 10);
+const SUBMIT_LIMIT = Number.isInteger(parsedSubmitLimit) && parsedSubmitLimit > 0 ? parsedSubmitLimit : 5;
 const SUBMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const submitLimiter = createRateLimiter({ limit: SUBMIT_LIMIT, windowMs: SUBMIT_WINDOW_MS });
 
