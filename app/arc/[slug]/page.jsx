@@ -7,12 +7,38 @@ import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent, getArcMeta, getArcsBySeries } from "@/lib/supabase";
 import { buildOpenGraph, truncate, MAX_META_DESCRIPTION, MAX_TWITTER_DESCRIPTION } from "@/lib/metadata";
 
-// Forces this route to always render dynamically and re-fetch on every
-// request — without it, Next can treat this dynamic-segment page as
-// eligible for static/ISR-style caching once nothing else forces it
-// dynamic, which would keep serving whatever content_items/beats data was
-// fetched on an earlier request instead of the current database state.
-export const revalidate = 0;
+// Session 50 (Phase 8, Session 4 — caching/performance pass): 300
+// (5 minutes), not 0. Originally set to 0 in Session 11 to fix a real
+// bug — Next's fetch cache was silently caching Supabase responses
+// *indefinitely* (`force-cache`, its default for an uncontrolled fetch
+// in a Server Component), with no mechanism to ever invalidate that
+// cache, so newly submitted content never appeared at all without a
+// redeploy. That's not what a bounded `revalidate: 300` reintroduces —
+// this is a real, automatically-expiring window (Next re-fetches once
+// it's stale), a deliberate trade-off this session's task explicitly
+// accepted ("new submitted content appears within 5 minutes... rather
+// than instantly") rather than the original open-ended caching bug.
+//
+// This export alone would NOT have achieved that, verified directly
+// (not assumed) with a minimal repro before touching any code: Next.js
+// computes a route's *effective* revalidate as the minimum across this
+// export and every individual fetch() made during that route's render —
+// a single fetch requesting `revalidate: 0` anywhere in the route drags
+// the whole thing back down to fully dynamic, export or no export. Every
+// Supabase call this page makes (getArcMeta/getArcBeats/getArcContent/
+// getArcsBySeries) used to go through lib/supabase.js's
+// always-`revalidate:0` client — changing only this number would have
+// been a silent no-op. lib/supabase.js now has a second, real
+// `supabaseCached` client (`revalidate: 300`) that those four functions
+// use instead — see that file's own comments for the full reasoning —
+// which is what actually makes this number mean something. AniList's own
+// calls this page makes (getSeriesById/getSeriesCharacters, via
+// lib/anilist.js) already requested `revalidate: 3600` since Session 6;
+// that setting was previously wasted, capped down to 0 by this same
+// export — it now finally takes effect too, exactly as this task asked
+// ("For AniList calls... set revalidate to 3600" — already true in code,
+// just never actually in force on this specific page until now).
+export const revalidate = 300;
 
 // AniList numeric id for Jujutsu Kaisen — used only as a fallback when
 // `params.slug` doesn't match a seeded `arcs` row (see `arcFoundInDb`

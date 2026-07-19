@@ -341,3 +341,30 @@ nav {
      elsewhere. */
   .cards { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Loading skeletons (Session 50) — shared by app/arc/[slug]/loading.jsx
+   and app/series/[slug]/loading.jsx, Next.js's route-level Suspense
+   fallback convention: shown immediately on navigation while each
+   page's own async data fetch is still in flight, instead of a blank
+   tab. Deliberately simple, static-sized placeholder blocks — "a simple
+   skeleton loading state" was the explicit ask, not a pixel-exact
+   second copy of either page's real layout to keep in sync forever
+   after every future markup change.
+   ══════════════════════════════════════════════════════════════ */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.skel {
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+  animation: skeletonPulse 1.6s ease-in-out infinite;
+}
+.skel-title { height: 34px; width: 55%; margin-bottom: 14px; }
+.skel-line { height: 12px; width: 100%; margin-bottom: 8px; }
+.skel-line:last-child { margin-bottom: 0; }
+.skel-thumb { width: 100%; aspect-ratio: 16/9; border-radius: var(--r) var(--r) 0 0; }
+.skel-poster { width: 160px; aspect-ratio: 2/3; border-radius: var(--r); flex-shrink: 0; }
+.skel-chip { height: 28px; width: 92px; border-radius: 20px; flex-shrink: 0; }
+.skel-stat { height: 44px; width: 76px; border-radius: var(--r-sm); }

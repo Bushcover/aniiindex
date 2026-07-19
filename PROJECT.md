@@ -5407,6 +5407,141 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–48.
 
+## Session 50
+
+**Phase 8, Session 4 — performance/caching pass.** Framed by the task
+itself as "Phase 8 Session 3," logged as Session 50 per this file's own
+numbering rule (see the top of this file). Asked to raise the arc page's
+`revalidate` from `0` to `300`, keep the home page's trending section at
+`0`, confirm AniList calls cache at `3600`, and add `loading.jsx`
+skeletons to the arc and series pages.
+
+**Investigated before touching any code, since the literal one-line
+change wouldn't have done what the task describes** — same standing
+practice as Sessions 43/47/48 (check a technically-loaded instruction
+against how the system actually behaves before implementing it as
+stated). Built a minimal repro first (`export const revalidate = 300` on
+a throwaway page, one `fetch()` inside it explicitly requesting
+`next: { revalidate: 0 }`, against a local hit-counting server) and
+confirmed directly — not assumed from documentation — that Next.js
+computes a route's *effective* cache lifetime as the **minimum** across
+the page's own `revalidate` export and every individual `fetch()` made
+during that route's render: the repro's underlying endpoint was hit on
+every single request despite the page-level `300`, because the one
+`revalidate: 0` fetch inside it dragged the whole route back down.
+`lib/supabase.js`'s existing `fetchWithoutCache` wrapper (added Session
+11 to fix a real "arc page serving stale data" bug) sets
+`next: { revalidate: 0 }` on **every** Supabase request this app makes,
+with no per-call override — so simply changing
+`app/arc/[slug]/page.jsx`'s own `export const revalidate` from `0` to
+`300`, exactly as literally requested, would have been a **silent
+no-op**: every Supabase call the arc page makes would have kept forcing
+the whole route back to fully dynamic regardless of that number. Fixing
+this for real required also changing `lib/supabase.js`, not just the one
+line the task named.
+
+**`lib/supabase.js`** gained a second client, `supabaseCached` — same
+project/credentials, a fetch wrapper requesting `next: { revalidate: 300
+}` instead of `0`. A real second `createClient()` call is required here,
+not just a per-query option, since `@supabase/supabase-js` only accepts
+a `global.fetch` override at client-creation time with no way to vary it
+per call. `getArcMeta`, `getArcBeats`, `getArcContent` (the arc page's
+own core reads — this is the actual "new submitted content appears
+within 5 minutes... rather than instantly" trade-off the task
+explicitly accepted) and `getArcsBySeries` (the arc-nav-strip/arc-list
+lookup, shared with the series page — see below) now go through
+`supabaseCached`; `getArcRowBySlug` (an internal helper both
+`getArcBeats`/`getArcContent` call) takes an explicit `client` parameter
+now instead of hardcoding one, so it can be passed either client rather
+than needing a near-duplicate second helper. Every other read
+(`getTrendingArcs` — the home page's own trending section, explicitly
+required to `stay` live — `searchSeries`, `getAllArcsForSeries`,
+`getSeriesByAnilistId`, `getArcSparkline`) and every write
+(`confirmContentItem`, `flagContentItem`, `createContentItem` — a cached
+pre-write `SELECT` could double-count a confirmation) stay on the
+original always-fresh `supabase` client, unchanged, verified directly
+(see below), not just left alone in the code and assumed unaffected.
+
+**A deliberate scope decision, not an oversight, worth stating plainly**:
+`getArcsBySeries` is shared by both the arc page (nav strip) and the
+series page (arc list) — there's one function, so caching it for the arc
+page's benefit also caches it for the series page's, even though the
+task named only the arc page. Judged this as a reasonable, consistent
+extension of the same reasoning (arc lists change on the rare "someone
+manually seeds a new arc via the SQL editor" cadence, not the
+frequent-relative-to-content_items cadence the 5-minute number is
+actually calibrated around), not a contradiction of the task's scope —
+flagged here rather than silently done, so it's a known, intentional
+side effect if it ever needs revisiting.
+
+**`app/arc/[slug]/page.jsx`**: `export const revalidate = 300`, with a
+comment explaining both why this isn't a repeat of Session 11's original
+bug (that was Next's fetch cache silently caching *indefinitely*, no
+invalidation path at all — this is a real, bounded, auto-expiring 300s
+window) and why the number alone wouldn't have worked without the
+`lib/supabase.js` change above. AniList's own calls this page makes
+(`getSeriesById`/`getSeriesCharacters`) already requested
+`revalidate: 3600` since Session 6 — the task's own ask ("For AniList
+calls... set revalidate to 3600") was **already true in the code**, it
+just had never actually taken effect on this specific page, since the
+page's old `revalidate: 0` capped every fetch in the route down to 0
+regardless of what any individual fetch requested — now that the page
+itself is 300 and every Supabase call in it is also >=300, AniList's
+already-correct 3600 finally applies for real here too.
+
+**New `app/arc/[slug]/loading.jsx` and `app/series/[slug]/loading.jsx`**
+— the Next.js route-level Suspense-fallback convention, shown
+immediately on navigation while each page's own async data fetch is
+still in flight. Both render the page's *real* nav (`NavAuth`/
+`SearchNav`, genuinely interactive client components — nothing about
+either page's nav depends on that page's own data, so there's no reason
+to fake it) plus simple skeleton placeholder blocks for the
+data-dependent sections below, using a new shared shimmer-block style in
+`globals.css` (`.skel`/`.skel-title`/`.skel-line`/`.skel-thumb`/
+`.skel-poster`/`.skel-chip`/`.skel-stat`, a CSS `@keyframes` pulse — no
+new dependency). The series page's `loading.jsx` also imports its own
+`series.module.css` for a closer shape match on its hero (poster + info
+block has no equivalent on the arc page). Deliberately simple, static-
+sized placeholders — "a simple skeleton loading state" was the explicit
+ask, not a pixel-exact second copy of either page's real markup to keep
+in sync forever after.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 49 left it (`loading.jsx` isn't its own route
+entry — it's a fallback tied to its segment, not a page). Real,
+measured verification, not assumed from reading the diff:
+- Built a local hit-counting mock PostgREST server (distinct counters per
+  table) and hit the real `/arc/shibuya-incident-arc` 5 times in quick
+  succession: the first request made 3 `arcs` calls (getArcMeta + two
+  internal getArcRowBySlug calls from getArcBeats/getArcContent), 1
+  `beats` call, 1 `content_items` call — and every one of the next 4
+  requests added **zero** additional calls, hit counts staying exactly
+  flat. This is the actual, measured proof the 5-minute cache works, not
+  an assumption from the code alone.
+- In the same run, hit the home page 3 times and confirmed
+  `content_items` (via `getTrendingArcs`) incremented on **every**
+  request, and separately hit `/api/confirm` 3 times and confirmed the
+  same — both correctly untouched by this session's change.
+- Confirmed the arc page still renders correct real AniList data
+  (`JUJUTSU KAISEN`) across repeated requests during the same cached
+  window — caching the Supabase side didn't break or stale out the
+  AniList-sourced content.
+- Verified the loading skeletons with a raw Node `http.get` client
+  (not just `curl`, which buffered too coarsely to show this) against a
+  deliberately slow mock (a 4-second artificial delay per Supabase call):
+  confirmed the skeleton's own markup (`skel-title`) streamed to the
+  client well before the page's real content arrived, and the final
+  response still contained the correct real data once everything
+  resolved — the fallback is genuinely reaching the browser first, not
+  just present in the component tree unused.
+- Confirmed `npm run build`'s route table is otherwise identical to
+  Session 49's.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–49.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
