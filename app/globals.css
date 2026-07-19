@@ -48,6 +48,14 @@
   --t2: #8A8AA8;
   --t3: #50505E;
   --display: 'Syne', sans-serif;
+  /* Session 52: a second display token for "large headline or big
+     number meant to make an impact" elements specifically — Bebas Neue,
+     first used Session 51 for the home page's hero headline only, now
+     applied more broadly (see each updated rule's own comment for which
+     elements qualified and why). Everything still using --display
+     (section headers, card titles, step labels, etc.) is unaffected —
+     this is a new, separate token, not a change to --display itself. */
+  --display-impact: 'Bebas Neue', sans-serif;
   --body: 'Inter', sans-serif;
   --r: 10px;
   --r-sm: 6px;
@@ -159,7 +167,14 @@ nav {
 .breadcrumb a { color: var(--t2); text-decoration: none; }
 .breadcrumb a:hover { color: var(--t1); }
 .breadcrumb .sep { color: var(--t3); }
-.hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(26px, 4vw, 42px); letter-spacing: -1px; line-height: 1.1; margin-bottom: 10px; }
+/* Session 52: the arc name — explicitly named as an in-scope target
+   ("the arc name heading on arc pages"). font-weight dropped from 800
+   to 400, same necessity as Session 51's original hero h1 change:
+   Bebas Neue only ships one real weight on Google Fonts, so keeping a
+   heavier weight here would trigger the browser's own synthetic bold
+   on top of an already-heavy-by-design face. Size/letter-spacing/
+   line-height left exactly as they were — not part of what was asked. */
+.hero h1 { font-family: var(--display-impact); font-weight: 400; font-size: clamp(26px, 4vw, 42px); letter-spacing: -1px; line-height: 1.1; margin-bottom: 10px; }
 .hero-meta { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--t2); margin-bottom: 14px; flex-wrap: wrap; }
 .hero-meta .dot { color: var(--t3); }
 .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
@@ -177,7 +192,13 @@ nav {
 /* Stats */
 .hero-stats { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .stat { display: flex; flex-direction: column; gap: 2px; }
-.stat-val { font-family: var(--display); font-size: 20px; font-weight: 700; }
+/* Session 52: the arc page's own hero stat numbers (Fan items/Saves/
+   This week/Contributors) — not explicitly named by task, but the same
+   "big number meant to make an impact" concept the task did explicitly
+   name for the home page's equivalent (.hstatVal, app/page.module.css)
+   and this file's own .scoreVal (series page). Judged in scope as a
+   reasonable, consistent extension. */
+.stat-val { font-family: var(--display-impact); font-size: 20px; font-weight: 400; }
 .stat-label { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; }
 .stat-div { width: 1px; height: 36px; background: var(--border-mid); }
 

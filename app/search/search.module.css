@@ -159,9 +159,13 @@
   text-transform: uppercase;
   margin-bottom: 4px;
 }
+/* Session 52: explicitly named — "the search result series name in the
+   series panel". font-weight 800 -> 400, same reasoning as every other
+   Bebas Neue target this session (see globals.css's own .hero h1
+   comment). Size/letter-spacing left exactly as they were. */
 .seriesName {
-  font-family: var(--display);
-  font-weight: 800;
+  font-family: var(--display-impact);
+  font-weight: 400;
   font-size: 26px;
   letter-spacing: -0.5px;
   color: var(--t1);

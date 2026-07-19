@@ -261,10 +261,18 @@ this section stated through Session 38's own audit.
 `#F0A96A`, `--green` `#6AF0A8`, `--green-soft` `rgba(106,240,168,0.14)`,
 `--t1`/`--t2`/`--t3` (text, high→low emphasis)
 `#EEEEF5`/`#8A8AA8`/`#50505E`, `--display` `'Syne', sans-serif`, `--body`
-`'Inter', sans-serif`, `--r` `10px`, `--r-sm` `6px`. All 15 tokens
-confirmed defined and in active use this session — no undefined
-custom-property gaps remain (the `--green`/`--green-soft` gap that existed
-from Session 13 through Session 17 was closed in Session 18).
+`'Inter', sans-serif`, `--r` `10px`, `--r-sm` `6px`. 15 tokens confirmed
+defined and in active use as of the session that counted them — no
+undefined custom-property gaps remain (the `--green`/`--green-soft` gap
+that existed from Session 13 through Session 17 was closed in Session
+18). **3 more added since, not yet folded into that count**:
+`--accent-warm` `#E8A87C` / `--accent-warm-soft` `rgba(232,168,124,0.14)`
+(Session 51 — a secondary warm accent for peak-moment UI specifically,
+same "soft" alpha pattern as `--accent`/`--accent-soft`) and
+`--display-impact` `'Bebas Neue', sans-serif` (Session 51, expanded
+Session 52 — a second display font for large headlines/big-impact
+numbers specifically; see each session's own log entry for exactly which
+elements use it and which stay on `--display`).
 
 ### Supabase — full schema, RLS, and seed data
 
@@ -5636,6 +5644,104 @@ temporary install.
 direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–50.
+
+## Session 52
+
+Two fixes from visual review of Session 51's font work.
+
+**Fix 1 — the home hero headline was too cramped on small phones.**
+Session 29 had already added a `max-width: 480px` override for
+`app/page.module.css`'s `.hero h1` (`clamp(24px, 8vw, 32px)`), tuned for
+Syne's proportions at the time — Session 51 swapped that rule's base
+font to Bebas Neue but never revisited this mobile override, which is
+exactly why it read cramped: Bebas Neue's condensed letterforms read
+smaller/denser than Syne at an identical pixel size. Updated to the
+requested `clamp(32px, 8vw, 48px)` — note this *raises* both the floor
+(24→32) and ceiling (32→48) rather than shrinking further, which looks
+backwards for a "too cramped" report until factoring in the font swap:
+a bigger point size is the correct fix for a condensed face reading too
+small, not a smaller one. Screenshot-confirmed at both 375px and 480px
+viewports — the three-line headline reads clearly at both widths now.
+
+**Fix 2 — Bebas Neue extended from "hero only" to every large-headline/
+big-number display element, audited and applied deliberately, not
+guessed at.** Grepped every `var(--display)` (Syne) usage across every
+CSS file in the app, plus every literal `<h1>`/`<h2>` tag across every
+`.jsx` file (zero `<h2>` tags exist anywhere), and classified each one
+against the task's own stated rule ("if it is a large headline or a big
+number meant to make an impact, it gets Bebas Neue. Everything else
+stays [as it was]") — the task named four targets explicitly and added
+a catch-all for any other h1/h2 still on Syne; this audit is what
+surfaced the rest and confirmed nothing was missed.
+
+**Converted to Bebas Neue** (font-weight also dropped 700/800 → 400 on
+every one of these, same necessity as Session 51's original change —
+Bebas Neue ships one real weight on Google Fonts, so anything heavier
+just triggers synthetic/faux bold on an already-heavy-by-design face;
+size/letter-spacing/line-height left untouched on all seven):
+- `globals.css` `.hero h1` — the arc page's arc name (explicitly named:
+  "the arc name heading on arc pages").
+- `app/page.module.css` `.hstatVal` — the home hero's stat numbers
+  (explicitly named: "14,200+ etc").
+- `app/search/search.module.css` `.seriesName` — the search panel's
+  matched series name (explicitly named).
+- `app/series/[slug]/series.module.css` `.title` — the series page's
+  series name (explicitly named).
+- `app/auth/auth.module.css` `.heading` — a real `<h1>`
+  ("Sign in to contribute"), caught by the task's own h1/h2 catch-all.
+- `globals.css` `.stat-val` — the arc page's own hero stat numbers (Fan
+  items/Saves/etc). **Not explicitly named** — included as a reasonable,
+  consistent extension of the same "big number" concept the task did
+  name for the home page's equivalent, flagged here rather than done
+  silently.
+- `app/series/[slug]/series.module.css` `.scoreVal` — the series page's
+  big Score percentage. **Not explicitly named** — same reasoning as
+  `.stat-val` above, the single-prominent-number pattern.
+
+**Left as Syne, deliberately** (every other current `var(--display)`
+site, found by the same audit): `.logo` (nav wordmark — small, appears
+on every page at a fixed size, not a "headline"), `.beat-title` (arc
+page, 15px in-content sub-heading), `.sectionTitle` (home/series pages,
+16px section headers like "Trending arcs"/"Arcs"), `.seriesCardName`
+(home page, 12px card text), `.momentRank` (home page, 13px rank
+numbers), `.sstatVal` (search page, 16px — a compact 4-column stat row,
+judged closer to dense data display than a hero-style "impact" number,
+unlike `.stat-val`/`.scoreVal`/`.hstatVal` above), `.colTitle` (search
+page, 14px column headers), the search page's arc-row numbers (10px),
+`.stateMessageTitle` (search/series pages, 18px empty-state messages),
+`.stepActiveTitle`/`.stepUpcomingTitle` (submit page, 15–16px wizard
+step titles). None of these are h1/h2 tags, none were named, and none
+read as "meant to make an impact" the way the seven converted elements
+do — kept exactly as they were.
+
+**New `--display-impact: 'Bebas Neue', sans-serif'` token** added to
+`globals.css`'s `:root`, and every target above (including Session 51's
+original home-hero-h1 rule, retrofitted) now references it instead of
+repeating the literal font-stack string seven-plus times — a pure DRY
+refactor with zero visual change (`'Bebas Neue', sans-serif` either way),
+done once this session started touching the same font in this many
+places. `--display` itself is untouched; this is a new, separate token,
+not a redefinition.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 51 left it. Real, live Playwright verification
+(temporarily installed, uninstalled after — `package.json`/
+`package-lock.json` show no diff) against `next dev` + this project's
+standing mock-PostgREST convention: screenshots of the home hero at
+375px and 480px (Fix 1), the arc page's hero (arc name + stat numbers),
+the series page's hero (series name + score), the search page's series
+panel (series name, with `.sstatVal` visibly still Syne alongside it —
+confirming the deliberate split rendered correctly, not just assumed
+from the CSS), and the auth page's heading — all seven converted
+elements read cleanly in Bebas Neue with no faux-bold distortion, and
+every element deliberately left on Syne is visibly unchanged in the same
+screenshots. `git diff --stat` confirmed exactly 5 CSS files touched, no
+`.jsx` files — this was a pure styling pass.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–51.
 
 ## Database schema
 

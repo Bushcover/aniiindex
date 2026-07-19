@@ -45,8 +45,7 @@
   margin-bottom: 20px;
 }
 /* Session 51: swapped from var(--display) (Syne) to Bebas Neue for this
-   headline specifically — everywhere else on this page (and every other
-   page) keeps Syne unchanged; this is the only .hero h1 rule that isn't
+   headline specifically — this is the only .hero h1 rule that isn't
    shared with the arc page's own global .hero h1 (globals.css), since
    this one lives in a CSS Module scoped to the home page. font-weight is
    400 here, not the 800 every other display heading uses — Bebas Neue
@@ -54,9 +53,17 @@
    just trigger the browser's own synthetic/faux bold on a font that's
    already visually heavy by design, not a second, bolder cut of it.
    Size/letter-spacing/line-height left exactly as they were, tuned
-   against Syne's proportions — not part of what was asked. */
+   against Syne's proportions — not part of what was asked.
+   Session 52: font-family switched from the literal 'Bebas Neue',
+   sans-serif string to the new --display-impact token (globals.css) —
+   a pure DRY refactor once Session 52 applied the same font to several
+   more elements; resolves to the exact same font stack, no visual
+   change. Session 51's own "everywhere else keeps Syne unchanged" note
+   above no longer fully describes the app now that Session 52 expanded
+   where this token is used — see PROJECT.md's Session 52 entry and each
+   newly-updated rule's own comment for the current, complete list. */
 .hero h1 {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--display-impact);
   font-weight: 400;
   font-size: clamp(28px, 5vw, 52px);
   letter-spacing: -1.5px;
@@ -163,10 +170,14 @@
 .hstat {
   text-align: center;
 }
+/* Session 52: explicitly named — "the stats numbers on the home page
+   hero (14,200+ etc)". font-weight dropped 800 -> 400, same reasoning as
+   every other Bebas Neue target this session (see globals.css's own
+   .hero h1 comment for the full explanation). */
 .hstatVal {
-  font-family: var(--display);
+  font-family: var(--display-impact);
   font-size: 22px;
-  font-weight: 800;
+  font-weight: 400;
   color: var(--t1);
 }
 .hstatLabel {
@@ -525,10 +536,17 @@
 }
 
 @media (max-width: 480px) {
-  /* Already fluid via clamp(28px, 5vw, 52px) and not literally
-     overflowing at 390px (renders at its 28px floor) — tightened
-     slightly further specifically for the smallest phones. */
-  .hero h1 { font-size: clamp(24px, 8vw, 32px); }
+  /* Session 52: retuned for Bebas Neue (Session 51 switched this
+     headline's font-family; this override predates that and was still
+     sized for Syne's wider default proportions at the time). Reported
+     back too cramped on real small screens — clamp(32px, 8vw, 48px)
+     raises both the floor (24->32) and ceiling (32->48) rather than
+     shrinking further, which looks backwards for a "too cramped" report
+     until you factor in the font swap: Bebas Neue's condensed letterforms
+     read smaller/denser than Syne at an identical pixel size, so the
+     fix for "hard to read" here is a bigger point size within the same
+     mobile-appropriate range, not a smaller one. */
+  .hero h1 { font-size: clamp(32px, 8vw, 48px); }
 
   /* Session 36: `.arcGrid`'s `repeat(auto-fill, minmax(300px, 1fr))`
      forces every column to be at least 300px regardless of available

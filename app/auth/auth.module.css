@@ -24,9 +24,14 @@
   margin-bottom: 22px;
 }
 
+/* Session 52: a real <h1> (app/auth/page.jsx: "Sign in to contribute")
+   using Syne — qualifies under the task's own catch-all ("any other h1
+   or h2 that currently uses Syne font-family"). font-weight 800 -> 400,
+   same reasoning as every other Bebas Neue target this session (see
+   globals.css's own .hero h1 comment). Size left exactly as it was. */
 .heading {
-  font-family: var(--display);
-  font-weight: 800;
+  font-family: var(--display-impact);
+  font-weight: 400;
   font-size: 22px;
   color: var(--t1);
   margin-bottom: 8px;
