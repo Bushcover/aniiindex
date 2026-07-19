@@ -44,9 +44,20 @@
   text-transform: uppercase;
   margin-bottom: 20px;
 }
+/* Session 51: swapped from var(--display) (Syne) to Bebas Neue for this
+   headline specifically — everywhere else on this page (and every other
+   page) keeps Syne unchanged; this is the only .hero h1 rule that isn't
+   shared with the arc page's own global .hero h1 (globals.css), since
+   this one lives in a CSS Module scoped to the home page. font-weight is
+   400 here, not the 800 every other display heading uses — Bebas Neue
+   only ships one real weight on Google Fonts, so requesting 800 would
+   just trigger the browser's own synthetic/faux bold on a font that's
+   already visually heavy by design, not a second, bolder cut of it.
+   Size/letter-spacing/line-height left exactly as they were, tuned
+   against Syne's proportions — not part of what was asked. */
 .hero h1 {
-  font-family: var(--display);
-  font-weight: 800;
+  font-family: 'Bebas Neue', sans-serif;
+  font-weight: 400;
   font-size: clamp(28px, 5vw, 52px);
   letter-spacing: -1.5px;
   line-height: 1.08;
@@ -199,6 +210,31 @@
   color: var(--t1);
 }
 
+/* Session 51: applied to the two sections still 100% hardcoded (Popular
+   series, Trending moments) — NOT Trending arcs, which is real Supabase
+   data since Session 37. A dashed border + a small top-right label, both
+   deliberately low-contrast against this page's dark background — meant
+   to be noticed by a developer/tester looking for it, not a casual
+   visitor scanning the page normally. */
+.sampleDataSection {
+  position: relative;
+  padding-left: 16px;
+  padding-right: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: var(--r);
+}
+.sampleDataLabel {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--t3);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 /* ── Arc cards ── */
 .arcGrid {
   display: grid;
@@ -273,17 +309,21 @@
   font-size: 11px;
   color: var(--t3);
 }
+/* Session 51: warm accent — this is the same "Peak: <beat>" concept as
+   the arc page's own .peak-pill (globals.css), just this page's own
+   trending-arc-card version; every other purple-accent use on this page
+   (nav links, hero eyebrow, sectionLink, etc.) is untouched. */
 .arcPeak {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: var(--accent-soft);
+  background: var(--accent-warm-soft);
   border-radius: 10px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-warm);
 }
 .arcPlatforms {
   display: flex;

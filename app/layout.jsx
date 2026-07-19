@@ -78,8 +78,13 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
+        {/* Session 51: Bebas Neue added for the home page's hero headline
+            only (see app/page.module.css's own .hero h1 rule) — Syne stays
+            the display font everywhere else, unchanged. Bebas Neue ships a
+            single real weight on Google Fonts (no :wght@ axis, unlike
+            Syne/Inter above), so it's requested plainly by family name. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>

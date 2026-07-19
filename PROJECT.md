@@ -5542,6 +5542,101 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–49.
 
+## Session 51
+
+**UI polish pass, requested as four specific, scoped changes with an
+explicit "do not touch anything else."** All four confirmed working live
+in a browser (Playwright, temporarily installed and uninstalled after,
+same convention as every other browser-driven session) against this
+project's standing local mock-PostgREST-server setup — not just a clean
+build. Touched exactly 4 files: `app/layout.jsx`, `app/page.jsx`,
+`app/page.module.css`, `app/globals.css`. Nothing else in the diff.
+
+**Change 1 — Bebas Neue for the home page's hero headline only.**
+`app/layout.jsx`'s Google Fonts `<link>` gained `&family=Bebas+Neue`
+alongside the existing Syne/Inter families. Only
+`app/page.module.css`'s own `.hero h1` rule (a CSS-Modules-scoped
+selector, entirely separate from the arc page's own global `.hero h1` in
+`globals.css`) changed `font-family` — every other heading on every
+other page keeps Syne, unchanged, confirmed by construction (this rule
+can't leak outside the home page's own module scope) rather than by
+grepping for stragglers. Also set `font-weight: 400` on this rule
+(previously 800) — a real technical necessity of this specific change,
+not a stylistic addition: Bebas Neue only ships one real weight on
+Google Fonts (no bold cut), so keeping `font-weight: 800` would have
+made the browser apply synthetic/faux bold to a font that's already
+visually heavy by design, which tends to look distorted rather than
+"characterful." Font-size/letter-spacing/line-height left exactly as
+they were (tuned against Syne's proportions) — not part of what was
+asked, so not touched. Screenshot-confirmed: the hero headline now
+renders in a distinctly condensed, tall face next to the still-Syne nav
+logo and "Trending arcs" section heading directly below it.
+
+**Change 2 — a very subtle radial-gradient body background.**
+`globals.css`'s `body` rule split `background: var(--bg)` into
+`background-color: var(--bg)` + a `background-image` with the two exact
+radial gradients specified (20%/0% and 80%/100%, 0.04/0.03 alpha) —
+every other property on that line (`overflow-x: hidden`,
+`max-width: 100vw`, and everything else the extensive Session 30/32
+history above it documents) is untouched. Verified directly via
+`getComputedStyle(document.body)` in a real page load, not just visual
+inspection (the effect is intentionally too subtle to eyeball
+confidently) — the computed `backgroundImage` matches the requested
+gradients exactly, byte for byte on the color/position/stop values.
+
+**Change 3 — a "Sample data" marker on the two still-hardcoded home page
+sections.** New `.sampleDataSection`/`.sampleDataLabel` classes in
+`app/page.module.css` (a 1px dashed low-alpha border,
+`rgba(255,255,255,0.08)`, plus a 9px muted-`--t3` top-right label at
+0.55 opacity) applied in `app/page.jsx` to exactly two sections —
+**Popular series** (`POPULAR_SERIES`) and **Trending moments**
+(`TRENDING_MOMENTS`), both still 100% hardcoded per this file's own
+"What's real vs. hardcoded" section — and deliberately *not* to
+"Trending arcs" directly above them, which has been real Supabase data
+since Session 37. Screenshot-confirmed both the border and label render
+as intended, and that "Trending arcs" itself has neither.
+
+**Change 4 — a secondary warm accent for peak-moment UI specifically.**
+New tokens in `globals.css`'s `:root`: `--accent-warm: #E8A87C` and
+`--accent-warm-soft: rgba(232,168,124,0.14)` (same "soft" alpha pattern
+as the existing `--accent`/`--accent-soft` pair). Applied to every
+peak-specific use of the purple accent found by direct search, not
+guessed at: the arc page's intensity chart (`.ibar.peak`,
+`.ibar.peak:hover`, `.ibar .pdot`, `.ibar-lbl.peak` — `.ibar.high`, the
+non-peak tier, stays purple), the arc page's "Peak moment"/"Highest
+moment" pill (`.peak-pill`, `components/BeatSection.jsx`), and the home
+page's own trending-arc-card peak label (`.arcPeak`,
+`app/page.module.css`) — the same "Peak: &lt;beat&gt;" concept as
+`.peak-pill`, just this page's own card version, judged in scope even
+though the task's own examples didn't name it specifically by class.
+Every other `--accent`/`--accent-soft` use across the app (buttons,
+active nav/tab states, chip highlights, the "Yours" badge, the hero
+eyebrow pill, etc.) is untouched. Screenshot-confirmed on a real peak
+beat (a seeded arc with one `is_peak: true` beat, via the mock): the
+intensity chart's peak bar/dot, the "✦ Peak moment" pill, and the home
+page's "✦ Peak: The Sealing" card label all render in the new warm
+amber tone, with non-peak bars staying their original color.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 50 left it. Beyond that — real, live
+Playwright-driven verification against `next dev` + a local mock
+PostgREST server seeded with a real arc that has one peak beat and one
+confirmed content item (so the home page's real `getTrendingArcs` had a
+genuine peak-labeled card to render, not just the arc page's own
+intensity chart): screenshots of the hero headline, both sample-data
+sections (and confirmation "Trending arcs" has neither treatment), the
+intensity chart, the "Peak moment" pill, and the home page's trending
+card's peak label — plus the direct `getComputedStyle` check for the
+background gradient described above. `git diff --stat` confirmed exactly
+4 files touched, matching the task's own explicit scope, and
+`package.json`/`package-lock.json` show no diff from Playwright's
+temporary install.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–50.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

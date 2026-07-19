@@ -250,7 +250,11 @@ export default async function HomePage() {
           </div>
         </div>
 
-        <div className={styles.section}>
+        {/* Session 51: sampleDataSection/sampleDataLabel — this section is
+            still 100% hardcoded (POPULAR_SERIES), unlike Trending arcs
+            above it (real Supabase data since Session 37). */}
+        <div className={`${styles.section} ${styles.sampleDataSection}`}>
+          <div className={styles.sampleDataLabel}>Sample data</div>
           <div className={styles.sectionHead}>
             <div className={styles.sectionTitle}>Popular series</div>
             <div className={styles.sectionSub}>Browse by series, then drill into arcs</div>
@@ -279,7 +283,12 @@ export default async function HomePage() {
           </div>
         </div>
 
-        <div className={styles.section}>
+        {/* Session 51: same sampleDataSection treatment — TRENDING_MOMENTS
+            is also still 100% hardcoded, no real "story beats with the
+            most new content this week" query exists anywhere in this
+            app. */}
+        <div className={`${styles.section} ${styles.sampleDataSection}`}>
+          <div className={styles.sampleDataLabel}>Sample data</div>
           <div className={styles.sectionHead}>
             <div className={styles.sectionTitle}>Trending moments</div>
             <div className={styles.sectionSub}>Story beats with the most new content this week</div>
