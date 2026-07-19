@@ -5,7 +5,7 @@ import ArcContent from "@/components/ArcContent";
 import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent, getArcMeta, getArcsBySeries } from "@/lib/supabase";
-import { buildOpenGraph } from "@/lib/metadata";
+import { buildOpenGraph, truncate, MAX_META_DESCRIPTION, MAX_TWITTER_DESCRIPTION } from "@/lib/metadata";
 
 // Forces this route to always render dynamically and re-fetch on every
 // request — without it, Next can treat this dynamic-segment page as
@@ -229,19 +229,6 @@ function buildBeatSections(beats, content) {
   });
 }
 
-// Trims an AniList description down to a meta-description-friendly
-// length. AniList's own text can run to several paragraphs (already
-// HTML-stripped by lib/anilist.js); search engines and social previews
-// both truncate well past ~160-200 characters anyway, so this just does
-// it deliberately with an ellipsis rather than letting it get cut off
-// mid-sentence by whatever's rendering it.
-function truncateDescription(text, maxLength = 200) {
-  if (!text) return null;
-  const trimmed = text.trim();
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength).trim()}…`;
-}
-
 // Phase 8 (Session 45): real per-arc SEO metadata + Open Graph/Twitter
 // preview. Runs as a separate function from the page component below
 // (required by the Metadata API) but fetches the same two calls
@@ -262,13 +249,42 @@ export async function generateMetadata({ params }) {
 
   const arcName = arcMeta?.title || ARC.name;
   const seriesName = series ? series.title.english || series.title.romaji : ARC.breadcrumb[0];
-  const description = truncateDescription(series?.description) || ARC.description;
+  // Session 47: the meta/OG description (155 chars, MAX_META_DESCRIPTION)
+  // and the twitter description (200 chars, MAX_TWITTER_DESCRIPTION) are
+  // each derived independently from the same raw AniList text — not one
+  // truncated from the other — so twitter's own longer allowance isn't
+  // artificially shortened to the stricter 155-char ceiling everywhere
+  // else uses. `truncate` returns null on falsy input, so the `||`
+  // fallback to ARC.description still applies on the hardcoded-fallback
+  // path exactly as before.
+  const rawDescription = series?.description || ARC.description;
+  const description = truncate(rawDescription, MAX_META_DESCRIPTION);
+  const twitterDescription = truncate(rawDescription, MAX_TWITTER_DESCRIPTION);
   // AniList's bannerImage (widescreen) is preferred over coverImage
   // (portrait) for a social-preview card — same preference order as the
   // series page's own generateMetadata. Real seeded arcs and the
   // hardcoded-fallback path (an unseeded slug, still using JJK's real
   // AniList id) both resolve a real `series` here, so this only omits
   // `images` entirely if the AniList call itself failed.
+  //
+  // Session 47: a request to switch this to `coverImage.large` (a
+  // portrait poster, keeping bannerImage's exact aspect ratio out of
+  // scope) was investigated, not applied — AniList's `coverImage` is a
+  // portrait book/poster-style image (roughly 2:3, taller than wide),
+  // which is *further* from the 1.91:1 landscape ratio social platforms
+  // expect than a wide banner already is, not closer to it; Twitter's
+  // own `summary_large_image` card (used on every page since Session 46,
+  // at this project's own request) in particular renders a portrait
+  // image cropped or letterboxed rather than "close to 1200x630." This
+  // sandbox's network policy blocks direct requests to `s4.anilist.co`
+  // (confirmed via the agent proxy's own status endpoint — only
+  // `graphql.anilist.co`, the API host, is reachable), so the exact pixel
+  // dimensions of either image couldn't be measured directly this
+  // session; AniList's documented image conventions (a portrait cover vs.
+  // a landscape banner) were enough on their own to make this call. Kept
+  // bannerImage unchanged; a pixel-exact 1200x630 image would need a
+  // generated card (`next/og`/`ImageResponse`), which Phase 8 explicitly
+  // scoped out in favor of reusing AniList's own real images.
   const image = series?.bannerImage || series?.coverImage?.large || null;
   const title = `${arcName} — ${seriesName}`;
   const url = `/arc/${params.slug}`;
@@ -281,6 +297,9 @@ export async function generateMetadata({ params }) {
     // this object was previously replacing, not merging with, the root
     // layout's `openGraph.siteName`/`locale`, so `og:site_name` never
     // actually rendered on this page despite app/layout.jsx defining it.
+    // buildOpenGraph also (re-)truncates `description` to
+    // MAX_META_DESCRIPTION itself (Session 47) — passing the already-
+    // truncated value here is a harmless no-op through that second pass.
     openGraph: buildOpenGraph({
       title,
       description,
@@ -296,7 +315,7 @@ export async function generateMetadata({ params }) {
       // regardless.
       card: "summary_large_image",
       title,
-      description,
+      description: twitterDescription,
       ...(image && { images: [image] }),
     },
   };

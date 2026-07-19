@@ -5143,6 +5143,99 @@ a clean ancestor of the continuation branch (Session 44's own commit,
 nothing else), so this was a fast-forward, not a merge or an overwrite of
 any divergent work.
 
+## Session 47
+
+Three small SEO fixes requested together, following up on Session 46.
+
+**Fix 1 — requested: switch `og:image` from the AniList banner image to
+`coverImage.large` (a portrait poster), on the stated reasoning that the
+banner's aspect ratio is far from the ~1.91:1/1200×630 platforms expect
+and the cover image would be closer. **Investigated before implementing,
+not applied** — this sandbox's network policy blocks direct requests to
+`s4.anilist.co` (confirmed via the agent proxy's own `/__agentproxy/status`
+endpoint: `graphql.anilist.co`, the API host, is reachable;
+`s4.anilist.co`, the image CDN, returns a 403 at the proxy), so the exact
+pixel dimensions of either image couldn't be measured directly — but
+AniList's documented image conventions were enough on their own:
+`coverImage` is a portrait book/poster-style image (roughly 2:3, taller
+than wide), which is *further* from a 1.91:1 landscape target than a wide
+banner already is, not closer to it. Switching would have made the
+`summary_large_image` Twitter card (every page, since Session 46, at this
+project's own request) render a cropped/letterboxed portrait image
+instead of a wide one. Kept `bannerImage` as the primary source unchanged
+(same preference order as before); a pixel-exact 1200×630 image would
+need a generated card (`next/og`/`ImageResponse`), which Phase 8
+explicitly scoped out in favor of reusing AniList's own real images (see
+Session 45's own "scope, clarified with the user" note) — flagged here
+rather than silently applying an instruction likely to make the actual
+social card worse, same convention as Session 43's investigation of an
+invalid AniList query field before implementing it as literally asked.
+
+**Fix 2 — real, applied.** `og:description`/meta `description` were
+running 201/211 characters (observed directly against real AniList
+descriptions) — over both Google's own ~155-char search-snippet ceiling
+and, in practice, whatever length various OG readers truncate at
+unpredictably on their own. New `lib/metadata.js` exports:
+`MAX_META_DESCRIPTION` (155), `MAX_TWITTER_DESCRIPTION` (200, Fix 3), and
+a shared `truncate(text, maxLength)` — consolidating what used to be an
+identical `truncateDescription` function duplicated in
+`app/arc/[slug]/page.jsx` and `app/series/[slug]/page.jsx` (Session 45),
+since two different length ceilings now both need the exact same logic,
+not just one. `buildOpenGraph` (Session 46) now also re-truncates
+`fields.description` to `MAX_META_DESCRIPTION` itself, so the ceiling is
+enforced in one place regardless of whether a future call site remembers
+to truncate before calling it — per the literal request ("apply this
+truncation in the buildOpenGraph helper... so it applies to all pages
+consistently"). That alone would only have fixed `og:description`,
+though, not the plain `<meta name="description">` tag the same report
+named as the other over-length tag — every page's `generateMetadata` (and
+`app/page.jsx`'s already-short static `metadata`) now also derives its
+own top-level `description` from `truncate(..., MAX_META_DESCRIPTION)`
+directly, so both tags are actually fixed, not just the one the literal
+instruction named.
+
+**Fix 3 — real, applied.** `twitter.description` now comes from a
+*separate* `truncate(rawDescription, MAX_TWITTER_DESCRIPTION)` call
+against the same raw source text, not a reuse of the shorter 155-char
+`description` value — Twitter's own card format tolerates more text
+before truncating its own preview, so capping it at the same 155 as
+`og:description` would have thrown away real, valid extra text Twitter
+can actually show. Applied on every `generateMetadata` that defines its
+own `twitter` object (arc/series/search's matched-query branch); pages
+that don't define their own `twitter` (home, submit, auth) already
+inherit Next's auto-filled `twitter:description` from the page's own
+top-level `description`, itself now correctly bounded by Fix 2 — no
+separate change needed there.
+
+**A real bug found during this session's own verification, not part of
+any of the three requested fixes**: `truncate()`'s first version sliced
+to the full `maxLength` and *then* appended a 1-character ellipsis,
+making the actual returned string `maxLength + 1` characters long, not
+`<= maxLength` — caught by measuring `twitter:description` at 201
+characters against the stated 200 cap during verification, not assumed
+correct from the code alone. Fixed by slicing to `maxLength - 1` before
+appending the ellipsis, so the result is always within the stated
+ceiling; re-verified at exactly 200 and 155 chars respectively after the
+fix.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 46 left it. Re-ran this project's standing local
+mock-PostgREST + `next dev` convention, this time measuring actual
+rendered character counts (not just presence) for `description`,
+`og:description`, and `twitter:description` on a real seeded arc, a real
+series page, a matched search query, home, and `/submit` — all five
+correctly `<= 155`/`<= 200` respectively after the off-by-one fix;
+`og:image` reconfirmed still the real AniList banner (landscape) URL on
+arc/series/search, not switched to a portrait cover per Fix 1's own
+non-application above; `og:site_name`/`twitter:card` reconfirmed still
+`"aniindex"`/`"summary_large_image"` everywhere (Session 46's fix
+untouched by this session's changes).
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` check as Session 46 before
+fast-forwarding, confirming no divergent work on Production to lose.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

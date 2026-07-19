@@ -4,7 +4,7 @@ import ArcList from "@/components/ArcList";
 import SearchNav from "@/components/SearchNav";
 import { searchSeries, getSeriesCharacters } from "@/lib/anilist";
 import { getSeriesByAnilistId, getAllArcsForSeries, getArcSparkline } from "@/lib/supabase";
-import { buildOpenGraph } from "@/lib/metadata";
+import { buildOpenGraph, truncate, MAX_META_DESCRIPTION, MAX_TWITTER_DESCRIPTION } from "@/lib/metadata";
 import styles from "./search.module.css";
 
 // Hardcoded placeholder counts for the sections that aren't wired to real
@@ -146,7 +146,14 @@ export async function generateMetadata({ searchParams }) {
 
   const seriesName = series.title.english || series.title.romaji;
   const title = `${seriesName} — search results for "${query}"`;
-  const description = `${seriesName}'s arcs, characters, and fan content on Aniindex.`;
+  // Session 47: routed through the same truncate() split as the arc/
+  // series pages, even though a synthesized one-sentence description
+  // like this rarely runs long enough to need it — kept consistent with
+  // every other page rather than a special case, since an unusually long
+  // real seriesName could still push it past 155 chars.
+  const rawDescription = `${seriesName}'s arcs, characters, and fan content on Aniindex.`;
+  const description = truncate(rawDescription, MAX_META_DESCRIPTION);
+  const twitterDescription = truncate(rawDescription, MAX_TWITTER_DESCRIPTION);
   const image = series.bannerImage || series.coverImage?.large || null;
 
   return {
@@ -173,7 +180,7 @@ export async function generateMetadata({ searchParams }) {
       // conditional on `image`.
       card: "summary_large_image",
       title,
-      description,
+      description: twitterDescription,
       ...(image && { images: [image] }),
     },
   };

@@ -3,7 +3,7 @@ import CharacterChips from "@/components/CharacterChips";
 import SearchNav from "@/components/SearchNav";
 import { getSeriesWithRelations, getSeriesCharacters } from "@/lib/anilist";
 import { getArcsBySeries } from "@/lib/supabase";
-import { buildOpenGraph } from "@/lib/metadata";
+import { buildOpenGraph, truncate, MAX_META_DESCRIPTION, MAX_TWITTER_DESCRIPTION } from "@/lib/metadata";
 import styles from "./series.module.css";
 
 // Fallback only, as of Session 25 — AniList has no arc-level data, so
@@ -137,18 +137,6 @@ function statusLabel(status) {
   return status ? status.replaceAll("_", " ").toLowerCase() : null;
 }
 
-// Same trim as app/arc/[slug]/page.jsx's own generateMetadata — kept as a
-// separate local copy rather than a shared lib export, matching this
-// codebase's existing convention of small per-page helpers duplicated
-// across files rather than a shared utils module (see formatLabel, which
-// this file and app/search/page.jsx both already define identically).
-function truncateDescription(text, maxLength = 200) {
-  if (!text) return null;
-  const trimmed = text.trim();
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength).trim()}…`;
-}
-
 // Phase 8 (Session 45): real per-series SEO metadata + Open Graph/Twitter
 // preview. `getSeriesWithRelations` failing here means the page itself
 // renders its own "Couldn't load this series" error state (see below) —
@@ -168,8 +156,17 @@ export async function generateMetadata({ params }) {
   }
 
   const seriesName = series.title.english || series.title.romaji;
-  const description =
-    truncateDescription(series.description) || `Browse ${seriesName}'s arcs and top characters on Aniindex.`;
+  // Session 47: see app/arc/[slug]/page.jsx's own generateMetadata
+  // comment — description/twitterDescription are each truncated
+  // independently from the same raw text at their own ceiling
+  // (MAX_META_DESCRIPTION/MAX_TWITTER_DESCRIPTION, lib/metadata.js), not
+  // one derived from the other. The local `truncateDescription` this file
+  // used to define itself (Session 45) moved into lib/metadata.js as a
+  // shared `truncate` — no longer just a small per-page helper once two
+  // different length ceilings both needed the identical logic.
+  const rawDescription = series.description || `Browse ${seriesName}'s arcs and top characters on Aniindex.`;
+  const description = truncate(rawDescription, MAX_META_DESCRIPTION);
+  const twitterDescription = truncate(rawDescription, MAX_TWITTER_DESCRIPTION);
   const image = series.bannerImage || series.coverImage?.large || null;
 
   return {
@@ -193,7 +190,7 @@ export async function generateMetadata({ params }) {
       // conditional on `image`.
       card: "summary_large_image",
       title: seriesName,
-      description,
+      description: twitterDescription,
       ...(image && { images: [image] }),
     },
   };
