@@ -10,6 +10,7 @@
 // Component) already passes this only plain, serializable `beat` data.
 import { useState } from "react";
 import ContentCard from "@/components/ContentCard";
+import { slugifyBeatTitle } from "@/lib/slug";
 
 export default function BeatSection({ beat, confirmedIds, onItemConfirmed }) {
   const [flaggedIds, setFlaggedIds] = useState(() => new Set());
@@ -28,7 +29,18 @@ export default function BeatSection({ beat, confirmedIds, onItemConfirmed }) {
   const visibleItems = beat.items.filter((item) => !item.id || !flaggedIds.has(item.id));
 
   return (
-    <div className="beat">
+    // Session 55: `id` is the click-to-scroll target for
+    // IntensityChart.jsx's own bars (components/IntensityChart.jsx),
+    // which generates the exact same slug from the exact same beat
+    // title via the shared lib/slug.js helper. Assumes beat titles are
+    // unique within a single arc (true of every real seeded arc today,
+    // per PROJECT.md's seed data) — there's no uniqueness constraint on
+    // `beats.title` at the schema level, so two identically-slugging
+    // titles on the same arc would produce a duplicate `id` in the DOM;
+    // `document.getElementById` would then just land on whichever one
+    // renders first. A narrow, accepted edge case, not something this
+    // change adds machinery to guard against.
+    <div className="beat" id={slugifyBeatTitle(beat.title)}>
       <div className="beat-head">
         <div className="beat-title">{beat.title}</div>
         <div className="beat-ct">{visibleItems.length.toLocaleString("en-US")} items</div>

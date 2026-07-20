@@ -220,21 +220,53 @@ nav {
 .intensity-wrap { padding: 28px 0 0; }
 .intensity-eyebrow { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
 .intensity-bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; }
-.ibar { flex: 1; border-radius: 3px 3px 0 0; background: var(--surface-3); position: relative; cursor: pointer; transition: background .15s; min-width: 0; }
-.ibar:hover { background: var(--surface-2); }
+/* Session 55: now a real <button> (was a plain <div>, matching this
+   codebase's own existing pattern for turning a decorative element
+   interactive — see ContentTabs.jsx's identical div-to-button change,
+   Session 28) — border/padding/font/text-align resets are needed here
+   that a <div> never required, so a default button's own UA chrome
+   doesn't distort the bar's exact height/width inside its flex parent. */
+.ibar { flex: 1; border: none; padding: 0; margin: 0; font: inherit; text-align: inherit; display: block; border-radius: 3px 3px 0 0; background: var(--surface-3); position: relative; cursor: pointer; transition: background .15s, filter .15s; min-width: 0; }
+/* Session 55: replaced a plain background-color swap
+   (`background: var(--surface-2)`) with `filter: brightness()` — the
+   old rule was a real, if minor, pre-existing bug: `--surface-2` is
+   actually *darker* than the bars' own base `--surface-3` (confirmed:
+   #1C1C26 vs #232330), so hovering a normal-tier bar dimmed it, the
+   opposite of the "slight brightness increase" this task asked for.
+   `filter: brightness()` also applies uniformly on top of whatever a
+   tier's own background already is (plain/.high/.peak alike), so the
+   old `.ibar.peak:hover` override below (a separately hand-tuned
+   brighter rgba value, only reachable via source-order because
+   `.ibar:hover` and `.ibar.high`/`.ibar.peak` share the same
+   specificity) is no longer needed — one rule now correctly brightens
+   every tier instead of two rules, one of which was actually wrong. */
+.ibar:hover { filter: brightness(1.2); }
 .ibar.high { background: rgba(123,108,246,0.18); }
 /* Session 51: peak tier switched from the purple accent to the warm one
    (--accent-warm) — .high (non-peak) stays purple, unchanged. */
 .ibar.peak { background: rgba(232,168,124,0.35); }
-.ibar.peak:hover { background: rgba(232,168,124,0.5); }
-.ibar .pdot { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--accent-warm); }
+.ibar .pdot { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--accent-warm); pointer-events: none; }
 .ibar-lbls { display: flex; gap: 3px; margin-top: 2px; }
 .ibar-lbl { flex: 1; font-size: 9px; color: var(--t3); text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 2px; line-height: 1.3; }
 .ibar-lbl.peak { color: var(--accent-warm); }
 
 /* ── Content ── */
 .content-body { padding: 32px 0 64px; }
-.beat { margin-bottom: 48px; }
+/* Session 55: `scroll-margin-top` — IntensityChart.jsx's bars now
+   scrollIntoView({block: "start"}) to a beat's own `id`
+   (BeatSection.jsx); without this, that call would land the beat's
+   title flush at the viewport's top edge, directly underneath this
+   page's two stacked sticky bars (nav, 56px, + .tabs-wrap, own height
+   varies) rather than actually visible. Measured directly (not
+   guessed): nav + .tabs-wrap together are ~102px on desktop
+   (.tabs-wrap 46px, one line of tabs) and up to ~192px at narrow mobile
+   widths, where Session 29's own `.tabs { flex-wrap: wrap }` (same
+   max-width: 768px breakpoint used below) lets the 5 tabs wrap across
+   multiple lines, making .tabs-wrap itself much taller. Both values
+   rounded up slightly for a small safety margin — this only controls
+   how much clearance a scrolled-to beat gets above the sticky bars, so
+   erring slightly generous costs nothing. */
+.beat { margin-bottom: 48px; scroll-margin-top: 110px; }
 .beat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .beat-title { font-family: var(--display); font-weight: 700; font-size: 15px; }
 .beat-ct { font-size: 12px; color: var(--t3); }
@@ -343,6 +375,16 @@ nav {
      there would be a visual no-op but there's no reason to apply it
      unconditionally). */
   .tabs { flex-wrap: wrap; }
+
+  /* Session 55: `.tabs` wrapping onto multiple lines (immediately
+     above) makes `.tabs-wrap` itself noticeably taller than its
+     one-line desktop height — measured up to ~136px at 320-375px
+     viewports (vs. ~46px on desktop), so `.beat`'s own base
+     `scroll-margin-top` (110px, sized for the desktop/one-line case)
+     isn't enough clearance here; a click-scrolled beat's title would
+     still land partly underneath the sticky nav+tabs bars at these
+     widths without this override. */
+  .beat { scroll-margin-top: 200px; }
 }
 
 @media (max-width: 640px) {

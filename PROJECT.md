@@ -5956,6 +5956,104 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–53.
 
+## Session 55
+
+Click-to-scroll on the arc page's intensity chart — clicking a bar
+smoothly scrolls to its matching beat section below.
+
+**New `lib/slug.js`** (`slugifyBeatTitle`) — shared by
+`components/IntensityChart.jsx` and `components/BeatSection.jsx`
+specifically because the task requires both to produce the *exact* same
+string from the same beat title (a click target has to match a
+rendered `id`); a divergence here would fail silently (a click that
+just doesn't scroll, no error anywhere), unlike this codebase's usual
+small-helper duplication (e.g. `formatLabel`, independently duplicated
+in `app/search/page.jsx` and `app/series/[slug]/page.jsx`) where the two
+copies aren't required to stay identical to work correctly.
+Lowercase → strip anything outside `[a-z0-9\s-]` → spaces to hyphens →
+collapse repeated hyphens → trim leading/trailing hyphens. Verified
+directly against the task's own example: "The Sealing" → `the-sealing`.
+
+**`components/BeatSection.jsx`** — the beat container (`<div
+className="beat">`) gets `id={slugifyBeatTitle(beat.title)}`. Noted, not
+solved: this assumes beat titles are unique within a single arc (true of
+every real seeded arc today) — `beats.title` has no uniqueness
+constraint at the schema level, so two identically-slugging titles on
+the same arc would produce a duplicate `id`, and a click would land on
+whichever renders first. A narrow, accepted edge case, not something
+this change adds machinery to guard against.
+
+**`components/IntensityChart.jsx`** — each bar (`.ibar`) changed from a
+plain `<div>` to a real `<button>` with an `onClick` calling
+`document.getElementById(slugifyBeatTitle(beat.label))?.scrollIntoView({
+behavior: "smooth", block: "start" })`, plus `aria-label={\`Jump to
+${beat.label}\`}` — no visible text lives on the bar itself (the label
+sits in a separate row below), so a screen reader would otherwise
+announce nothing meaningful; mirrors an identical existing pattern in
+this codebase, `app/submit/page.jsx`'s own beat-selector bars
+(`aria-label={beat.title}`). Div-to-button matches this project's own
+established precedent for making a previously-decorative element
+interactive (`ContentTabs.jsx`, Session 28) rather than a bespoke
+`onClick`-on-a-`div` pattern. No new `"use client"` directive needed —
+this component is only ever imported from `ArcContent.jsx` (already
+`"use client"`), so it's already part of the client bundle.
+
+**A real interaction with this page's sticky headers, checked before
+shipping, not after**: `scrollIntoView({block: "start"})` on its own
+would land a beat's title flush at the viewport's top edge — directly
+underneath this page's two stacked sticky bars (`nav`, 56px, +
+`.tabs-wrap`), hiding it rather than revealing it. Measured directly
+(not guessed): nav + `.tabs-wrap` together are ~102px on desktop (one
+line of tabs) and up to ~192px at narrow mobile widths, where the
+existing `.tabs { flex-wrap: wrap }` rule (Session 29,
+`max-width: 768px`) lets the tabs wrap across multiple lines, making
+`.tabs-wrap` itself much taller. Solved with `.beat`'s own
+`scroll-margin-top` (110px base, 200px inside the same `max-width:
+768px` query) rather than a manual scroll-offset calculation in JS —
+this is what lets the actual `scrollIntoView` call in
+`IntensityChart.jsx` stay exactly the plain, literal call the task
+asked for. Verified with real bounding-rect measurements, not assumed:
+on a middle beat (room to scroll freely both directions, so not skewed
+by hitting the document's own bottom edge), the scrolled-to target
+landed at 110px on desktop and 200px on a 375px viewport, both cleanly
+below their respective sticky-stack bottom edges (102px / 192px).
+
+**Also fixed a small, real, pre-existing bug found while implementing
+the requested hover state**: `.ibar:hover` previously swapped to
+`background: var(--surface-2)` — `--surface-2` (`#1C1C26`) is actually
+*darker* than the bars' own base `--surface-3` (`#232330`), so hovering
+a normal-tier bar dimmed it, the opposite of "a slight brightness
+increase." Replaced with `filter: brightness(1.2)`, which applies
+uniformly on top of whatever a tier's own background already is
+(normal/`.high`/`.peak` alike) — this also let the separate,
+hand-tuned `.ibar.peak:hover` override (only reachable via
+source-order, since `.ibar:hover` and `.ibar.peak` share the same CSS
+specificity) be removed entirely, one correct rule instead of two, one
+of which was wrong. Verified via `getComputedStyle` on both a
+normal-tier and a peak-tier bar: `filter: brightness(1.2)` applies to
+both on hover, `cursor: pointer` confirmed (was already present before
+this session, unchanged).
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 54 left it (only the arc page's own bundle size
+changed, +0.15kB). Real, live Playwright verification (temporarily
+installed, uninstalled after) against `next dev` + a local mock
+PostgREST server seeded with 3 real beats: confirmed the rendered
+`.beat` element ids (`curtain-falls`, `the-sealing`, `aftermath`) match
+`IntensityChart`'s own generated slugs exactly; confirmed every bar
+rendered as a real `<button>` with the correct `aria-label`; clicked a
+bar and confirmed the page actually scrolled and the correct beat
+landed fully clear of the sticky header stack, at both desktop and
+mobile widths, with the exact pixel measurements above; confirmed the
+hover brightness filter applies correctly on both tiers. `git diff
+--stat`: 3 files modified + 1 new file, all directly attributable to
+this feature.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–54.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
