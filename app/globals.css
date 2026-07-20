@@ -115,12 +115,28 @@ nav {
 .logo { font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--t1); letter-spacing: -0.5px; flex-shrink: 0; text-decoration: none; }
 .logo span { color: var(--accent); }
 .search-bar {
-  flex: 1; max-width: 380px;
+  flex: 1; min-width: 0; max-width: 380px;
   display: flex; align-items: center; gap: 8px;
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 8px; padding: 0 12px; height: 34px;
   color: var(--t3); font-size: 13px; font-family: var(--body);
 }
+/* Session 56: the arc page's ".search-bar" is now a real <input>
+   (components/ArcSearchBar.jsx) rather than a static div — this makes
+   the input itself invisible against its ".search-bar" container so the
+   visual result is unchanged from the old placeholder-text version.
+   `min-width: 0` on both the input and its ".search-bar" flex parent
+   overrides a real browser default (a bare <input>'s intrinsic
+   `min-width: auto` refuses to flex-shrink below its default rendered
+   content width, historically ~170px+ in Chromium) — without it, this
+   input alone reintroduced a narrow-viewport nav overflow at 320px that
+   the old plain-text div never had, since text simply wraps/shrinks
+   with no equivalent floor. */
+.arc-search-input {
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  color: var(--t1); font-size: 13px; font-family: var(--body);
+}
+.arc-search-input::placeholder { color: var(--t3); }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .btn { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: none; font-family: var(--body); text-decoration: none; }
 .btn-ghost { background: transparent; color: var(--t2); }

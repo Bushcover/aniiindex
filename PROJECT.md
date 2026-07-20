@@ -6054,6 +6054,184 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–54.
 
+## Session 56
+
+Phase 8 final QA pass — systematically checked all 10 items the task
+listed before content seeding. Built a new, more realistic local mock
+PostgREST server (3 series, 4 arcs, 5 beats, 4 content_items in
+different states) specifically to exercise multi-series/multi-arc
+behavior, not just the single hardcoded fixture prior sessions' mocks
+used. Real, live Playwright verification throughout (temporarily
+installed, uninstalled after), against `next dev` + the mock.
+
+**One real, confirmed bug found and fixed: the arc page's nav "search
+bar" was purely decorative.** Direct code read of `app/arc/[slug]/
+page.jsx` showed it was a `<div className="search-bar">` with an SVG
+icon and static placeholder text — no `<input>`, no handler — unlike
+`SearchNav.jsx` (search/series pages), which has a real, working input.
+Cross-checked against this file's own Session 3 log entry, which
+explicitly noted this was true from the very start of the project
+("`.search-bar` is a plain placeholder `<div>` on the arc page but a
+real `<input>` here [search page]") — so this was original, 53-session-
+old intentional-at-the-time mockup debt, never revisited, not a
+regression. Fixed anyway: the task's checklist item 1 requires "search
+works... from every page" as an unconditional requirement, and a nav
+element that looks like a search box but does nothing is a real,
+confusing bug for a real visitor at launch.
+
+**New `components/ArcSearchBar.jsx`** (client component) replaces that
+div — a real, controlled `<input>` that navigates to
+`/search?q=<value>` on Enter, mirroring `SearchNav.jsx`'s own
+Enter-to-navigate behavior. Reuses the existing `.search-bar` container
+class (`app/globals.css`) rather than introducing new layout styles, so
+the visual result is unchanged; added one small `.arc-search-input`
+rule to make the input itself blend into that container (transparent
+background, no border, matching color/font).
+
+**A real regression this fix itself introduced, caught by testing
+before it shipped, not after**: a bare `<input>` has a browser-default
+`min-width: auto` that refuses to flex-shrink below its intrinsic
+content width (historically ~170px+ in Chromium) — the old plain-text
+div had no such floor. This alone reintroduced a horizontal-overflow
+bug at 320px viewport width (measured: `scrollWidth` 323 vs
+`clientWidth` 320, traced via a full-DOM bounding-rect sweep to the nav
+overflowing past the sign-out button) that the old decorative div never
+had. Fixed by adding `min-width: 0` to both `.search-bar` and the new
+`.arc-search-input` — standard fix for this exact flex/input quirk.
+Re-verified clean (`scrollWidth === clientWidth`) across all 6 pages at
+320/360/375/390/414px afterward, both signed-out and signed-in (the
+signed-in nav state is what actually overflowed in the original
+Session 34 mobile saga, so every mobile check this session injected a
+fake session first, not just tested signed-out).
+
+**Item-by-item results:**
+
+1. **Nav links + search** — logo→`/` and sign-in→`/auth` confirmed on
+   all 6 pages (home, arc, search, series, submit, auth) via direct
+   `getAttribute('href')` checks. Search confirmed working end-to-end on
+   home (hero search), search page (nav input), and now the arc page
+   (fixed this session) — all three correctly navigate to
+   `/search?q=<value>` on Enter.
+2. **Submit form end-to-end** — paste URL → `/api/og-fetch` auto-detect
+   attempted (gracefully falls back to manual-entry placeholders in this
+   sandbox, since TikTok's real oEmbed API isn't reachable here — this
+   is the existing, intentional fallback path working as designed, not
+   a bug) → series search/select → arc select → beat select → character
+   tag → content type → Continue → Review → Submit → success message →
+   "View arc page" link (correct `href="/arc/control-devil-arc"`) →
+   lands on that arc. Verified live against the mock's Chainsaw Man /
+   Control Devil Arc data, distinct from every other session's usual
+   Shibuya-arc-only testing.
+3. **Multiple series resolve on search** — tested `Jujutsu`, `Demon
+   Slayer`, and `Chainsaw` against the mock's 3 series; each correctly
+   returned matching results. Mechanism-only verification — this
+   sandbox has no live Supabase credentials, so the actual live 7-series
+   seed can't be queried directly from here (see Sandbox limitations
+   below).
+4. **Arc pages load with real beats/series data** — tested 4 different
+   arcs across 3 different series (Shibuya Incident, Vs. Mahito,
+   Swordsmith Village, Control Devil); each rendered the correct `h1`
+   and correct beat-section count for that arc (Vs. Mahito correctly
+   rendered 0 beat sections, since the mock deliberately didn't seed
+   beats for it — confirmed this is graceful empty-state handling, not
+   a crash).
+5. **Confirm placement persists** — confirming a fresh-pending item
+   hides its pending badge immediately (optimistic), and after a real
+   page reload (new navigation, not client-side) correctly shows
+   "Awaiting second confirmation" (Session 53's fix), not a bare
+   "Confirm placement" button. Caught and fixed a mock-only bug while
+   verifying this (see below) — the real app code was correct throughout.
+6. **Flag makes an item disappear immediately and stays gone** — flagged
+   item vanished from the same tab instantly, and after a real reload
+   stayed gone (Session 54's fix, confirmed still intact).
+7. **Sign-in flow** — the email form's "Check your email" success state
+   renders correctly on submit. `/auth/callback`'s code read fresh this
+   session: correctly handles both the PKCE `?code=` flow
+   (`exchangeCodeForSession`) and the older implicit flow (checks
+   `getSession()` for a session Supabase's client already parsed from
+   the URL hash), with a real error state ("This magic link is invalid
+   or has expired") if neither resolves a session. A real magic-link
+   email round trip (receive email, click link, land signed in) is not
+   testable from this sandbox — no live email inbox exists here, a
+   standing gap unchanged since Phase 4.
+8. **Sign out clears session** — tested by injecting a fake session into
+   `localStorage` (same technique as Session 34) rather than a real
+   sign-in: nav correctly showed the signed-in email + "Sign out"
+   button, clicking it correctly reverted the nav to the "Sign in" link
+   and cleared the session from `localStorage`.
+9. **Mobile view, no overflow** — all 6 pages checked at 320/360/375/
+   390/414px, signed-in state (the state that actually caused the
+   original Session 34 overflow bug). Found and fixed the 320px
+   overflow described above; zero overflow everywhere after the fix.
+10. **Open Graph preview** — fetched the raw HTML of an arc page and
+    confirmed `og:title`, `og:image` (real AniList banner), `og:type`,
+    `og:site_name`, `og:locale`, `twitter:card` (`summary_large_image`),
+    `twitter:title`, `twitter:image`, `<meta name="description">`,
+    `og:description`, and `twitter:description` are all present and
+    correctly truncated (155 / 155 / 200 decoded characters respectively,
+    matching Session 47's ceilings exactly) — confirmed by decoding HTML
+    entities before measuring length, after an initial single-line grep
+    falsely suggested the description tags were missing (AniList's
+    description text contains literal newlines, which broke a
+    single-line regex across multiple physical lines in the raw HTML;
+    the tags were present all along). No live production URL exists to
+    test how real crawlers (Facebook, Twitter, Discord, etc.) actually
+    render this — only the meta tags' presence/correctness in server-
+    rendered HTML was verified, same scope as Sessions 45–47.
+
+**A mock-only bug caught and fixed while testing item 5, not a real
+app bug**: this session's mock server always returned bare JSON arrays
+from every GET, but `confirmContentItem` (`lib/supabase.js`) calls
+`.single()` on its pre-update SELECT, which real PostgREST/supabase-js
+only unwraps to a plain object (not an array) when the server honors
+`Accept: application/vnd.pgrst.object+json`. `.maybeSingle()` (used
+everywhere else in this codebase, e.g. `getArcRowBySlug`) unwraps
+client-side regardless, which is why every other mocked call worked
+fine and this one specifically didn't. Against the non-compliant mock,
+`current.status` came back `undefined` (an array has no `.status`),
+tripping `confirmContentItem`'s "already not pending" early-return
+before ever sending the actual PATCH — confirmed directly: the mock's
+own request log showed the SELECT firing twice but zero PATCH requests
+for that item, and the API response was a bare `{"id":1}` with
+`confirmationCount`/`status` silently dropped by `JSON.stringify`
+serializing `undefined` fields. Fixed by making the mock inspect the
+`Accept` header and return a bare object (matching real PostgREST) when
+the client requests one. This was caught, diagnosed to its exact root
+cause, and fixed within this session before it could produce a false
+"confirm doesn't persist" bug report — worth logging since it's exactly
+the kind of test-infrastructure gap this project's mock-based testing
+has to stay honest about (see `mock-postgrest.js`'s own comments,
+scratch file, not part of this repo).
+
+**Sandbox limitations, unchanged from prior sessions, honestly
+re-confirmed rather than re-litigated:**
+- No live Supabase credentials in any sandbox session — every test here
+  ran against a local mock seeded with representative (not the real
+  live 7-series/21-arc) data. Verifies the *mechanism*, not the actual
+  production dataset.
+- `s4.anilist.co` (AniList's image CDN) remains blocked by this
+  sandbox's network policy — banner/poster images can't be visually
+  rendered here, though the real image URLs themselves were confirmed
+  present and correct in `og:image`/`twitter:image`.
+- No live email inbox — a real magic-link round trip (item 7) has never
+  been completable from any sandbox session; only the code paths and
+  UI states around it were verified.
+- No live production URL — item 10's OG tags were verified as correct
+  HTML output, not as an actual crawler-rendered preview card.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, no
+new errors or warnings, same route table as Session 55 left it. `git
+diff --stat`: 3 files changed (`app/arc/[slug]/page.jsx`,
+`app/globals.css`) + 1 new file (`components/ArcSearchBar.jsx`), all
+directly attributable to the one fix this session made. All dev/mock
+servers and Playwright test scripts cleaned up; `playwright-core`
+uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–55.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

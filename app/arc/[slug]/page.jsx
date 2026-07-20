@@ -2,6 +2,7 @@ import Link from "next/link";
 import ArcNav from "@/components/ArcNav";
 import ArcHero from "@/components/ArcHero";
 import ArcContent from "@/components/ArcContent";
+import ArcSearchBar from "@/components/ArcSearchBar";
 import NavAuth from "@/components/NavAuth";
 import { getSeriesById, getSeriesCharacters } from "@/lib/anilist";
 import { getArcBeats, getArcContent, getArcMeta, getArcsBySeries } from "@/lib/supabase";
@@ -471,13 +472,7 @@ export default async function ArcPage({ params }) {
         <Link href="/" className="logo">
           ani<span>index</span>
         </Link>
-        <div className="search-bar">
-          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          Search series, arcs, characters…
-        </div>
+        <ArcSearchBar />
         <div className="nav-right">
           <button className="btn btn-ghost nav-browse-btn">Browse</button>
           <NavAuth signInClassName="btn btn-primary" />
