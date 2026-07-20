@@ -6,7 +6,8 @@
 // lib/supabase.js's confirmContentItem, same split as every other real
 // write path in this app.
 
-import { confirmContentItem } from "@/lib/supabase";
+import { revalidateTag } from "next/cache";
+import { confirmContentItem, ARC_DATA_CACHE_TAG } from "@/lib/supabase";
 
 export async function POST(request) {
   let body;
@@ -23,6 +24,14 @@ export async function POST(request) {
 
   try {
     const item = await confirmContentItem(id);
+    // Session 54: same fix as app/api/flag/route.js — getArcContent
+    // reads through a 5-minute-cached client (Session 50), so without
+    // this a just-confirmed item's `status`/`confirmation_count` could
+    // read stale for up to 5 minutes on the arc page's own next load
+    // (Session 53's own "Awaiting second confirmation" label depends on
+    // a fresh `confirmation_count`, which this also fixes as a direct
+    // consequence, not a separate change).
+    revalidateTag(ARC_DATA_CACHE_TAG);
     return Response.json(item);
   } catch (err) {
     // Intentional, permanent operational logging (not a leftover debug

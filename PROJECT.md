@@ -5873,6 +5873,89 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–52.
 
+## Session 54
+
+Bug report: flagged content still appearing on the arc page after a
+refresh. Task asked to check `getArcContent`'s query for the `status in
+('confirmed', 'pending')` filter, check whether the arc page was reading
+cached data, and add a temporary `console.log`.
+
+**The query itself is correct and was never the bug** — confirmed by
+direct code read, not assumed: `getArcContent` (`lib/supabase.js`)
+has `.in('status', ['confirmed', 'pending'])`, unique in the codebase
+(one definition, one call site — `app/arc/[slug]/page.jsx` — grepped to
+rule out an override or a stray second copy), unmodified since Session
+53. Confirmed further with a real mock that honors the same filter
+PostgREST would: querying it directly against a genuinely-flagged row
+correctly returned `[]`.
+
+**The real cause is exactly what the task's second question named**:
+`getArcContent` reads through `supabaseCached` (Session 50's 5-minute
+cache). `/api/flag` writes through the always-fresh `supabase` client
+and takes effect in the database immediately — but the arc page's own
+*read* can keep serving a response taken *before* that write for up to
+the remaining length of that 5-minute window. The query filtering out
+`'flagged'` rows was, and still is, entirely correct; it just wasn't
+being asked again soon enough. **Reproduced directly, not just
+theorized**: built for production (`next build && next start` — Next's
+Data Cache doesn't behave the same way under `next dev`), loaded the arc
+page once to populate the cache, flagged a real item via the actual
+`/api/flag` route (confirmed the underlying mock data genuinely flipped
+to `'flagged'`), then reloaded the arc page immediately — the flagged
+item was still there. Same exact sequence re-run after the fix below:
+gone on the very next load.
+
+**No `console.log` was added or left in the code.** The task's own
+diagnostic goal — confirming what statuses `getArcContent` actually
+returns — was answered more conclusively by the before/after
+reproduction above than a log line would have given, and this project
+has an explicit standing "zero leftover debug logging" convention
+(PROJECT.md's own file-inventory note, and Sessions 11/25's pattern of
+removing temporary diagnostic logs once a bug was confirmed fixed rather
+than shipping them). Said so plainly rather than silently skipping part
+of the literal ask.
+
+**Fix**: `lib/supabase.js`'s cached-fetch wrapper now tags every request
+with a new exported `ARC_DATA_CACHE_TAG` (`'arc-data'`), alongside the
+existing `revalidate: 300`. `app/api/flag/route.js` and
+`app/api/confirm/route.js` both call `revalidateTag(ARC_DATA_CACHE_TAG)`
+(`next/cache`) immediately after their own write succeeds — this forces
+the *next* read of any tagged query fresh, without touching or
+disabling the 300-second window itself for every read that isn't
+immediately following a flag or confirm. Applied to both routes, not
+just flag: `confirmContentItem` changes `status`/`confirmation_count`
+too, and Session 53's own "Awaiting second confirmation" label
+(`ContentCard.jsx`) depends on a fresh `confirmation_count` for the same
+reason — fixing confirm's staleness alongside flag's is the same root
+cause, not a separate change bundled in.
+
+**A real, accepted trade-off, not swept under the rug**: the tag is
+shared across everything `supabaseCached` touches (`getArcMeta`,
+`getArcBeats`, `getArcContent`, `getArcsBySeries`), not scoped to the
+one arc a given flag/confirm actually affects — a flag on one arc's
+content technically busts every arc's cached data, not just that arc's.
+Scoping it per-arc would need resolving which arc a bare content-item id
+belongs to before revalidating (an extra query neither route currently
+makes) for a benefit that's purely about cache-hit efficiency, not
+correctness — over-invalidating is safe, just occasionally re-fetches a
+few extra arcs' worth of data sooner than strictly necessary. Kept
+simple; a real cost only if this app's real seeded-arc count grows large
+enough for it to matter.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 53 left it. The before/after production-build
+reproduction above is the real verification, not a clean build alone —
+confirmed the exact reported bug on the unmodified Session 53 code
+first, then confirmed the same sequence resolved on the fixed code, both
+against a mock extended this session to properly honor PostgREST's own
+`status=in.(...)` filter syntax (needed for a reproduction that actually
+proves the query's own correctness, not just trusts it).
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–53.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
