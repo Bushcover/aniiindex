@@ -80,6 +80,7 @@ export default function ContentCard({
   compact = false,
   submittedBy,
   status,
+  confirmationCount,
   onFlagged,
   locallyConfirmed = false,
   onConfirmed,
@@ -107,6 +108,23 @@ export default function ContentCard({
   // remounted this exact card (see ArcContent.jsx) — lifting it above
   // that remount boundary is the actual fix.
   const isPending = Boolean(id) && status === "pending" && !locallyConfirmed;
+  // Session 53: `confirmation_count` is now returned by getArcContent
+  // (lib/supabase.js) — used here purely to distinguish "no one has
+  // confirmed this yet" from "one confirmation already landed, it's
+  // waiting on a second" after a page refresh, when `locallyConfirmed`
+  // (ArcContent.jsx's client-side, in-memory optimistic state) has
+  // necessarily been lost. Passed straight through to ConfirmButton,
+  // which is what actually changes its idle-state label/styling — see
+  // that component's own comment for why this still has to stay
+  // clickable rather than becoming an inert label (this app has no
+  // per-visitor confirmation ledger, so there's no way to tell "the
+  // browser that already confirmed, reloading" apart from "a genuinely
+  // different visitor who still needs to provide the second
+  // confirmation" — replacing the control outright for everyone once
+  // count reaches 1 would permanently strand every item at "pending,
+  // one confirmation," since nothing else in this app can ever supply
+  // the second one).
+  const awaitingSecondConfirmation = isPending && confirmationCount === 1;
 
   if (compact) {
     return (
@@ -172,7 +190,9 @@ export default function ContentCard({
         </div>
         {id && (
           <div className="card-actions">
-            {isPending && <ConfirmButton id={id} onConfirmed={onConfirmed} />}
+            {isPending && (
+              <ConfirmButton id={id} onConfirmed={onConfirmed} awaitingSecond={awaitingSecondConfirmation} />
+            )}
             <FlagButton id={id} onFlagged={onFlagged} />
           </div>
         )}

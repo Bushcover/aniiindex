@@ -10,7 +10,20 @@ import { useState } from "react";
 // The card's own <a> wraps this button (the whole card links to
 // sourceUrl), so every handler here must stop the click from bubbling up
 // into that link.
-export default function ConfirmButton({ id, onConfirmed }) {
+//
+// Session 53: `awaitingSecond` (from ContentCard, true when
+// confirmation_count is already 1) only changes the *idle*-state
+// label/styling below, to a muted "Awaiting second confirmation" —
+// giving the person who already confirmed a refresh-persistent signal
+// that their click was recorded, instead of a full, prominent "Confirm
+// placement" CTA that looks like nothing happened. Deliberately still
+// the exact same clickable control underneath, not a static label — see
+// ContentCard.jsx's own comment for why turning this into a dead end
+// once count reaches 1 would break the only path this app has for a
+// second, genuinely different confirmation to ever land. Once clicked,
+// this behaves identically regardless of `awaitingSecond` — the
+// loading/error/done states below don't reference it at all.
+export default function ConfirmButton({ id, onConfirmed, awaitingSecond = false }) {
   const [state, setState] = useState("idle"); // idle | loading | done | error
 
   async function handleClick(e) {
@@ -46,9 +59,23 @@ export default function ConfirmButton({ id, onConfirmed }) {
     return <span className="confirm-btn confirm-btn-done">✓ Confirmed</span>;
   }
 
+  const isAwaitingIdle = awaitingSecond && state === "idle";
+
   return (
-    <button type="button" className="confirm-btn" onClick={handleClick} disabled={state === "loading"}>
-      {state === "loading" ? "Confirming…" : state === "error" ? "Try again" : "✓ Confirm placement"}
+    <button
+      type="button"
+      className={`confirm-btn${isAwaitingIdle ? " confirm-btn-awaiting" : ""}`}
+      onClick={handleClick}
+      disabled={state === "loading"}
+      title={isAwaitingIdle ? "A second confirmation is still needed — click to add yours" : undefined}
+    >
+      {state === "loading"
+        ? "Confirming…"
+        : state === "error"
+        ? "Try again"
+        : isAwaitingIdle
+        ? "Awaiting second confirmation"
+        : "✓ Confirm placement"}
     </button>
   );
 }

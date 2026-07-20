@@ -5743,6 +5743,136 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–51.
 
+## Session 53
+
+Three fixes.
+
+**Fix 1 — the series page's AniList banner "stretching awkwardly on
+mobile."** Investigated before touching CSS: `background-size: cover`
+was already set (not the literal bug), so the real problem was that
+`.hero` had no height cap at all — its rendered height came entirely
+from `.heroInner`'s real content (poster, title, genres, score,
+description), which stacks vertically on mobile (Session 29's own
+`flex-direction: column` at max-width:768px) and can easily run 1000px+
+tall. `background-size: cover` scales against *whatever* height the
+element actually is, so on a real narrow phone the banner was being
+force-scaled to cover an unusually tall, narrow box — a wide banner
+image zoomed in dramatically to fill that shape, reading as "stretched"
+even though `cover` itself was working correctly the whole time.
+
+Simply adding `max-height: 300px` directly to the old unified `.hero`
+(which carried both the background image AND the real content) would
+have created a *worse*, different bug: with `overflow: hidden` it would
+clip real content (description text, genre tags) past 300px; without
+it, `.hero`'s own `border-bottom` would render at the 300px mark and cut
+a visible line straight through whatever content overflowed past it.
+Restructured instead: the banner image moved into its own new element,
+`.heroBanner` (`app/series/[slug]/page.jsx`, `series.module.css`),
+absolutely positioned and independently capped at `max-height: 300px` —
+`.heroInner` (the real content) stays in normal flow at its own natural
+height, completely decoupled from the banner's height. `background-
+position` also changed to `center top` per the request (was
+`center 30%`). Verified directly, not assumed: at a 375px viewport with
+`.heroInner` measured at 1018px tall (real content, genuinely that
+long), `.heroBanner`'s own rendered `getBoundingClientRect().height` was
+exactly 300px — proving the cap holds regardless of how tall the content
+below it gets. (Couldn't screenshot the actual banner photo rendering —
+`s4.anilist.co`, the image CDN, is blocked by this sandbox's own network
+policy, same limitation Session 47 first hit — but the box-model/cover/
+position values were confirmed directly via `getComputedStyle` and
+bounding-rect measurement, which doesn't need the image bytes to load.)
+
+**Fix 2 — extra gap above the series page's "Arcs" section.** Measured
+first (`getBoundingClientRect`), not guessed: the gap from the
+description text's bottom to the "Arcs" title's top was 81px. Traced to
+`.heroInner`'s own 40px bottom padding stacking directly with `.section`
+(Arcs)'s own, separate 40px top padding immediately below it —
+`app/series/[slug]/page.jsx` renders the Arcs section as a plain
+`.section` right after the hero closes, unlike e.g. the arc page's own
+hero, which is followed by the tabs bar's much smaller padding, not
+another `.section`. Neither padding was wrong in isolation (each is
+correctly the page's own established `.section`/`.heroInner` rhythm on
+its own); stacked back-to-back they double up in a way nothing else on
+this page does. Reduced `.heroInner`'s own bottom padding specifically
+(48px 28px 40px -> 48px 28px 24px) — the piece unique to this one
+transition, not shared with the Arcs-to-Characters section-to-section
+gap (confirmed unaffected: still 0px box-to-box, same as before, since
+`.section + .section` wasn't touched). Re-measured after the change:
+65px, down from 81px.
+
+**Fix 3 — the confirm state reverting to a full "Confirm placement"
+button after a refresh, even though a confirmation was genuinely
+recorded.** `getArcContent` (`lib/supabase.js`) now selects
+`confirmation_count` — it was already written by `confirmContentItem`
+since Session 18, but never actually returned to any page. Threaded
+through `buildBeatSections` (`app/arc/[slug]/page.jsx`) as
+`confirmationCount`, then via `BeatSection`'s existing `{...item}`
+spread into `ContentCard` unmodified.
+
+**Investigated the literal instruction before implementing it, since
+part of it would have broken a core feature.** As written, the task
+asked for the muted "Awaiting second confirmation" label to fully
+*replace* the Confirm button whenever `confirmation_count === 1`. This
+app has no per-visitor confirmation ledger (a known, already-documented
+gap — see "Partially working" above) — there is no way to tell "the
+browser that already confirmed, reloading" apart from "a genuinely
+different visitor who still needs to provide the second confirmation."
+Replacing the control with an inert label for *everyone* once count
+reaches 1 would have permanently stranded every item at "pending, one
+confirmation" — nothing else in this app has any way to supply a second,
+real confirmation, so no item could ever reach `confirmed` again through
+the UI once it picked up its first click. This is exactly the class of
+technically-flawed literal instruction Sessions 43/47/48 each caught
+before implementing rather than after — same practice applied here.
+
+**What actually shipped**: `ConfirmButton.jsx` gained an `awaitingSecond`
+prop (from `ContentCard`'s own new `confirmationCount === 1 &&
+isPending` check) that changes only the *idle*-state rendering — a
+muted style (new `.confirm-btn-awaiting`, globals.css, matching
+`.flag-btn`'s existing neutral "quiet control" language rather than the
+prominent green `.confirm-btn` treatment) and the requested "Awaiting
+second confirmation" text, with a `title` tooltip explaining it's still
+clickable. The `onClick`/loading/error/done states are completely
+unchanged and don't reference `awaitingSecond` at all — this is the
+exact same control underneath, just re-labeled while idle, not a
+separate inert element. Verified end-to-end, not just rendered:
+clicking the muted button fired a real `POST /api/confirm`, got a
+genuine `200 {"id":11}` back, and the control correctly disappeared
+afterward (`onConfirmed` -> `ArcContent`'s `locallyConfirmed` ->
+`isPending` false), the same optimistic-hide behavior the normal button
+already had — proving it's a fully functional control, not a label
+wearing a button's clothes.
+
+**A real interaction worth noting, not a bug this session introduced**:
+`getArcContent` reads through `supabaseCached` (Session 50, 5-minute
+cache) — a visitor who confirms an item and refreshes within that same
+cache window can still see a stale `confirmation_count` for up to 5
+minutes, same standing trade-off as every other field that query
+returns. Doesn't undermine the fix (the confirming visitor's own
+immediate view already comes from client-side `locallyConfirmed`, not
+this read), just worth remembering if this specific fix is ever reported
+"not working" on a very recent confirmation.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, same
+route table as Session 52 left it. Real, live Playwright verification
+(temporarily installed, uninstalled after) against `next dev` + a local
+mock PostgREST server extended this session to properly filter
+`content_items` by `id` on both `GET` and `PATCH` (needed for a clean
+confirm-click round trip, not just a single-row fixture) — screenshots
+and direct measurements for all three fixes: the series page at 375px
+and desktop widths (banner cap, no clipped content, no stray border
+line), the `.heroInner`/section gap before and after, and both
+confirmation-count states side by side on a real arc page render (a
+fresh `confirmation_count: 0` item showing the normal green button, a
+`confirmation_count: 1` item showing the new muted label) plus the click
+round-trip described above. `git diff --stat`: 7 files, all directly
+attributable to one of the three fixes.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–52.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

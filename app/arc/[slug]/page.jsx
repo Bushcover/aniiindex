@@ -250,6 +250,11 @@ function buildBeatSections(beats, content) {
         sourceUrl: item.source_url,
         submittedBy: item.submitted_by,
         status: item.status,
+        // Session 53: threaded through to ContentCard (via BeatSection's
+        // `{...item}` spread, unchanged) so it can tell "no one has
+        // confirmed this yet" apart from "one person already has" after a
+        // page refresh — see ContentCard.jsx's own comment.
+        confirmationCount: item.confirmation_count,
       })),
     };
   });

@@ -286,6 +286,15 @@ nav {
 .confirm-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid var(--green); background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 600; font-family: var(--body); cursor: pointer; }
 .confirm-btn:disabled { cursor: default; opacity: 0.7; }
 .confirm-btn-done { border: 1px solid transparent; background: transparent; cursor: default; }
+/* Session 53: idle-state-only variant for a card that already has one
+   confirmation (ConfirmButton's own `awaitingSecond` prop) — same size/
+   layout as .confirm-btn, deliberately muted (matches .flag-btn's own
+   neutral "quiet control" language, --t3/--border, rather than the
+   prominent --green treatment) since the point is signaling "already
+   recorded, no action needed from the person who clicked it" without
+   looking like a dead control to anyone else who still could confirm it. */
+.confirm-btn-awaiting { border-color: var(--border); background: transparent; color: var(--t3); }
+.confirm-btn-awaiting:hover { border-color: var(--border-mid); color: var(--t2); }
 .flag-btn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 8px; border-radius: var(--r-sm); border: 1px solid var(--border); background: transparent; color: var(--t3); font-size: 11px; font-family: var(--body); cursor: pointer; }
 .flag-btn:hover { border-color: var(--red); color: var(--red); }
 .flag-btn:disabled { cursor: default; opacity: 0.7; }

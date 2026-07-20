@@ -242,10 +242,18 @@ export default async function SeriesPage({ params }) {
 
       {series && (
         <>
-          <div
-            className={styles.hero}
-            style={series.bannerImage ? { backgroundImage: `url(${series.bannerImage})` } : undefined}
-          >
+          <div className={styles.hero}>
+            {/* Session 53: banner image split into its own layer, capped
+                at max-height 300px (series.module.css's own .heroBanner
+                comment has the full "why" — in short, .hero itself can no
+                longer own both the background image and the content, since
+                the real content (poster/title/description) can genuinely
+                need more than 300px on mobile and shouldn't be clipped or
+                have a stray border line cut across it). */}
+            <div
+              className={styles.heroBanner}
+              style={series.bannerImage ? { backgroundImage: `url(${series.bannerImage})` } : undefined}
+            ></div>
             <div className={styles.heroOverlay}></div>
             <div className={styles.heroInner}>
               {series.coverImage?.large && (

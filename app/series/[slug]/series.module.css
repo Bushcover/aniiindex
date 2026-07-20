@@ -1,22 +1,75 @@
 /* ── Series hero ── */
+/* Session 53: no longer carries the banner background-image itself (see
+   .heroBanner below) — the real content in .heroInner (poster, title,
+   genres, score, description) can genuinely be taller than a sensible
+   banner-image cap on mobile once it stacks (Session 29's own
+   `.heroInner { flex-direction: column }` at max-width:768px), and a
+   `max-height` directly on this element would either clip that content
+   (with overflow: hidden) or leave this element's own `border-bottom`
+   rendering mid-content once it overflows (without it) — neither is
+   correct. `.hero` now just establishes the positioning context and
+   sits at its natural (unclamped) content height, same as before this
+   session for that part. */
 .hero {
   position: relative;
-  overflow: hidden;
   border-bottom: 1px solid var(--border);
   background-color: var(--surface);
+}
+/* Session 53 (Fix 1) — the actual banner image, split out specifically so
+   it can be height-capped independently of the real content below it.
+   `background-size: cover` was already correct before this session (not
+   a stretch/distortion bug on its own); `background-position` changed
+   from `center 30%` to `center top` per this fix's own request.
+   `max-height: 300px` (this fix's other explicit ask) is what actually
+   stops the image reading as "stretched"/over-zoomed on mobile — with
+   the old unified .hero approach, `cover` sized the image against
+   whatever height the stacked mobile content happened to produce (easily
+   600px+), forcing a wide banner image to scale up dramatically to fill
+   an unusually tall, narrow box; capped at a fixed 300px here, `cover`
+   always scales against the same reasonable aspect ratio regardless of
+   how tall the real content below ends up being. */
+.heroBanner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  max-height: 300px;
+  background-color: var(--surface);
   background-size: cover;
-  background-position: center 30%;
+  background-position: center top;
 }
 .heroOverlay {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Session 53: matches .heroBanner's own fixed height instead of the
+     old `inset: 0` (which stretched to cover .hero's full, previously-
+     unified height) — the gradient's job is fading the banner image
+     into the page background, so it should only span the area the
+     banner image itself actually occupies. */
+  height: 300px;
   background: linear-gradient(to bottom, rgba(12, 12, 18, 0.55) 0%, var(--bg) 96%);
 }
+/* Session 53 (Fix 2): bottom padding 40px -> 24px. Measured directly
+   (not guessed): the gap from the description text's bottom edge to the
+   "Arcs" section title's top edge was 81px — this element's own 40px
+   bottom padding stacking with .section's own, separate 40px top
+   padding immediately below it (app/series/[slug]/page.jsx renders the
+   Arcs section as a plain `.section` right after this one closes,
+   unlike e.g. the arc page's own hero, which is followed by the tabs
+   bar's much smaller padding, not another `.section`). Neither padding
+   value was wrong on its own; stacked back-to-back they double up in a
+   way nothing else on this page does. 24px keeps real breathing room
+   between the description and this element's own border-bottom, while
+   the combined 24+40=64px total gap reads much closer to this page's
+   own established section-to-section rhythm than the original 80px+. */
 .heroInner {
   position: relative;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 48px 28px 40px;
+  padding: 48px 28px 24px;
   display: flex;
   align-items: flex-end;
   gap: 24px;
