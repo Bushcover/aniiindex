@@ -242,25 +242,24 @@ export default async function SeriesPage({ params }) {
 
       {series && (
         <>
-          <div className={styles.hero}>
-            {/* Session 53: banner image split into its own layer, capped
-                at max-height 300px (series.module.css's own .heroBanner
-                comment has the full "why" — in short, .hero itself can no
-                longer own both the background image and the content, since
-                the real content (poster/title/description) can genuinely
-                need more than 300px on mobile and shouldn't be clipped or
-                have a stray border line cut across it). */}
-            <div
-              className={styles.heroBanner}
-              style={series.bannerImage ? { backgroundImage: `url(${series.bannerImage})` } : undefined}
-            ></div>
-            <div className={styles.heroOverlay}></div>
+          {/* Session 58: redesigned as two independent sections instead of
+              overlaying the poster/title/description on top of the banner
+              image — see series.module.css's own .banner/.heroContent
+              comments for why. Section 1 is the banner alone, with
+              nothing rendered on top of it; omitted entirely when the
+              series has no bannerImage (AniList doesn't guarantee one),
+              rather than rendering an empty 250px strip of just
+              `var(--surface)`. */}
+          {series.bannerImage && (
+            <div className={styles.banner} style={{ backgroundImage: `url(${series.bannerImage})` }}></div>
+          )}
+
+          <div className={styles.heroContent}>
             <div className={styles.heroInner}>
               {series.coverImage?.large && (
                 <img className={styles.poster} src={series.coverImage.large} alt={`${seriesName} poster`} />
               )}
               <div className={styles.info}>
-                <div className={styles.eyebrow}>Series</div>
                 <div className={styles.title}>{seriesName}</div>
                 <div className={styles.metaLine}>
                   {formatLabel(series.format) && <span>{formatLabel(series.format)}</span>}
@@ -298,7 +297,11 @@ export default async function SeriesPage({ params }) {
                     <div className={styles.scoreLabel}>Score</div>
                   </div>
                 </div>
-                <p className={styles.description}>{series.description}</p>
+                {/* Session 58: capped at 250 characters — the same `truncate`
+                    helper generateMetadata above already uses at its own,
+                    different ceilings (lib/metadata.js), reused here rather
+                    than duplicated for a third length. */}
+                <p className={styles.description}>{truncate(series.description, 250)}</p>
               </div>
             </div>
           </div>

@@ -6303,6 +6303,90 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–56.
 
+## Session 58
+
+Full redesign of the series page hero, requested directly rather than
+another incremental fix — Session 57's `align-items: flex-start` fix
+solved one specific overlap case, but the underlying design (poster/
+title/description layered directly on top of the banner image) was
+still fragile by construction. Replaced with two independent,
+non-overlapping sections per the task's own exact spec.
+
+**Section 1 — banner.** `app/series/[slug]/page.jsx` now renders a
+plain `<div className={styles.banner}>` (full width, 250px tall,
+`background-size: cover`, `background-position: center`) with nothing
+rendered on top of it — no overlay gradient, no absolute positioning,
+just a normal block-level element in document flow before the content
+section. Omitted entirely (`{series.bannerImage && (...)}`) when the
+series has none, rather than rendering an empty `var(--surface)` strip
+— verified directly against a real AniList id with no `bannerImage`
+(id 242, "Gokusen" — found by querying AniList's own API for anime
+without one, since every one of the ~130 most popular titles checked
+first all had one) that the banner element doesn't render at all and
+the content section starts immediately under the nav with zero gap.
+
+**Section 2 — content.** A new `.heroContent` block below the banner
+(or immediately below the nav, when there's no banner), explicitly
+light-themed against this otherwise all-dark site per direct request —
+`background: #F5F5F7` with one-off dark text colors local to this file
+(`.title`/`.scoreVal` `#15151D`, `.metaLine`/`.description` `#45454F`,
+etc.), not this project's existing `--t1`/`--t2`/`--t3` tokens, which
+are light text colors meant for the dark page background and would be
+close to invisible here. Inside it, `.heroInner` lays the poster (left,
+160px, rounded via the existing `--r` token) and the info column
+(right: title in Bebas Neue, meta line, genre tags, score, description)
+out as a plain `display: flex` row — no `position: absolute` anywhere
+in either section now, which is what actually removes the whole class
+of overlap bug by construction rather than patching the latest specific
+trigger for it (unusual image dimensions, a long description, etc.).
+The old "Series" eyebrow label is dropped — not part of the task's
+explicit content list for this column, and the redesign reads cleaner
+without it.
+
+**Description truncated to 250 characters.** Reused `lib/metadata.js`'s
+existing `truncate` helper (already imported in this file for
+`generateMetadata`'s own, different ceilings) rather than adding a
+fourth length constant or hand-rolling the same slice-and-ellipsis
+logic a third time. Verified directly against One Piece's real,
+unusually long AniList description: rendered text measured at exactly
+249 characters, ending in `…`.
+
+**Mobile.** `max-width: 768px` stacks `.heroInner` into a column with
+`align-items: center` (centers the fixed-width poster) and `.info {
+align-self: stretch }` (keeps the info column at full width with its
+own text left-aligned, rather than also being centered as a shrunk
+block — centering the box but not literally centering every line of
+body text reads better and is still "the poster centered above the
+text" as asked). Verified via screenshot and a direct `scrollWidth`
+vs. `clientWidth` check at 390px: the poster sits centered above the
+left-aligned title/meta/genres/description, zero horizontal overflow.
+
+**`app/series/[slug]/loading.jsx`** updated to match — a banner-shaped
+skeleton block (always shown during loading, since whether the real
+series has one isn't known yet) followed by `.heroContent`/`.heroInner`
+skeletons in place of the old single `.hero` block, which no longer
+exists as a class. Left unfixed, the loading skeleton would have
+silently stopped matching any real page layout — a visible, flickering
+mismatch the moment real content replaced it, not merely stale code.
+
+**Verification**: live-rendered via Playwright against real AniList
+data (not just a static code read) for both the "has a banner" case
+(id 21, One Piece — chosen deliberately since Session 57 already
+established it has the longest real description on this site, the
+hardest case for this new layout to get right) and the "no banner"
+case (id 242) before considering this done. `rm -rf .next && npm run
+build` compiles cleanly, no new errors or warnings, same route table
+as Session 57 left it (only the series page's own bundle size changed,
+-0.03kB). `git diff --stat`: 3 files changed (`app/series/[slug]/
+page.jsx`, `app/series/[slug]/series.module.css`, `app/series/[slug]/
+loading.jsx`), all directly attributable to this redesign. Dev server
+and Playwright test scripts cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–57.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

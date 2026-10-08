@@ -1,94 +1,43 @@
-/* ── Series hero ── */
-/* Session 53: no longer carries the banner background-image itself (see
-   .heroBanner below) — the real content in .heroInner (poster, title,
-   genres, score, description) can genuinely be taller than a sensible
-   banner-image cap on mobile once it stacks (Session 29's own
-   `.heroInner { flex-direction: column }` at max-width:768px), and a
-   `max-height` directly on this element would either clip that content
-   (with overflow: hidden) or leave this element's own `border-bottom`
-   rendering mid-content once it overflows (without it) — neither is
-   correct. `.hero` now just establishes the positioning context and
-   sits at its natural (unclamped) content height, same as before this
-   session for that part. */
-.hero {
-  position: relative;
-  border-bottom: 1px solid var(--border);
-  background-color: var(--surface);
-}
-/* Session 53 (Fix 1) — the actual banner image, split out specifically so
-   it can be height-capped independently of the real content below it.
-   `background-size: cover` was already correct before this session (not
-   a stretch/distortion bug on its own); `background-position` changed
-   from `center 30%` to `center top` per this fix's own request.
-   `max-height: 300px` (this fix's other explicit ask) is what actually
-   stops the image reading as "stretched"/over-zoomed on mobile — with
-   the old unified .hero approach, `cover` sized the image against
-   whatever height the stacked mobile content happened to produce (easily
-   600px+), forcing a wide banner image to scale up dramatically to fill
-   an unusually tall, narrow box; capped at a fixed 300px here, `cover`
-   always scales against the same reasonable aspect ratio regardless of
-   how tall the real content below ends up being. */
-.heroBanner {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 300px;
-  max-height: 300px;
+/* ── Series hero (Session 58 redesign) ── */
+/* Two independent, non-overlapping sections, replacing the old single
+   `.hero` that layered the poster/title/description directly on top of
+   the banner image (`.heroBanner` + `.heroOverlay` + an absolutely-
+   positioned `.heroInner`). That approach kept producing real layout
+   bugs as a direct result of the overlay itself — Session 57 fixed one
+   specific case (`align-items: flex-end` dragging the poster down into
+   a long description), but the underlying "content floats on top of a
+   background image" structure was always going to be fragile against
+   unusual image dimensions or description lengths. Splitting the banner
+   out into its own plain block-level section (`.banner`, no overlay, no
+   absolute positioning, nothing rendered on top of it) and the real
+   content into a separate section below it (`.heroContent`) removes the
+   entire class of bug by construction — nothing can overlap when
+   nothing is layered. */
+.banner {
+  width: 100%;
+  height: 250px;
   background-color: var(--surface);
   background-size: cover;
-  background-position: center top;
+  background-position: center;
 }
-.heroOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  /* Session 53: matches .heroBanner's own fixed height instead of the
-     old `inset: 0` (which stretched to cover .hero's full, previously-
-     unified height) — the gradient's job is fading the banner image
-     into the page background, so it should only span the area the
-     banner image itself actually occupies. */
-  height: 300px;
-  background: linear-gradient(to bottom, rgba(12, 12, 18, 0.55) 0%, var(--bg) 96%);
+/* A light section against this site's otherwise all-dark design,
+   deliberately — direct request, not a drift from the design system.
+   Every color below is a one-off for this section rather than reusing
+   --t1/--t2/--t3 (those are light TEXT colors meant for the dark page
+   background and would be close to invisible here), kept local to this
+   file rather than promoted to globals.css custom properties since
+   nothing else on the site currently uses a light surface. */
+.heroContent {
+  background: #F5F5F7;
+  border-bottom: 1px solid var(--border);
 }
-/* Session 53 (Fix 2): bottom padding 40px -> 24px. Measured directly
-   (not guessed): the gap from the description text's bottom edge to the
-   "Arcs" section title's top edge was 81px — this element's own 40px
-   bottom padding stacking with .section's own, separate 40px top
-   padding immediately below it (app/series/[slug]/page.jsx renders the
-   Arcs section as a plain `.section` right after this one closes,
-   unlike e.g. the arc page's own hero, which is followed by the tabs
-   bar's much smaller padding, not another `.section`). Neither padding
-   value was wrong on its own; stacked back-to-back they double up in a
-   way nothing else on this page does. 24px keeps real breathing room
-   between the description and this element's own border-bottom, while
-   the combined 24+40=64px total gap reads much closer to this page's
-   own established section-to-section rhythm than the original 80px+. */
 .heroInner {
-  position: relative;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 48px 28px 24px;
+  padding: 32px 28px;
   display: flex;
-  /* Session 57 (Bug 2 fix): was `flex-end` (bottom-aligned), which is only
-     correct when the poster and the info column happen to end up close
-     in height. A real series with an unusually long AniList description
-     (One Piece's, confirmed directly against the live API — 1200+
-     characters vs. a typical few hundred) makes `.info` far taller than
-     `.poster`'s fixed 240px, and `align-items: flex-end` then drags the
-     much-shorter poster all the way down to align with the *bottom* of
-     that tall column — landing it next to the middle of the description
-     paragraph instead of next to the title, reading as the two
-     overlapping even though their horizontal bounding boxes technically
-     don't intersect. `flex-start` keeps the poster's top edge level with
-     the title's top edge regardless of how long the description grows,
-     which is what every other series on this site (shorter description,
-     where flex-end and flex-start looked identical) was already
-     expecting to see. */
   align-items: flex-start;
   gap: 24px;
-  flex-wrap: wrap;
 }
 .poster {
   width: 160px;
@@ -96,32 +45,23 @@
   object-fit: cover;
   border-radius: var(--r);
   flex-shrink: 0;
-  background: var(--surface-3);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  background: #E4E4E9;
+  box-shadow: 0 10px 28px rgba(20, 20, 30, 0.18);
 }
 .info {
   flex: 1;
   min-width: 0;
 }
-.eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
-/* Session 52: explicitly named — "the series name heading on series
-   pages". font-weight 800 -> 400, same reasoning as every other Bebas
-   Neue target this session (see globals.css's own .hero h1 comment).
-   Size/letter-spacing/line-height left exactly as they were. */
+/* Session 52's original Bebas Neue choice (font-weight 400, same
+   size/letter-spacing/line-height) carried over unchanged — only the
+   color changed, for the new light background. */
 .title {
   font-family: var(--display-impact);
   font-weight: 400;
   font-size: clamp(24px, 4vw, 38px);
   letter-spacing: -1px;
   line-height: 1.1;
-  color: var(--t1);
+  color: #15151D;
   margin-bottom: 10px;
 }
 .metaLine {
@@ -130,11 +70,11 @@
   gap: 10px;
   flex-wrap: wrap;
   font-size: 13px;
-  color: var(--t2);
+  color: #52525C;
   margin-bottom: 12px;
 }
 .dot {
-  color: var(--t3);
+  color: #A6A6AF;
 }
 .genres {
   display: flex;
@@ -144,11 +84,11 @@
 }
 .genreTag {
   padding: 3px 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: #EAEAEF;
+  border: 1px solid #DADAE1;
   border-radius: 20px;
   font-size: 11px;
-  color: var(--t2);
+  color: #45454F;
 }
 .scoreRow {
   display: flex;
@@ -156,27 +96,22 @@
   gap: 20px;
   margin-bottom: 14px;
 }
-/* Session 52: not explicitly named by task, but the same "big number
-   meant to make an impact" concept as .hstatVal (app/page.module.css,
-   explicitly named) and the arc page's .stat-val (globals.css) — a
-   single prominent score percentage, same reasonable-extension judgment
-   call as .stat-val. */
 .scoreVal {
   font-family: var(--display-impact);
   font-size: 20px;
   font-weight: 400;
-  color: var(--t1);
+  color: #15151D;
 }
 .scoreLabel {
   font-size: 10px;
-  color: var(--t3);
+  color: #8E8E97;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 2px;
 }
 .description {
   font-size: 13px;
-  color: var(--t2);
+  color: #45454F;
   max-width: 640px;
   line-height: 1.7;
 }
@@ -226,13 +161,16 @@
 /* ══ Responsive (Session 29) — additive only, see globals.css ══ */
 
 @media (max-width: 768px) {
-  /* Confirmed via direct measurement, not just visual inspection: the
-     fixed 160px poster + flex:1/min-width:0 info block don't fit side
-     by side at mobile widths — info squeezes to ~150px, its text wraps
-     into an abnormally tall column (over 1000px), and align-items:
-     flex-end then pushes the poster hundreds of pixels down to align
-     with that tall block's bottom edge, landing it mid-page overlapping
-     the description text instead of at the top. Stack vertically
-     instead — poster on top at full size, info below at full width. */
-  .heroInner { flex-direction: column; align-items: flex-start; }
+  /* The fixed 160px poster + flex:1/min-width:0 info block don't fit
+     side by side at mobile widths — info squeezes too narrow and its
+     text wraps into an abnormally tall column. Stack vertically instead
+     — poster centered on top, info at full width below it (direct
+     request: "the poster centered above the text"). `.info` gets
+     `align-self: stretch` so it still takes the full row width and
+     keeps its own text left-aligned (readable body copy), rather than
+     `align-items: center` centering both children, which would also
+     shrink `.info` to its content width and center *it* as a box,
+     leaving its left-aligned text looking stranded off-center. */
+  .heroInner { flex-direction: column; align-items: center; gap: 20px; }
+  .info { align-self: stretch; }
 }

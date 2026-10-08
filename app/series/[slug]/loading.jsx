@@ -11,16 +11,26 @@ import styles from "./series.module.css";
 // (this page's hero — poster + info block — has no equivalent shape on
 // the arc page), filled with globals.css's shared `.skel*` shimmer
 // blocks instead of real content.
+//
+// Session 58: updated to match the redesigned two-section hero
+// (series.module.css's own header comment has the full "why"). Whether
+// the real series has a banner image isn't known yet at this point, so
+// this always shows a banner-shaped skeleton — it either matches the
+// real page a moment later, or collapses away along with it if this
+// series turns out to have none, same either way from the viewer's
+// perspective since this is only ever on screen for a brief loading
+// window.
 export default function SeriesLoading() {
   return (
     <>
       <SearchNav query="" />
 
-      <div className={styles.hero}>
+      <div className="skel" style={{ width: "100%", height: 250, borderRadius: 0 }} />
+
+      <div className={styles.heroContent}>
         <div className={styles.heroInner}>
           <div className="skel skel-poster" />
           <div className={styles.info}>
-            <div className="skel skel-line" style={{ width: 70, height: 11, marginBottom: 8 }} />
             <div className="skel skel-title" style={{ width: "45%" }} />
             <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
               <div className="skel skel-line" style={{ width: 60, height: 13, marginBottom: 0 }} />
