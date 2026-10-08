@@ -6434,6 +6434,71 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–58.
 
+## Session 60
+
+Reported: the series page redesign (Session 58) reintroduced mobile
+horizontal overflow — a visible scrollbar, the page draggable sideways
+— previously fixed site-wide by the Sessions 29-36 "mobile overflow
+saga." Investigated before touching any code, per this project's own
+standing convention of reproducing rather than assuming.
+
+**Could not reproduce** across 13 real-data combinations before making
+any change: two series with real AniList data at opposite extremes of
+what the redesigned hero renders (One Piece — the longest real
+description on this site, with a banner image; Gokusen — no banner at
+all) at 320/390px, signed in and signed out (the signed-in nav state is
+what actually caused the *original* Session 34 overflow bug, so always
+checked, not assumed irrelevant here); plus a third series
+(Re:Zero, AniList id 21355) chosen specifically for having 7 genres
+including "Psychological," the longest unbreakable single genre word
+found checking AniList's top 50 titles by genre count — a direct stress
+test of the task's own "genre tags row" concern. `documentElement.
+scrollWidth` matched `clientWidth` exactly (0px overflow) in every one
+of the 13 cases, and a full-DOM bounding-rect sweep for any element
+crossing the viewport edge (the same technique Session 56 used to
+confirm a real overflow bug previously) found nothing. Also confirmed
+directly in `series.module.css`: nothing sets a fixed px width wider
+than `.poster`'s 160px, well under even a 320px viewport, and the
+site-wide `*, *::before, *::after { max-width: 100% }` reset
+(globals.css, Session 32) already caps every element to its container.
+
+**Applied the requested hardening anyway.** Not reproducing a bug isn't
+the same as being certain it can't happen on a real device this
+sandbox's Chromium doesn't replicate — this project's own history
+(Session 34) has exactly one precedent for that gap, so the requested
+defensive `overflow-x: hidden` was added rather than skipped on the
+strength of "I couldn't reproduce it." Added to `.banner` and
+`.heroContent` specifically — the two top-level sections the
+redesigned hero actually consists of, and *siblings* of `<SearchNav
+/>`, not ancestors of it. That distinction is the one that matters:
+globals.css's own `body` rule documents, from a real previously-
+confirmed regression, that `overflow-x: hidden` on both `html` and
+`body` together breaks `nav`'s `position: sticky` outright — these two
+series-page sections are plain static blocks below the nav in normal
+document flow, so containing overflow at their boundary carries none of
+that risk, confirmed directly rather than assumed (see Verification).
+Also added `max-width: 100%` + `word-break: break-word` to `.genreTag`
+and `max-width: 100%` to `.genres` itself, directly answering the
+task's explicit "genre tags row" checklist item, even though no genre
+list tested actually triggered an overflow.
+
+**Verification**: re-ran the same 13-combination overflow check after
+the change — still 0px overflow everywhere, confirming no regression
+from the fix itself. Separately confirmed `nav`'s sticky behavior is
+intact: `position: sticky`, `top: 0` both before and after scrolling
+1000px down the page — the exact check that would have caught the
+Session 32-documented regression had this session's fix accidentally
+reintroduced it. `rm -rf .next && npm run build` compiles cleanly, no
+new errors or warnings, same route table as Session 59 left it. `git
+diff --stat`: 1 file changed (`app/series/[slug]/series.module.css`).
+Dev server and Playwright test scripts cleaned up; `playwright-core`
+uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–59.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

@@ -13,12 +13,38 @@
    content into a separate section below it (`.heroContent`) removes the
    entire class of bug by construction — nothing can overlap when
    nothing is layered. */
+/* Session 60: `overflow-x: hidden` added to both `.banner` and
+   `.heroContent` — the two top-level sections the redesigned hero
+   consists of (siblings of `<SearchNav />`, not ancestors of it), so
+   this contains any horizontal overflow from their own children (the
+   poster/text flex row, the genre tag row) at the nearest sensible
+   boundary without touching `html` or `body`. That distinction matters:
+   globals.css's own body rule documents a real, previously-confirmed
+   regression where `overflow-x: hidden` on both `html` and `body`
+   together breaks `nav`'s `position: sticky` outright — these two
+   elements are plain static blocks below the nav, not ancestors of it,
+   so adding it here carries none of that risk.
+   Reproduction attempted first, not assumed: live-tested against real
+   AniList data across 13 combinations (a long-description series, a
+   no-banner series, a 7-genre series including "Psychological" — the
+   longest unbreakable single genre word on AniList's own top-50-by-
+   genre-count list — at 320/360/375/390/414px, signed in and signed
+   out) and found zero reproducible overflow in any of them; nothing in
+   this file sets a fixed px width wider than 320px either (`.poster`'s
+   160px is the largest, well under the narrowest tested viewport).
+   Applied anyway since it's a safe, low-risk hardening that matches
+   this site's own established defensive pattern for this exact class
+   of bug (globals.css's `* { max-width: 100% }` reset), in case this is
+   a real-device-only case this sandbox's Chromium doesn't reproduce —
+   this project's own history (Session 34) has at least one precedent
+   for exactly that gap. */
 .banner {
   width: 100%;
   height: 250px;
   background-color: var(--surface);
   background-size: cover;
   background-position: center;
+  overflow-x: hidden;
 }
 /* Session 59: reverted back to the site's dark theme — the light
    section Session 58 introduced here (direct request at the time) read
@@ -28,6 +54,7 @@
 .heroContent {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  overflow-x: hidden;
 }
 .heroInner {
   max-width: 1100px;
@@ -78,6 +105,7 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 14px;
+  max-width: 100%;
 }
 .genreTag {
   padding: 3px 10px;
@@ -86,6 +114,8 @@
   border-radius: 20px;
   font-size: 11px;
   color: var(--t2);
+  max-width: 100%;
+  word-break: break-word;
 }
 .scoreRow {
   display: flex;
