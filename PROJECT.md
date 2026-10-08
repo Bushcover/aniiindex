@@ -6387,6 +6387,53 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–57.
 
+## Session 59
+
+Reverted the series page's `.heroContent` section (the light-themed
+content panel Session 58's redesign deliberately introduced, at that
+session's own direct request) back to this site's dark theme — flagged
+directly, with a screenshot, as reading like a bright interruption
+against the rest of the page rather than a natural continuation of it.
+
+Every one-off hex/rgba color `series.module.css` added for that light
+section replaced with the exact token it would have used had this
+section stayed dark (i.e., what it used before Session 58, not a new
+guess): `.heroContent`'s `background: #F5F5F7` → `var(--surface)`;
+`.title`/`.scoreVal` (`#15151D`) → `var(--t1)`; `.metaLine`/
+`.description` (`#52525C`/`#45454F`) → `var(--t2)`; `.dot`/
+`.scoreLabel` (`#A6A6AF`/`#8E8E97`) → `var(--t3)`; `.genreTag`'s
+`background`/`border`/`color` (`#EAEAEF`/`#DADAE1`/`#45454F`) →
+`var(--surface-2)`/`var(--border)`/`var(--t2)`; `.poster`'s placeholder
+`background`/`box-shadow` (`#E4E4E9` / a lighter rgba shadow) →
+`var(--surface-3)` / the original heavier `rgba(0,0,0,0.45)` shadow,
+which reads correctly again now that it's sitting on a dark surface.
+Confirmed with a direct `grep` for any remaining hex/rgba color in the
+file — none — rather than trusting a visual-only pass to have caught
+every one.
+
+The banner section, the two-column flex layout, the mobile stacking
+behavior, and the 250-character description truncation — everything
+Session 58 actually restructured, as opposed to just themed — are
+untouched; this was purely a color revert, not a second layout pass.
+
+**Verification**: live-rendered via Playwright against real AniList
+data (One Piece, same series as the reported screenshot) and read
+every changed element's `getComputedStyle(...).color`/
+`backgroundColor` directly — confirmed each one resolves to the exact
+rgb() the intended CSS variable computes to (`--surface` → `rgb(20, 20,
+28)`, `--t1` → `rgb(238, 238, 245)`, `--t2` → `rgb(138, 138, 168)`,
+`--t3` → `rgb(80, 80, 94)`), not just a screenshot comparison by eye.
+`rm -rf .next && npm run build` compiles cleanly, no new errors or
+warnings, same route table as Session 58 left it. `git diff --stat`: 1
+file changed (`app/series/[slug]/series.module.css`) — the only file
+this session's fix touched. Dev server and Playwright test script
+cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–58.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

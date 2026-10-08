@@ -20,15 +20,13 @@
   background-size: cover;
   background-position: center;
 }
-/* A light section against this site's otherwise all-dark design,
-   deliberately — direct request, not a drift from the design system.
-   Every color below is a one-off for this section rather than reusing
-   --t1/--t2/--t3 (those are light TEXT colors meant for the dark page
-   background and would be close to invisible here), kept local to this
-   file rather than promoted to globals.css custom properties since
-   nothing else on the site currently uses a light surface. */
+/* Session 59: reverted back to the site's dark theme — the light
+   section Session 58 introduced here (direct request at the time) read
+   as a bright interruption against the rest of the page. Back to
+   --surface/--t1/--t2/--t3, same tokens this section (and every other
+   dark section on this page) used before that redesign. */
 .heroContent {
-  background: #F5F5F7;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 .heroInner {
@@ -45,23 +43,22 @@
   object-fit: cover;
   border-radius: var(--r);
   flex-shrink: 0;
-  background: #E4E4E9;
-  box-shadow: 0 10px 28px rgba(20, 20, 30, 0.18);
+  background: var(--surface-3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 .info {
   flex: 1;
   min-width: 0;
 }
 /* Session 52's original Bebas Neue choice (font-weight 400, same
-   size/letter-spacing/line-height) carried over unchanged — only the
-   color changed, for the new light background. */
+   size/letter-spacing/line-height) — unchanged throughout. */
 .title {
   font-family: var(--display-impact);
   font-weight: 400;
   font-size: clamp(24px, 4vw, 38px);
   letter-spacing: -1px;
   line-height: 1.1;
-  color: #15151D;
+  color: var(--t1);
   margin-bottom: 10px;
 }
 .metaLine {
@@ -70,11 +67,11 @@
   gap: 10px;
   flex-wrap: wrap;
   font-size: 13px;
-  color: #52525C;
+  color: var(--t2);
   margin-bottom: 12px;
 }
 .dot {
-  color: #A6A6AF;
+  color: var(--t3);
 }
 .genres {
   display: flex;
@@ -84,11 +81,11 @@
 }
 .genreTag {
   padding: 3px 10px;
-  background: #EAEAEF;
-  border: 1px solid #DADAE1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 20px;
   font-size: 11px;
-  color: #45454F;
+  color: var(--t2);
 }
 .scoreRow {
   display: flex;
@@ -100,18 +97,18 @@
   font-family: var(--display-impact);
   font-size: 20px;
   font-weight: 400;
-  color: #15151D;
+  color: var(--t1);
 }
 .scoreLabel {
   font-size: 10px;
-  color: #8E8E97;
+  color: var(--t3);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 2px;
 }
 .description {
   font-size: 13px;
-  color: #45454F;
+  color: var(--t2);
   max-width: 640px;
   line-height: 1.7;
 }
