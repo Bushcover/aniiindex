@@ -201,3 +201,19 @@
   .heroInner { flex-direction: column; align-items: center; gap: 20px; }
   .info { align-self: stretch; }
 }
+
+@media (max-width: 640px) {
+  /* Direct request: the fixed 160px poster read as unpolished at
+     mobile widths — centered with large empty gaps on either side of
+     it. Widened to fill up to 280px (well over the "at least 240px"
+     floor asked for), still `width: 100%` so it never exceeds its
+     actual available space and naturally fills the full inner width at
+     the narrowest viewports (e.g. 320px, where 100% already clamps
+     below 280px) rather than just picking one fixed value. The content
+     order itself — banner, poster, title, meta, genres, score,
+     description — was already exactly this top-to-bottom flow; `.info`
+     (title/meta/genres/score/description) was already the very next
+     sibling after `.poster` in the DOM and this stacked layout, nothing
+     needed to move. */
+  .poster { width: 100%; max-width: 280px; }
+}

@@ -6499,6 +6499,84 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–59.
 
+## Session 61
+
+Two fixes: the home page's quick-search chips, and the series page's
+mobile poster sizing.
+
+**Fix 1 — quick-search chips, with a deviation flagged before
+implementing, not silently.** The task's own exact replacement list
+("Marineford War", "Enies Lobby", "Shibuya Incident", "Chimera Ant",
+"Mugen Train") was checked against the real query `searchSeries()`
+actually sends (`lib/anilist.js`'s `SEARCH_SERIES_QUERY` — AniList
+title search, `type: ANIME`, `popularity_greater: 1000`) before
+touching any code, not assumed correct because the arc names sounded
+plausible. Three of the five — "Marineford War," "Enies Lobby," and
+"Chimera Ant" — return **zero** AniList matches with that exact query
+(confirmed directly, not guessed), the same complete-failure mode the
+task itself was trying to fix (and, incidentally, also true of the
+*current* "Wano Arc"/"Chimera Ant Arc" chips being replaced — AniList's
+search indexes real anime titles, not arc-only phrases, so most
+arc-name text simply matches nothing). Implementing the request
+literally would have replaced one set of broken chips with a set that's
+still 3/5 broken, directly contradicting its own stated goal ("these
+are all seeded arcs that will return real results").
+
+Found working substitutes instead, each individually verified against
+the same exact query to resolve to the *correct* show (not just *some*
+result — "The Rumbling," tried as an Attack on Titan candidate, matched
+an unrelated, wrong anime entirely and was discarded for that reason):
+"Reze Arc" → `Chainsaw Man: Reze-hen` (id 171627), "Greed Island" →
+`HUNTER×HUNTER: Greed Island` (id 138). "Shibuya Incident" and "Mugen
+Train" were kept exactly as requested (both verified). "Attack on
+Titan" (the plain series title, since no tested arc-style AOT phrasing
+matched correctly) fills the fifth slot. Final list in
+`components/HeroSearch.jsx`'s `QUICK_SEARCHES`: "Shibuya Incident",
+"Mugen Train", "Reze Arc", "Greed Island", "Attack on Titan" — two
+exactly as requested, three substituted with reasoning recorded
+directly in the file's own comment, not just here.
+
+Separately: whether each matched show's *arc list* is seeded in
+Supabase (as opposed to whether the series search itself resolves) is
+not independently verifiable from this sandbox — no live Supabase
+credentials exist here, and the "further seeding after Session 44"
+this file's own Current State section already flags was done directly
+against production, outside any logged session. All five chips are
+confirmed to at minimum return the correct real series panel, never a
+dead "no results" page, which is what Fix 1 was actually asking for.
+
+**Fix 2 — mobile poster sizing.** Added a new `max-width: 640px` media
+query in `series.module.css` widening `.poster` to `width: 100%;
+max-width: 280px` (well over the "at least 240px" floor asked for,
+and literally "100% width of a constrained container" — both of the
+task's own named options at once), reverting to the original 160px
+above that breakpoint. Verified directly, not assumed: poster renders
+at 264px at a 320px viewport (100% of available width, since 280px
+would exceed it there) and a flat 280px at 390–639px, then correctly
+drops back to 160px at 700px (above the new breakpoint, still within
+the existing 768px stacking breakpoint) — confirmed via `boundingBox()`
+measurements at five widths, not a single screenshot. The requested
+content order (banner, poster, title, meta, genres, score, description)
+needed no JSX change — `.info`'s children (title → metaLine → genres →
+scoreRow → description) were already in that exact order and `.info`
+was already the DOM sibling directly after `.poster`, confirmed by
+reading `app/series/[slug]/page.jsx` before assuming a reorder was
+needed; `title.top` measured after `poster.bottom` and before
+`metaLine.top` at every tested width, confirming the visual order
+matches. Zero horizontal overflow at any tested width (320–700px),
+confirming this doesn't reopen Session 60's overflow hardening.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, no
+new errors or warnings, same route table as Session 60 left it. `git
+diff --stat`: 2 files changed (`components/HeroSearch.jsx`,
+`app/series/[slug]/series.module.css`). Dev server and Playwright test
+scripts cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–60.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

@@ -4,7 +4,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "@/app/page.module.css";
 
-const QUICK_SEARCHES = ["Shibuya Incident", "Gojo Satoru", "Wano Arc", "Chainsaw Man", "Chimera Ant Arc"];
+// Each of these is verified to return a real AniList match against the
+// exact query searchSeries() sends (lib/anilist.js's SEARCH_SERIES_QUERY
+// — title search, type: ANIME, popularity_greater: 1000), not just
+// assumed to work because the arc itself is plausible-sounding — AniList
+// searches real anime *titles*, not arc names, so most arc-only phrases
+// (the previous "Wano Arc"/"Chimera Ant Arc", and three of the five
+// originally requested replacements — "Marineford War", "Enies Lobby",
+// "Chimera Ant" — all return zero results from that exact query,
+// confirmed directly). "Shibuya Incident" and "Mugen Train" were kept as
+// requested (both verified); "Reze Arc" (Chainsaw Man: Reze-hen) and
+// "Greed Island" (HUNTER×HUNTER: Greed Island) replace the two broken
+// One-Piece-arc names with real, correctly-matching Chainsaw Man/Hunter
+// x Hunter titles instead; "Attack on Titan" (a full series title,
+// since no AOT arc-name phrasing tested — "The Rumbling" — matched the
+// right show) fills the fifth slot.
+const QUICK_SEARCHES = ["Shibuya Incident", "Mugen Train", "Reze Arc", "Greed Island", "Attack on Titan"];
 
 export default function HeroSearch() {
   const [value, setValue] = useState("");
