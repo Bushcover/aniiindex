@@ -6232,6 +6232,77 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–55.
 
+## Session 57
+
+Two visual bugs reported on One Piece pages, post-seeding. Investigated
+both against live-rendered One Piece data (real AniList API data for
+the series — anilist id 21 — plus a local mock for the Supabase-side
+arc/beat rows, since this sandbox still has no live Supabase
+credentials) before touching any code, per this project's own
+convention of verifying rather than guessing.
+
+**Bug 2 — real, confirmed, fixed.** The series page's `.heroInner`
+(`app/series/[slug]/series.module.css`) laid the poster and the title/
+description column out with `align-items: flex-end` (bottom-aligned).
+That's invisible with a typical few-hundred-character description,
+where the poster and the info column end up close in height — but
+One Piece's real AniList description is unusually long (confirmed
+directly against the live API: 1200+ characters, several times the
+typical length), making `.info` far taller than the poster's fixed
+240px. `flex-end` then dragged the much-shorter poster all the way down
+to align with the *bottom* of that tall column, landing it next to the
+middle of the description paragraph instead of next to the title —
+exactly what the user's screenshot showed, the poster appearing to
+"overlap" the synopsis even though the two elements' bounding boxes
+didn't technically intersect (confirmed via direct `boundingBox()`
+measurement before changing anything: poster at y=407, info at y=104,
+on a viewport where the correct behavior is both starting at the same y).
+Changed to `align-items: flex-start` — verified directly with a
+screenshot after the fix: poster's top edge now sits level with the
+title's top edge regardless of description length, no overlap, no
+other series page known to have anything close to One Piece's
+description length is affected differently (shorter descriptions never
+distinguished `flex-end` from `flex-start` in the first place).
+
+**Bug 1 — investigated thoroughly, could not reproduce, not changed.**
+`ArcHero.jsx`'s `<h1>{arc.name}</h1>` (line 18) is present, and
+`app/globals.css`'s `.hero h1` rule (line 193) sets `font-family:
+var(--display-impact)` (Bebas Neue), a real font-size, and inherits a
+real, visible `color` from `body`'s own `color: var(--t1)` — nothing in
+either file looked wrong on a static read. Live-tested against two
+different real One Piece arcs (a mocked "Whole Cake Island Arc" with a
+realistic long title, and the user's own "Water 7 Arc" screenshot): in
+every case the h1 rendered with real, visible, correctly-styled text —
+confirmed via `getComputedStyle` (`color: rgb(238, 238, 245)`,
+`visibility: visible`, `opacity: 1`, a non-zero `height`), not just a
+visual glance. Even with this session's own test explicitly blocking
+Google Fonts entirely (to rule out a flash-of-invisible-text theory),
+the h1 still rendered its real text immediately, in the fallback
+sans-serif — confirming `app/layout.jsx`'s existing `display=swap` on
+the Google Fonts URL (Session 51) already prevents any invisible-text
+period during font load, so that's not a plausible cause either. The
+user's own two screenshots, requested and reviewed directly rather than
+guessed at, show the arc page's "Water 7 Arc" h1 rendering exactly as
+expected — large, bold, visible. No code change was made for this one:
+every direct check available from this session came back showing it
+working, and changing code with no reproduction and no visible defect
+would risk the opposite of what was asked ("fix any real bugs... do not
+change anything working correctly" is this project's standing rule
+across every QA-style session, most recently Session 56). Flagged back
+to the user rather than silently dropped.
+
+**Verification**: `rm -rf .next && npm run build` compiles cleanly, no
+new errors or warnings, same route table as Session 56 left it. `git
+diff --stat`: 1 file changed (`app/series/[slug]/series.module.css`),
+the one line this session actually found a reproducible defect in.
+Dev/mock servers and Playwright test scripts cleaned up; `playwright-core`
+uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–56.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

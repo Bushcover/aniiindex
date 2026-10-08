@@ -71,7 +71,22 @@
   margin: 0 auto;
   padding: 48px 28px 24px;
   display: flex;
-  align-items: flex-end;
+  /* Session 57 (Bug 2 fix): was `flex-end` (bottom-aligned), which is only
+     correct when the poster and the info column happen to end up close
+     in height. A real series with an unusually long AniList description
+     (One Piece's, confirmed directly against the live API — 1200+
+     characters vs. a typical few hundred) makes `.info` far taller than
+     `.poster`'s fixed 240px, and `align-items: flex-end` then drags the
+     much-shorter poster all the way down to align with the *bottom* of
+     that tall column — landing it next to the middle of the description
+     paragraph instead of next to the title, reading as the two
+     overlapping even though their horizontal bounding boxes technically
+     don't intersect. `flex-start` keeps the poster's top edge level with
+     the title's top edge regardless of how long the description grows,
+     which is what every other series on this site (shorter description,
+     where flex-end and flex-start looked identical) was already
+     expecting to see. */
+  align-items: flex-start;
   gap: 24px;
   flex-wrap: wrap;
 }
