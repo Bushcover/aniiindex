@@ -4,22 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "@/app/page.module.css";
 
-// Each of these is verified to return a real AniList match against the
-// exact query searchSeries() sends (lib/anilist.js's SEARCH_SERIES_QUERY
-// — title search, type: ANIME, popularity_greater: 1000), not just
-// assumed to work because the arc itself is plausible-sounding — AniList
-// searches real anime *titles*, not arc names, so most arc-only phrases
-// (the previous "Wano Arc"/"Chimera Ant Arc", and three of the five
-// originally requested replacements — "Marineford War", "Enies Lobby",
-// "Chimera Ant" — all return zero results from that exact query,
-// confirmed directly). "Shibuya Incident" and "Mugen Train" were kept as
-// requested (both verified); "Reze Arc" (Chainsaw Man: Reze-hen) and
-// "Greed Island" (HUNTER×HUNTER: Greed Island) replace the two broken
-// One-Piece-arc names with real, correctly-matching Chainsaw Man/Hunter
-// x Hunter titles instead; "Attack on Titan" (a full series title,
-// since no AOT arc-name phrasing tested — "The Rumbling" — matched the
-// right show) fills the fifth slot.
-const QUICK_SEARCHES = ["Shibuya Incident", "Mugen Train", "Reze Arc", "Greed Island", "Attack on Titan"];
+// Session 63: Session 61's arc/movie-title chips ("Mugen Train", "Reze
+// Arc", "Greed Island") each matched a real AniList entry, but a
+// *separate* one from the main TV series — a movie/special with its own
+// id, not the id this project's real seeded arcs are actually stored
+// under — so clicking them could land on a real series panel for the
+// wrong entry with no arc list, confusing rather than clean. Replaced
+// with plain series titles instead: searching the show's own name
+// always resolves straight to its main entry, the one real seeded arcs
+// are actually attached to. "Shibuya Incident" and "Attack on Titan"
+// kept as requested (both already real, arc-name and series-name
+// respectively); "Chainsaw Man", "Jujutsu Kaisen", "Hunter x Hunter"
+// added as the other three.
+const QUICK_SEARCHES = ["Shibuya Incident", "Attack on Titan", "Chainsaw Man", "Jujutsu Kaisen", "Hunter x Hunter"];
 
 export default function HeroSearch() {
   const [value, setValue] = useState("");

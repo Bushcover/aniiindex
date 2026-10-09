@@ -59,7 +59,7 @@
 .heroInner {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 32px 28px;
+  padding: 32px 28px 0;
   display: flex;
   align-items: flex-start;
   gap: 24px;
@@ -136,10 +136,20 @@
   letter-spacing: 0.06em;
   margin-top: 2px;
 }
+/* Session 62: now a sibling of `.heroInner` (page.jsx), not nested
+   inside `.info` — direct request: "the description goes below the
+   two-column section at full width." Gets the same max-width/
+   centering/horizontal padding as `.heroInner` so its left edge lines
+   up with the poster above it and it spans the same full row width,
+   rather than the old `max-width: 640px` reading cap, which only made
+   sense when this was squeezed into the narrower `.info` column next
+   to the poster. */
 .description {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 28px 32px;
   font-size: 13px;
   color: var(--t2);
-  max-width: 640px;
   line-height: 1.7;
 }
 
@@ -188,32 +198,30 @@
 /* ══ Responsive (Session 29) — additive only, see globals.css ══ */
 
 @media (max-width: 768px) {
-  /* The fixed 160px poster + flex:1/min-width:0 info block don't fit
-     side by side at mobile widths — info squeezes too narrow and its
-     text wraps into an abnormally tall column. Stack vertically instead
-     — poster centered on top, info at full width below it (direct
-     request: "the poster centered above the text"). `.info` gets
-     `align-self: stretch` so it still takes the full row width and
-     keeps its own text left-aligned (readable body copy), rather than
-     `align-items: center` centering both children, which would also
-     shrink `.info` to its content width and center *it* as a box,
-     leaving its left-aligned text looking stranded off-center. */
-  .heroInner { flex-direction: column; align-items: center; gap: 20px; }
-  .info { align-self: stretch; }
-}
-
-@media (max-width: 640px) {
-  /* Direct request: the fixed 160px poster read as unpolished at
-     mobile widths — centered with large empty gaps on either side of
-     it. Widened to fill up to 280px (well over the "at least 240px"
-     floor asked for), still `width: 100%` so it never exceeds its
-     actual available space and naturally fills the full inner width at
-     the narrowest viewports (e.g. 320px, where 100% already clamps
-     below 280px) rather than just picking one fixed value. The content
-     order itself — banner, poster, title, meta, genres, score,
-     description — was already exactly this top-to-bottom flow; `.info`
-     (title/meta/genres/score/description) was already the very next
-     sibling after `.poster` in the DOM and this stacked layout, nothing
-     needed to move. */
-  .poster { width: 100%; max-width: 280px; }
+  /* Session 62: replaces both Session 58's full-width stack (poster on
+     top, info below it) and Session 61's wide-poster treatment (up to
+     280px, only below 640px) — direct feedback, with a screenshot, that
+     a poster that wide read as "a poster app, not a series page."
+     Reverted to a compact two-column row instead — small poster left
+     (max 140px), title/meta/genres/score right, same `flex-direction:
+     row` the desktop layout already uses (nothing to override here,
+     just a smaller poster and tighter spacing/type scale so that
+     narrower right column stays readable rather than wrapping
+     excessively). Uses this page's existing 768px breakpoint (Session
+     29's general mobile threshold), not a narrower one — Session 58's
+     own comment documented the 160px poster + flexible info column
+     "don't fit side by side" specifically in the 640-768px range, so a
+     640px cutoff here would have silently reopened that exact gap for
+     that range. The description, moved out of `.info` into its own
+     full-width sibling this session (see page.jsx's and `.description`'s
+     own comments), already sits below this row at every breakpoint
+     without any mobile-specific override needed for that part. */
+  .heroInner { gap: 14px; padding: 20px 20px 0; }
+  .poster { width: 140px; max-width: 140px; }
+  .title { font-size: clamp(16px, 5.5vw, 22px); margin-bottom: 6px; }
+  .metaLine { font-size: 11px; gap: 6px; margin-bottom: 8px; }
+  .genres { gap: 4px; margin-bottom: 8px; }
+  .genreTag { padding: 2px 8px; font-size: 10px; }
+  .scoreRow { margin-bottom: 0; }
+  .description { padding: 14px 20px 24px; }
 }

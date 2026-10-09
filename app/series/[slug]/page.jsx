@@ -255,6 +255,15 @@ export default async function SeriesPage({ params }) {
           )}
 
           <div className={styles.heroContent}>
+            {/* Session 62: the two-column row (poster + title/meta/genres/
+                score) and the description paragraph are now separate
+                siblings, not description nested inside `.info` — this is
+                what actually lets the description span the full width
+                below the row at every breakpoint (mobile and desktop
+                alike) instead of being squeezed into whatever width the
+                right column happens to have. See series.module.css's own
+                `.heroInner`/`.description` comments for the compact
+                mobile layout this enables. */}
             <div className={styles.heroInner}>
               {series.coverImage?.large && (
                 <img className={styles.poster} src={series.coverImage.large} alt={`${seriesName} poster`} />
@@ -297,13 +306,13 @@ export default async function SeriesPage({ params }) {
                     <div className={styles.scoreLabel}>Score</div>
                   </div>
                 </div>
-                {/* Session 58: capped at 250 characters — the same `truncate`
-                    helper generateMetadata above already uses at its own,
-                    different ceilings (lib/metadata.js), reused here rather
-                    than duplicated for a third length. */}
-                <p className={styles.description}>{truncate(series.description, 250)}</p>
               </div>
             </div>
+            {/* Session 58: capped at 250 characters — the same `truncate`
+                helper generateMetadata above already uses at its own,
+                different ceilings (lib/metadata.js), reused here rather
+                than duplicated for a third length. */}
+            <p className={styles.description}>{truncate(series.description, 250)}</p>
           </div>
 
           <div className="container">

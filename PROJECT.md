@@ -6577,6 +6577,101 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–60.
 
+## Session 62
+
+Two fixes, both reverting/correcting parts of Sessions 61's own work —
+flagged directly, with screenshots, as not landing the way intended.
+
+**Fix 1 — series page mobile layout.** Session 61's 280px-wide poster
+(a direct fix for the *previous* complaint, large empty side gaps) read
+as "a poster app, not a series page" once actually seen on a real
+screen — confirmed from the screenshot, not disputed. Reverted to a
+compact two-column row instead of the full-width stack: `.poster` back
+to `width: 140px` (a *maximum*, per the task's own wording, and under
+Session 61's 160px desktop value too) sitting left of `.info`
+(title/meta/genres/score) via the same `display: flex` row the desktop
+layout already uses — no `flex-direction: column` override needed
+anymore, since a 140px poster + a flexible right column genuinely does
+fit side by side at mobile widths, unlike the original 160px one
+Session 58's own comment documented *not* fitting.
+
+Used the page's existing 768px breakpoint for this, not a narrower
+640px one — Session 58's own comment specifically named the 640-768px
+range as where the old 160px-poster row broke down, so a 640px cutoff
+here would have silently reopened that exact gap for that range with
+the new 140px poster never actually getting applied there. Tightened
+`.title`/`.metaLine`/`.genres`/`.genreTag` sizing at this breakpoint
+too (smaller font sizes, tighter gaps) since "Keep it compact" was
+explicit and a ~210px-wide right column (768px viewport minus padding,
+poster, and gap) needs a noticeably smaller type scale than the
+desktop row to read cleanly rather than wrapping excessively.
+
+**The description — "goes below the two-column section at full
+width"** — required a real markup change, not just CSS: it used to be
+the last child *inside* `.info` (nested in the right column, capped at
+640px), which can't visually escape that column's own width no matter
+what CSS is applied to it. Moved to be a direct sibling of `.heroInner`
+inside `.heroContent` instead (`app/series/[slug]/page.jsx`), with its
+own copy of `.heroInner`'s max-width/centering/padding so it lines up
+under the row above and spans the same full row width at every
+breakpoint — this is what actually satisfies "full width," and needed
+no mobile-specific override once moved, since it was never squeezed
+into the right column to begin with. Collateral effect, not hidden:
+this also changes the *desktop* layout (description now spans the full
+row width below the poster, not just the ~800px-wide right column next
+to it) — not something the task asked about one way or the other, but
+screenshot-checked directly (see Verification) rather than assumed
+fine, and reads as a clean, intentional-looking layout, not a
+regression.
+
+**Fix 2 — quick-search chips, correcting Session 61's own choices.**
+Session 61 picked arc/movie-style search terms ("Mugen Train," "Reze
+Arc," "Greed Island") specifically because they resolved to *some* real
+AniList match — but each one resolves to a *separate* movie/special
+entry with its own AniList id, distinct from the main TV series' id
+this project's real seeded arcs are actually stored under, so clicking
+one could land on a real series panel for the wrong entry with an empty
+arc list — "confusing," per this task's own framing, a real and fair
+characterization even though the earlier fix wasn't wrong about those
+three queries returning *a* result. Replaced with the plain series
+titles instead ("Chainsaw Man," "Jujutsu Kaisen," "Hunter x Hunter"),
+which always resolve straight to the main entry. "Shibuya Incident"
+and "Attack on Titan" kept exactly as requested (both already correct
+from Session 61). Final `QUICK_SEARCHES`: "Shibuya Incident", "Attack
+on Titan", "Chainsaw Man", "Jujutsu Kaisen", "Hunter x Hunter" — all
+five verified directly against the real AniList search query
+(`searchSeries()`'s exact `SEARCH_SERIES_QUERY`, same as Session 61's
+own verification method) to resolve to the correct main series entry
+with no "no results" state.
+
+**Verification**: live-rendered via Playwright against real AniList
+data (One Piece, same reference series as the reported screenshots) at
+320/390/480/700/768/900px — confirmed via direct `boundingBox()`
+measurements that the poster sits at 140px beside the title (same row,
+not stacked) at every width through 768px, reverts cleanly to 160px at
+900px (above the breakpoint, unchanged desktop behavior), and the
+description spans the full row width below at every width tested, with
+zero horizontal overflow throughout (confirming this doesn't reopen
+Session 60's overflow hardening). Screenshot-confirmed both the mobile
+(390px) and desktop (1280px) results directly, not assumed from the
+measurements alone — desktop reads as a clean, intentional layout, not
+a regression, despite the description's width behavior changing there
+too. All five chip search terms re-verified end to end: each real
+AniList match confirmed by actually navigating `/search?q=...` for it
+and reading the rendered series panel name (not just the raw API
+response), zero "no results" states.
+
+`rm -rf .next && npm run build` compiles cleanly, no new errors or
+warnings, same route table as Session 61 left it. `git diff --stat`: 3
+files changed (`app/series/[slug]/page.jsx`, `app/series/[slug]/
+series.module.css`, `components/HeroSearch.jsx`). Dev server and
+Playwright test scripts cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–61.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
