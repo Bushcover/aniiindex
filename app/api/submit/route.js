@@ -42,7 +42,15 @@ const submitLimiter = createRateLimiter({ limit: SUBMIT_LIMIT, windowMs: SUBMIT_
 // not a full schema-validation pass — a genuinely invalid arc_id/beat_id
 // (e.g. one that doesn't exist) still fails at the database's own
 // foreign-key constraint, surfaced below as a real Postgres error.
-const REQUIRED_FIELDS = ["arc_id", "beat_id", "source_url", "title", "creator", "platform", "content_type"];
+//
+// Session 63 (Fix 2): `beat_id` deliberately isn't in this list anymore
+// — the submit form's "Skip this and the community can help place it"
+// option now actually works, sending `beat_id: null` for a real, valid
+// submission. The `!body?.[field]` check below treats `null` the same
+// as "absent," so beat_id staying in this list would have silently
+// rejected every skipped submission with a "missing required field"
+// error despite the client doing exactly what it was supposed to.
+const REQUIRED_FIELDS = ["arc_id", "source_url", "title", "creator", "platform", "content_type"];
 
 export async function POST(request) {
   const ip = getClientIp(request);
@@ -81,7 +89,7 @@ export async function POST(request) {
   // a request built by hand outside the UI.
   const payload = {
     arc_id: body.arc_id,
-    beat_id: body.beat_id,
+    beat_id: body.beat_id ?? null,
     source_url: body.source_url,
     title: body.title,
     creator: body.creator,

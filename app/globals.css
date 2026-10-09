@@ -348,6 +348,23 @@ nav {
 .flag-btn:disabled { cursor: default; opacity: 0.7; }
 .flag-btn-done { border: 1px solid transparent; background: transparent; color: var(--red); cursor: default; }
 
+/* Session 63: EditSubmissionButton — same quiet, neutral treatment as
+   .flag-btn (this isn't a primary action), shown only to a card's own
+   submitter. `.edit-form` replaces the button in place once clicked,
+   staying inside the same `.card-actions` row rather than opening a
+   modal — "a simple edit/report flow," per the task's own framing, not
+   a full editor. */
+.edit-btn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 8px; border-radius: var(--r-sm); border: 1px solid var(--border); background: transparent; color: var(--t3); font-size: 11px; font-family: var(--body); cursor: pointer; }
+.edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+.edit-form { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.edit-select { width: 100%; padding: 6px 8px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--t1); font-size: 11px; font-family: var(--body); }
+.edit-error { font-size: 11px; color: var(--red); }
+.edit-actions { display: flex; gap: 6px; }
+.edit-save { flex: 1; padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; font-family: var(--body); cursor: pointer; }
+.edit-save:disabled { cursor: default; opacity: 0.7; }
+.edit-cancel { padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid var(--border); background: transparent; color: var(--t3); font-size: 11px; font-family: var(--body); cursor: pointer; }
+.edit-cancel:disabled { cursor: default; opacity: 0.7; }
+
 /* Footer */
 .index-note { padding: 18px 0 48px; border-top: 1px solid var(--border); font-size: 12px; color: var(--t3); line-height: 1.7; }
 .index-note a { color: var(--t2); text-underline-offset: 3px; }

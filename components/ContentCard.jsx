@@ -14,6 +14,7 @@
 import YoursBadge from "@/components/YoursBadge";
 import ConfirmButton from "@/components/ConfirmButton";
 import FlagButton from "@/components/FlagButton";
+import EditSubmissionButton from "@/components/EditSubmissionButton";
 import styles from "./ContentCard.module.css";
 
 const PLATFORM_YT = { className: "plt-yt", compactClassName: styles.compactPltYt, icon: "▶", label: "YouTube" };
@@ -84,6 +85,15 @@ export default function ContentCard({
   onFlagged,
   locallyConfirmed = false,
   onConfirmed,
+  // Session 63: beatId (this item's current beat_id, nullable — see
+  // app/submit/page.jsx's "skip the beat" option) and arcBeats (every
+  // beat on this arc, {id, title}) only matter for EditSubmissionButton's
+  // "change beat" dropdown below — undefined on every other render path
+  // (the hardcoded fallback data, the submit wizard's own preview card,
+  // the search page's compact cards) where id is also absent, so
+  // EditSubmissionButton never actually renders there regardless.
+  beatId,
+  arcBeats,
 }) {
   const meta = PLATFORM_META[platform] || DEFAULT_PLATFORM_META;
   const genTags = [].concat(contentType ?? []);
@@ -194,6 +204,24 @@ export default function ContentCard({
               <ConfirmButton id={id} onConfirmed={onConfirmed} awaitingSecond={awaitingSecondConfirmation} />
             )}
             <FlagButton id={id} onFlagged={onFlagged} />
+            {/* Same gate as the Yours badge above (!isPending && submittedBy)
+                — a submitter's own pending item shows the pending badge in
+                that slot instead of Yours, so Edit stays off until it does
+                too, matching the task's own framing ("the card... marked
+                with the Yours badge"). EditSubmissionButton does its own
+                ownership check on top of this and renders nothing if it
+                doesn't match, so this gate is a visibility optimization,
+                not the actual security boundary — that's server-side, in
+                app/api/edit-submission/route.js. */}
+            {!isPending && submittedBy && (
+              <EditSubmissionButton
+                id={id}
+                submittedBy={submittedBy}
+                beatId={beatId}
+                contentType={Array.isArray(contentType) ? contentType[0] : contentType}
+                arcBeats={arcBeats}
+              />
+            )}
           </div>
         )}
       </div>

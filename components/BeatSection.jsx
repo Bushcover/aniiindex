@@ -12,7 +12,7 @@ import { useState } from "react";
 import ContentCard from "@/components/ContentCard";
 import { slugifyBeatTitle } from "@/lib/slug";
 
-export default function BeatSection({ beat, confirmedIds, onItemConfirmed }) {
+export default function BeatSection({ beat, confirmedIds, onItemConfirmed, arcBeats }) {
   const [flaggedIds, setFlaggedIds] = useState(() => new Set());
 
   function handleFlagged(id) {
@@ -55,6 +55,7 @@ export default function BeatSection({ beat, confirmedIds, onItemConfirmed }) {
             onFlagged={handleFlagged}
             locallyConfirmed={Boolean(item.id) && confirmedIds?.has(item.id)}
             onConfirmed={() => onItemConfirmed?.(item.id)}
+            arcBeats={arcBeats}
           />
         ))}
       </div>

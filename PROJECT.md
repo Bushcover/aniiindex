@@ -432,6 +432,34 @@ working in production as of Session 21, this SQL is presumed applied —
 but nobody has actually run this query and reported the result back, so
 it remains formally unconfirmed by this file's own standard.
 
+**New SQL required for Session 63's edit-submission feature, NOT yet run
+against the live project** (this sandbox has no way to run it itself —
+same standing limitation as every other schema change in this file).
+`app/api/edit-submission/route.js`'s `updateContentItemPlacement`
+(`lib/supabase.js`) needs to `UPDATE content_items SET beat_id = ...,
+content_type = ...` — neither column is covered by the Session 18 grant
+above (`confirmation_count, status` only), so without this, every real
+edit attempt against production would fail at the database's own column-
+privilege check, before RLS is even evaluated (same mechanism the
+Session 18 comment above already explains). Unlike confirm/flag, this
+write *is* ownership-gated — but at the application layer (the route
+verifies the caller's JWT and checks it against the row's own
+`submitted_by` before ever issuing this UPDATE), not via RLS itself;
+matching the existing confirm/flag policy's own `using (true)` shape
+here (rather than a `submitted_by = auth.uid()` row-level check) keeps
+this consistent with how every other write in this app is modeled —
+real authorization enforced once, in the one place that already does it,
+not duplicated into a second, parallel mechanism:
+
+```sql
+grant update (beat_id, content_type) on content_items to anon, authenticated;
+
+create policy "Public can edit content_items placement"
+  on content_items for update
+  using (true)
+  with check (true);
+```
+
 **`content_items.status` values in use**: `'pending'` (the insert
 default), `'confirmed'` (reached when `confirmation_count` hits 2 via
 `/api/confirm`), and `'flagged'` (set unconditionally, no threshold, via
@@ -6671,6 +6699,140 @@ Playwright test scripts cleaned up; `playwright-core` uninstalled.
 direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–61.
+
+## Session 63
+
+Four fixes to the submit form and arc page — the most structurally
+involved session since the original Phase 7 arc-seeding work, touching
+8 files plus one new API route and one new component.
+
+**Fix 1 — manual title/creator fallback.** Confirmed the real failure
+mode first rather than assuming: Reddit's pages don't serve scrapable
+`og:title` to server-side scraping the way TikTok/Instagram/X do, so
+`/api/og-fetch` genuinely returns a 200 with `title: null` for a Reddit
+link, not an error — `app/submit/page.jsx`'s old UI only ever showed a
+manual-entry path on `ogStatus === "error"`, so this specific real case
+silently fell through to "Untitled link" with no way to fix it short of
+abandoning the submission. New `needsManualEntry` covers both cases
+(outright failure, or success with no title); when true, two new text
+inputs (Title, Creator) appear directly under the URL field, and
+`effectiveLink` now prefers resolvedLink → manual entry → honest
+placeholder, in that order. The Next button was never actually blocked
+by failed detection (`disabled={url.trim().length === 0}` only, unrelated
+to `ogStatus`) — verified directly rather than assumed already broken.
+
+**Fix 2 — the beat skip link now actually works**, rather than being
+removed. Required a genuine third state: `beatSkipped`, since
+`selectedBeatIndex` defaulting to `0` already meant "the first beat,"
+not "nothing" — `selectedBeat` is now `beatSkipped ? null :
+realBeats?.[selectedBeatIndex] ?? null`, and the Continue button's
+disabled condition changed to `(!selectedBeat && !beatSkipped)` so an
+explicit skip unblocks it exactly like a real beat selection would. A
+**second, deeper bug surfaced while making this actually work end to
+end**, not just in the UI: `app/api/submit/route.js`'s own
+`REQUIRED_FIELDS` check (`!body?.[field]`) treated `beat_id: null` as
+"missing," which would have rejected every skipped submission with a
+"missing required field" error — found by testing the full flow against
+a mock server rather than stopping at "the button isn't disabled
+anymore," and fixed by removing `beat_id` from that required-fields
+list (it's genuinely optional now, not a validation bug). A **third
+consequence** needed its own fix: `app/arc/[slug]/page.jsx`'s
+`buildBeatSections` grouped items by `beat_id` into a `Map` keyed
+directly by that value — an item with `beat_id: null` would key into a
+`null` bucket that nothing ever reads back out of (`beats.map(beat =>
+map.get(beat.id))` only ever looks up real beat ids), meaning a
+successfully skipped submission would silently vanish from the arc page
+forever, strictly worse than the old forced-selection behavior this fix
+was meant to replace. Fixed by grouping null-beat items under a
+reserved `'unplaced'` key and appending a trailing "Unplaced" beat
+section when any exist — verified live: a real submission with
+`beat_id: null` renders in a real "Unplaced" section on the arc page,
+not silently dropped.
+
+**Fix 3 — success screen message**, added directly below the existing
+"✓ Submitted" line in Step 3's success state, explaining the arc page's
+own 5-minute cache window (`lib/supabase.js`'s `getArcContent`, Session
+50) so a real, immediate submission doesn't read as "didn't work" for
+the several minutes it can take to actually appear.
+
+**Fix 4 — a real ownership-gated edit flow**, not just a UI stub. New
+`components/EditSubmissionButton.jsx` renders a small "✎ Edit" control
+next to a card's own "Yours" badge (same `!isPending && submittedBy`
+gate `ContentCard.jsx` already uses for Yours itself), doing its own
+independent `getSession()` ownership check — consistent with this
+codebase's existing ConfirmButton/FlagButton/YoursBadge pattern of
+small, independent client components rather than lifting shared state.
+Clicking it reveals an inline form (beat dropdown + content-type
+dropdown, Save/Cancel) inside the same `.card-actions` row, not a modal
+— "a simple edit/report flow," per the task's own framing.
+
+The actual security boundary is server-side, in new
+`app/api/edit-submission/route.js` — this is the first write route in
+this app that needed to know *who* is actually calling, which this
+project's client-side-only Supabase session (no server cookie,
+no `@supabase/ssr`, confirmed by reading every other route's own
+comments on this) can't give a Route Handler for free the way
+`app/api/submit`'s trusted-string `submitted_by` gets away with for an
+anonymous-friendly insert. Solved by having the client read its own
+current `access_token` (via `getSession()`, right before the save call,
+not cached from mount) and send it in the request body; the route
+verifies it server-side with `supabase.auth.getUser(access_token)` —
+confirmed directly, not assumed, exactly what real supabase-js calls
+server-side: a `GET /auth/v1/user` with `Authorization: Bearer
+<token>`, validated against Supabase Auth's own signature check, using
+nothing more than the already-public anon-key client. The verified user
+id *that call returns* — never a client-supplied one — is what
+`lib/supabase.js`'s new `updateContentItemPlacement` checks against the
+row's own `submitted_by`; a mismatch throws a real 403, not a silent
+no-op. Verified all four cases directly against a mock implementing
+`/auth/v1/user`: the real owner's token succeeds (200), a different
+user's valid token is rejected (403), a missing token is rejected (401),
+and an unrecognized/invalid token is rejected (401) — not just the
+happy path.
+
+A **second real gap found and documented, not fixed in code** (nothing
+in this sandbox can run SQL against the live project): the Session 18
+grant this app's confirm/flag writes depend on
+(`grant update (confirmation_count, status) on content_items to anon,
+authenticated`) doesn't cover `beat_id`/`content_type` — without a new
+grant, every real edit attempt would fail at Postgres's own column-
+privilege check against production, before RLS is even evaluated, the
+same mechanism the Session 18 comment already explains for the existing
+columns. New required SQL (`grant update (beat_id, content_type)...` +
+a second, parallel `using (true)` policy, matching confirm/flag's own
+shape rather than introducing a different enforcement model) added to
+the Database schema section below, clearly marked not yet run.
+
+**Verification**: built a mock PostgREST + `/auth/v1/user` server
+(this sandbox's standing convention for anything requiring Supabase)
+seeded with one item owned by a test user and one owned by someone
+else, plus real series/arc/beat data. Live-tested via Playwright against
+a real dev server for all four fixes: Fix 1 (manual title AND manual
+creator independently confirmed to flow through to the final submission
+when the mocked og-fetch response omitted each), Fix 2 (skip link
+genuinely unblocks Continue, submits with real `beat_id: null`,
+confirmed via the mock's own insert log, and renders in a real
+"Unplaced" section), Fix 3 (the new success copy renders), Fix 4 (Edit
+button renders only on the signed-in owner's own card — confirmed
+`0` on a differently-owned card in the same arc, matching the Yours
+badge exactly — and a real save round-trip correctly updates
+`beat_id`/`content_type` via the API, confirmed by reading the
+response body, not just a 200 status). `rm -rf .next && npm run build`
+compiles cleanly, no new errors or warnings, one new route
+(`/api/edit-submission`) in the route table, same otherwise as Session
+62 left it. `git diff --stat`: 11 files changed/added
+(`app/submit/page.jsx`, `app/submit/submit.module.css`,
+`app/api/submit/route.js`, `app/api/edit-submission/route.js` [new],
+`lib/supabase.js`, `components/ContentCard.jsx`,
+`components/EditSubmissionButton.jsx` [new],
+`components/BeatSection.jsx`, `components/ArcContent.jsx`,
+`app/arc/[slug]/page.jsx`, `app/globals.css`). Dev server and mock
+cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–62.
 
 ## Database schema
 

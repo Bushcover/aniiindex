@@ -68,7 +68,7 @@ function itemMatchesBucket(item, bucket) {
   return tags.some((tag) => classifyTag(tag) === bucket);
 }
 
-export default function ArcContent({ tabs, intensityBeats, beatSections }) {
+export default function ArcContent({ tabs, intensityBeats, beatSections, arcBeats }) {
   const [activeLabel, setActiveLabel] = useState(tabs.find((tab) => tab.active)?.label ?? tabs[0]?.label ?? "All");
   const [confirmedIds, setConfirmedIds] = useState(() => new Set());
 
@@ -116,6 +116,7 @@ export default function ArcContent({ tabs, intensityBeats, beatSections }) {
                 beat={beat}
                 confirmedIds={confirmedIds}
                 onItemConfirmed={handleItemConfirmed}
+                arcBeats={arcBeats}
               />
             ))
           )}

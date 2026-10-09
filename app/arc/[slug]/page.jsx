@@ -223,6 +223,33 @@ const BEATS = [
   },
 ];
 
+// Maps a raw content_items row to the plain props shape BeatSection's own
+// `{...item}` spread passes straight into ContentCard.
+function mapContentItem(item) {
+  return {
+    id: item.id,
+    platform: item.platform,
+    thumbnailUrl: item.thumbnail_url,
+    title: item.title,
+    creator: item.creator,
+    contentType: item.content_type,
+    characterTags: item.character_tags,
+    sourceUrl: item.source_url,
+    submittedBy: item.submitted_by,
+    status: item.status,
+    // Session 53: threaded through to ContentCard (via BeatSection's
+    // `{...item}` spread, unchanged) so it can tell "no one has
+    // confirmed this yet" apart from "one person already has" after a
+    // page refresh — see ContentCard.jsx's own comment.
+    confirmationCount: item.confirmation_count,
+    // Session 63: this item's current beat_id, nullable (see this
+    // function's own "Unplaced" section below) — only consumed by
+    // EditSubmissionButton's "change beat" dropdown, to pre-select the
+    // item's current placement.
+    beatId: item.beat_id,
+  };
+}
+
 // Groups real content items under their real beat, in the same order the
 // beats table returned (already sorted by order_index). Every beat gets a
 // section — including ones with zero items — per the task: a beat with no
@@ -230,35 +257,42 @@ const BEATS = [
 function buildBeatSections(beats, content) {
   const itemsByBeatId = new Map();
   for (const item of content) {
-    if (!itemsByBeatId.has(item.beat_id)) itemsByBeatId.set(item.beat_id, []);
-    itemsByBeatId.get(item.beat_id).push(item);
+    // Session 63: `beat_id` can now genuinely be null — the submit
+    // wizard's "Skip this and the community can help place it" option
+    // (app/submit/page.jsx) actually works now, rather than being
+    // unclickable copy. Grouped under a reserved 'unplaced' key, distinct
+    // from any real numeric beats.id, rather than the literal `null`
+    // value — `beats.map(beat => itemsByBeatId.get(beat.id))` below only
+    // ever looks up real beat ids, so an item keyed by the literal `null`
+    // value would never be retrieved by anything and silently vanish
+    // from the page entirely, worse than the old forced-selection
+    // behavior this fix was asked to replace.
+    const key = item.beat_id ?? "unplaced";
+    if (!itemsByBeatId.has(key)) itemsByBeatId.set(key, []);
+    itemsByBeatId.get(key).push(item);
   }
 
-  return beats.map((beat) => {
+  const sections = beats.map((beat) => {
     const items = itemsByBeatId.get(beat.id) ?? [];
     return {
       title: beat.title,
       count: items.length,
       peakLabel: beat.is_peak ? "Peak moment" : null,
-      items: items.map((item) => ({
-        id: item.id,
-        platform: item.platform,
-        thumbnailUrl: item.thumbnail_url,
-        title: item.title,
-        creator: item.creator,
-        contentType: item.content_type,
-        characterTags: item.character_tags,
-        sourceUrl: item.source_url,
-        submittedBy: item.submitted_by,
-        status: item.status,
-        // Session 53: threaded through to ContentCard (via BeatSection's
-        // `{...item}` spread, unchanged) so it can tell "no one has
-        // confirmed this yet" apart from "one person already has" after a
-        // page refresh — see ContentCard.jsx's own comment.
-        confirmationCount: item.confirmation_count,
-      })),
+      items: items.map(mapContentItem),
     };
   });
+
+  const unplacedItems = itemsByBeatId.get("unplaced") ?? [];
+  if (unplacedItems.length > 0) {
+    sections.push({
+      title: "Unplaced",
+      count: unplacedItems.length,
+      peakLabel: null,
+      items: unplacedItems.map(mapContentItem),
+    });
+  }
+
+  return sections;
 }
 
 // Phase 8 (Session 45): real per-arc SEO metadata + Open Graph/Twitter
@@ -465,6 +499,14 @@ export default async function ArcPage({ params }) {
     : INTENSITY_BEATS;
 
   const beatSections = arcFoundInDb ? buildBeatSections(realArcBeats, realArcContent) : BEATS;
+  // Session 63: the real beat list for this arc, {id, title} only — the
+  // "change beat" dropdown EditSubmissionButton renders needs real beat
+  // ids to submit, which beatSections itself doesn't carry at the
+  // section level (grouped-by-beat, not a flat id/title list). Empty on
+  // the hardcoded-fallback path (arcFoundInDb false) — every item there
+  // has no `id` either, so EditSubmissionButton never renders regardless
+  // (see ContentCard.jsx's own comment on both props).
+  const arcBeats = arcFoundInDb ? realArcBeats.map((beat) => ({ id: beat.id, title: beat.title })) : [];
 
   return (
     <>
@@ -483,7 +525,7 @@ export default async function ArcPage({ params }) {
 
       <ArcHero arc={arc} />
 
-      <ArcContent tabs={TABS} intensityBeats={intensityBeats} beatSections={beatSections} />
+      <ArcContent tabs={TABS} intensityBeats={intensityBeats} beatSections={beatSections} arcBeats={arcBeats} />
     </>
   );
 }

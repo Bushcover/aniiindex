@@ -54,6 +54,11 @@ export default function SubmitPage() {
   const [arcsLoadStatus, setArcsLoadStatus] = useState("idle"); // idle | loading | success
   const [selectedArc, setSelectedArc] = useState(null); // { id, slug, title, episode_start, episode_end } | null
   const [selectedBeatIndex, setSelectedBeatIndex] = useState(0);
+  // Session 63 (Fix 2): "skip this beat" is a genuine third state, not
+  // just "whatever index selectedBeatIndex happens to be" — see
+  // selectedBeat's own comment below for why a separate flag is needed
+  // rather than overloading selectedBeatIndex with a sentinel value.
+  const [beatSkipped, setBeatSkipped] = useState(false);
   const [characters, setCharacters] = useState([]); // free-text names, no auto-detection
   const [characterInput, setCharacterInput] = useState("");
   const [contentType, setContentType] = useState(DEFAULT_CONTENT_TYPE);
@@ -66,6 +71,12 @@ export default function SubmitPage() {
   const [resolvedLink, setResolvedLink] = useState(null); // { title, thumbnailUrl, platform, creator } | null
   const [ogStatus, setOgStatus] = useState("idle"); // idle | loading | success | error
   const [ogError, setOgError] = useState("");
+  // Session 63 (Fix 1): filled in by hand when auto-detection comes back
+  // with no title (confirmed real failure mode for Reddit links
+  // specifically — Reddit doesn't serve scrapable og:title the way
+  // TikTok/Instagram/X do) or fails outright. See needsManualEntry below.
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualCreator, setManualCreator] = useState("");
   const [session, setSession] = useState(null); // null until checked, or once confirmed signed out
 
   // Read the current session once on mount, so a signed-in submission can
@@ -91,6 +102,8 @@ export default function SubmitPage() {
       setResolvedLink(null);
       setOgStatus("idle");
       setOgError("");
+      setManualTitle("");
+      setManualCreator("");
       return;
     }
 
@@ -125,17 +138,29 @@ export default function SubmitPage() {
     };
   }, [url]);
 
+  // Session 63 (Fix 1): true whenever auto-detection genuinely needs a
+  // human to fill in the gap — either it failed outright, or it
+  // succeeded but came back with no title at all (confirmed real for
+  // Reddit links: Reddit doesn't serve scrapable og:title server-side
+  // the way TikTok/Instagram/X do, so /api/og-fetch's regex scrape comes
+  // back with `title: null` on a 200, not an error). Deliberately not
+  // "no thumbnail" or "no creator" — those already have reasonable,
+  // honest placeholders (a gradient, the bare hostname) that don't need
+  // a human to intervene the way a genuinely blank title does.
+  const needsManualEntry = ogStatus === "error" || (ogStatus === "success" && !resolvedLink?.title);
+
   // What the rest of the wizard actually renders/saves — real resolved
-  // data where available, honest fallbacks otherwise. `platform` can't
-  // fall back to null here since content_items.platform is NOT NULL in
-  // Supabase; "other" is a genuine, ContentCard-safe "unknown" value
-  // (see components/ContentCard.jsx's default platform meta), not a
-  // guess at the real platform.
+  // data where available, the user's own manual entry next, honest
+  // fallbacks last. `platform` can't fall back to null here since
+  // content_items.platform is NOT NULL in Supabase; "other" is a
+  // genuine, ContentCard-safe "unknown" value (see
+  // components/ContentCard.jsx's default platform meta), not a guess at
+  // the real platform.
   const effectiveLink = {
-    title: resolvedLink?.title || "Untitled link",
+    title: resolvedLink?.title || manualTitle.trim() || "Untitled link",
     thumbnailUrl: resolvedLink?.thumbnailUrl || DEFAULT_THUMBNAIL,
     platform: resolvedLink?.platform || "other",
-    creator: resolvedLink?.creator || "Unknown creator",
+    creator: resolvedLink?.creator || manualCreator.trim() || "Unknown creator",
   };
 
   // Debounced series search: waits 300ms after the user stops typing before
@@ -201,6 +226,7 @@ export default function SubmitPage() {
   // arc's own list.
   useEffect(() => {
     setSelectedBeatIndex(0);
+    setBeatSkipped(false);
     if (!selectedArc) {
       setRealBeats(null);
       setBeatsLoadError("");
@@ -228,7 +254,24 @@ export default function SubmitPage() {
     };
   }, [selectedArc]);
 
-  const selectedBeat = realBeats?.[selectedBeatIndex] ?? null;
+  // Session 63 (Fix 2): "skip this beat" takes priority over whatever
+  // selectedBeatIndex happens to be — it's a genuine third state ("the
+  // user explicitly chose not to place this"), not just "no selection
+  // made yet" (which selectedBeatIndex defaulting to 0 already treats as
+  // "the first beat," not "nothing"). A separate flag, rather than
+  // repurposing selectedBeatIndex itself (e.g. -1 as a sentinel), keeps
+  // getBarTier and the bar-click handlers simple — they only ever deal
+  // with real indices, never a magic "skipped" value.
+  const selectedBeat = beatSkipped ? null : realBeats?.[selectedBeatIndex] ?? null;
+
+  function handleSelectBeat(index) {
+    setBeatSkipped(false);
+    setSelectedBeatIndex(index);
+  }
+
+  function handleSkipBeat() {
+    setBeatSkipped(true);
+  }
 
   function handleSelectSeries(series) {
     setSelectedSeries(series);
@@ -245,6 +288,11 @@ export default function SubmitPage() {
   }
 
   function getBarTier(i) {
+    // Once skipped, nothing is actually selected — selectedBeatIndex
+    // still holds whatever index it last pointed at, but visually
+    // highlighting a bar as "selected" here would contradict the
+    // explicit "no specific beat" choice.
+    if (beatSkipped) return i === selectedBeatIndex + 1 || i === selectedBeatIndex + 2 ? "nearby" : "dim";
     if (i === selectedBeatIndex) return "selected";
     if (i === selectedBeatIndex + 1 || i === selectedBeatIndex + 2) return "nearby";
     return "dim";
@@ -287,7 +335,12 @@ export default function SubmitPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           arc_id: selectedArc.id,
-          beat_id: selectedBeat.id,
+          // Session 63 (Fix 2): null when the user explicitly skipped
+          // placement — content_items.beat_id has no NOT NULL
+          // constraint (see PROJECT.md's Database schema section), and
+          // the arc page's own buildBeatSections groups a null beat_id
+          // into a trailing "Unplaced" section rather than dropping it.
+          beat_id: selectedBeat?.id ?? null,
           source_url: url,
           title: effectiveLink.title,
           creator: effectiveLink.creator,
@@ -387,16 +440,50 @@ export default function SubmitPage() {
                 {ogStatus === "loading" && <div className={styles.detectNote}>Detecting link details…</div>}
                 {ogStatus === "error" && (
                   <div className={styles.submitErrorMsg}>
-                    Couldn&rsquo;t auto-detect this link: {ogError} — you can still continue and add it manually.
+                    Couldn&rsquo;t auto-detect this link: {ogError} — add the title and creator below to continue.
                   </div>
                 )}
-                {ogStatus === "success" && resolvedLink && (
+                {/* Session 63 (Fix 1): real failure mode, not hypothetical —
+                    Reddit links resolve with a 200 but no og:title
+                    (confirmed, see needsManualEntry's own comment), which
+                    used to silently fall through to "Untitled link" with
+                    no way to fix it short of abandoning the submission. */}
+                {ogStatus === "success" && resolvedLink && !resolvedLink.title && (
+                  <div className={styles.submitErrorMsg}>
+                    Couldn&rsquo;t detect a title for this link{resolvedLink.platform ? ` from ${PLATFORM_LABELS[resolvedLink.platform] || resolvedLink.platform}` : ""} — add the title and creator below to continue.
+                  </div>
+                )}
+                {ogStatus === "success" && resolvedLink && resolvedLink.title && (
                   <div className={styles.detectNote}>
-                    ✓ Detected{resolvedLink.platform ? ` from ${PLATFORM_LABELS[resolvedLink.platform] || resolvedLink.platform}` : ""}
-                    {resolvedLink.title ? `: ${resolvedLink.title}` : " — no title found, you can still continue"}
+                    ✓ Detected{resolvedLink.platform ? ` from ${PLATFORM_LABELS[resolvedLink.platform] || resolvedLink.platform}` : ""}: {resolvedLink.title}
                   </div>
                 )}
               </div>
+
+              {needsManualEntry && (
+                <>
+                  <div className={styles.field}>
+                    <div className={styles.fieldLabel}>Title</div>
+                    <input
+                      className={styles.urlInput}
+                      type="text"
+                      placeholder="What is this content called?"
+                      value={manualTitle}
+                      onChange={(e) => setManualTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <div className={styles.fieldLabel}>Creator</div>
+                    <input
+                      className={styles.urlInput}
+                      type="text"
+                      placeholder="Username or creator name"
+                      value={manualCreator}
+                      onChange={(e) => setManualCreator(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className={styles.stepFooter}>
               <div className={styles.unsureNote}>
@@ -555,7 +642,7 @@ export default function SubmitPage() {
                                 tier === "selected" && styles.bbarSelected
                               )}
                               style={{ height: `${beat.intensity}%` }}
-                              onClick={() => setSelectedBeatIndex(i)}
+                              onClick={() => handleSelectBeat(i)}
                               aria-label={beat.title}
                             ></button>
                           );
@@ -565,8 +652,8 @@ export default function SubmitPage() {
                         {realBeats.map((beat, i) => (
                           <button
                             key={beat.id}
-                            className={cx(styles.blabel, i === selectedBeatIndex && styles.blabelSelected)}
-                            onClick={() => setSelectedBeatIndex(i)}
+                            className={cx(styles.blabel, !beatSkipped && i === selectedBeatIndex && styles.blabelSelected)}
+                            onClick={() => handleSelectBeat(i)}
                           >
                             {beat.title}
                           </button>
@@ -581,9 +668,30 @@ export default function SubmitPage() {
                       </div>
                     )}
 
-                    <div className={styles.beatUnsure}>
-                      Not sure which beat? <a>Skip this and the community can help place it</a>
-                    </div>
+                    {/* Session 63 (Fix 2): this used to be plain text with
+                        no handler at all — clicking it did nothing, while
+                        the Continue button below still required a real
+                        beat selection, so "skip" never actually worked.
+                        Now a real control: clicking it sets beatSkipped,
+                        which both selectedBeat (above) and the Continue
+                        button's disabled condition (below) genuinely
+                        respect, and the item submits with beat_id: null
+                        (see handleSubmit) rather than being blocked. */}
+                    {beatSkipped ? (
+                      <div className={styles.beatSelectedRow}>
+                        <div className={styles.beatSelectedIcon}>⏭</div>
+                        <div className={styles.beatSelectedName}>
+                          Skipped — the community can help place this
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={styles.beatUnsure}>
+                        Not sure which beat?{" "}
+                        <a onClick={handleSkipBeat} role="button" tabIndex={0}>
+                          Skip this and the community can help place it
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -645,7 +753,7 @@ export default function SubmitPage() {
               <button
                 className={styles.btnContinue}
                 onClick={() => setStep(3)}
-                disabled={!selectedSeries || !selectedArc || !selectedBeat}
+                disabled={!selectedSeries || !selectedArc || (!selectedBeat && !beatSkipped)}
               >
                 Continue →
               </button>
@@ -659,7 +767,7 @@ export default function SubmitPage() {
             <div className={styles.completedCheck}>✓</div>
             <div className={styles.completedInfo}>
               <div className={styles.completedTitle}>
-                {selectedSeries?.title} · {selectedArc?.title} · {selectedBeat?.title}
+                {selectedSeries?.title} · {selectedArc?.title} · {selectedBeat?.title || "Unplaced"}
               </div>
               <div className={styles.completedMeta}>
                 {contentType} · {characters.length} character{characters.length === 1 ? "" : "s"} tagged
@@ -703,7 +811,7 @@ export default function SubmitPage() {
                     contentType={[contentType]}
                     characterTags={characters}
                     sourceUrl={url || "#"}
-                    beatLabel={selectedBeat.title}
+                    beatLabel={selectedBeat?.title}
                   />
                 </div>
               </div>
@@ -729,6 +837,17 @@ export default function SubmitPage() {
               {submitStatus === "success" && (
                 <div className={styles.submitSuccess}>
                   ✓ Submitted — this content is now pending review.
+                  {/* Session 63 (Fix 3): the arc page's own getArcContent
+                      reads through a 5-minute cache (lib/supabase.js,
+                      Session 50) — a just-submitted item is genuinely in
+                      Supabase immediately, but can take up to that long
+                      to actually render on the arc page, which otherwise
+                      reads as "my submission didn't work" rather than
+                      "it worked, the page just hasn't caught up yet." */}
+                  <div className={styles.submitSuccessNote}>
+                    Your submission is now pending review. It may take a few minutes to appear on the arc page
+                    while the page cache refreshes.
+                  </div>
                 </div>
               )}
               {submitStatus === "success" && selectedArc && (
