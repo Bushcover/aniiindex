@@ -6834,6 +6834,75 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–62.
 
+## Session 64
+
+Three fixes before content seeding begins, all about the gap between
+real and hardcoded data on the search page, plus one home page chip
+change.
+
+**Fix 1 + Fix 3 — removed the search page's hardcoded "Top content this
+week" section entirely**, both the section header/subtitle and the four
+hardcoded `TOP_CONTENT` cards (`app/search/page.jsx`) — always showing
+the same four Chainsaw Man items regardless of which series was
+actually searched, since nothing in that block was ever keyed by
+`query`/`series` the way the real Arcs/Characters columns next to it
+already are. Right column now shows only the Characters header,
+subtitle, and the real AniList character grid (or the existing honest
+"No characters listed" empty state) — nothing renders in its place when
+there's no real content yet, per the task's own explicit instruction,
+rather than a placeholder message implying something is still loading.
+Removed the now-dead `TOP_CONTENT` constant, the now-unused
+`ContentCard` import (the only thing in this file that used it), and
+the divider line that existed only to separate Characters from the
+section above it. Also removed `.topContent`'s now-orphaned CSS rule
+(`search.module.css`) — confirmed nothing else in the file referenced
+it before deleting. The left column's own separate hardcoded section
+("Also found" — manga/OST/related entries) and the results-header's
+hardcoded `RESULTS_SUMMARY`/`FILTERS` counts are untouched — out of
+this task's explicit scope (it named the right column specifically),
+not an oversight.
+
+**Fix 2 — home page quick-search chips**: One Piece added first
+("Shibuya Incident", "Attack on Titan", "Chainsaw Man", "Jujutsu
+Kaisen" kept, in the requested order), replacing "Hunter x Hunter".
+Verified all five directly against the exact query `searchSeries()`
+sends (`lib/anilist.js`'s `SEARCH_SERIES_QUERY`, same method Sessions
+61/62 already established) before considering this done — each
+resolves to its correct real main entry, not just *some* AniList match
+("One Piece" → id 21, the TV series itself, not one of the films that
+also matched the raw search term). Whether each of these five series
+actually has real seeded arcs in the live Supabase project — as opposed
+to just resolving to the right series panel — isn't something this
+sandbox can independently confirm (no live Supabase credentials exist
+here, and real content seeding is done directly against production,
+outside any session this file logs); what's verified here is that none
+of the five chips lead to a dead "no results" search, which is the
+specific, checkable half of the task's own "verify... return real
+search results" ask.
+
+**Verification**: live-rendered via Playwright against real AniList
+data. Screenshot-confirmed the One Piece search result directly: the
+right column shows only "Characters" + real character chips (Luffy
+Monkey, Zoro Roronoa, Sanji, Robin Nico, Nami, Chopper Tony Tony,
+Usopp, Brook, Franky, Jinbe — real AniList data for this series, not a
+placeholder), with "Top content this week" and the hardcoded Chainsaw
+Man cards both confirmed absent (text-search counts of 0 for both,
+checked directly rather than assumed from the diff alone). All five
+home page chips confirmed rendering in the requested order and each
+one's `/search?q=...` confirmed resolving to the correct series panel
+with no "no results" state. `rm -rf .next && npm run build` compiles
+cleanly, no new errors or warnings (explicitly checked for lint
+warnings too, given an import was removed), same route table as
+Session 63 left it. `git diff --stat`: 3 files changed
+(`app/search/page.jsx`, `app/search/search.module.css`,
+`components/HeroSearch.jsx`). Dev server and Playwright test scripts
+cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–63.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project

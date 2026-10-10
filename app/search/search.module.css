@@ -430,13 +430,6 @@
   flex-shrink: 0;
 }
 
-/* ── Right column: top content ── */
-.topContent {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 /* ── State messages (no query / no results / request failed) ── */
 .stateMessage {
   padding: 64px 28px;

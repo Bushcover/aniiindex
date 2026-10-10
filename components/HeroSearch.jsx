@@ -4,19 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "@/app/page.module.css";
 
-// Session 63: Session 61's arc/movie-title chips ("Mugen Train", "Reze
-// Arc", "Greed Island") each matched a real AniList entry, but a
-// *separate* one from the main TV series — a movie/special with its own
-// id, not the id this project's real seeded arcs are actually stored
-// under — so clicking them could land on a real series panel for the
-// wrong entry with no arc list, confusing rather than clean. Replaced
-// with plain series titles instead: searching the show's own name
-// always resolves straight to its main entry, the one real seeded arcs
-// are actually attached to. "Shibuya Incident" and "Attack on Titan"
-// kept as requested (both already real, arc-name and series-name
-// respectively); "Chainsaw Man", "Jujutsu Kaisen", "Hunter x Hunter"
-// added as the other three.
-const QUICK_SEARCHES = ["Shibuya Incident", "Attack on Titan", "Chainsaw Man", "Jujutsu Kaisen", "Hunter x Hunter"];
+// Session 64: One Piece added first — the primary community this app is
+// being seeded for, per direct instruction — replacing "Hunter x Hunter".
+// Every term here is verified against the exact query searchSeries()
+// sends (lib/anilist.js's SEARCH_SERIES_QUERY — AniList title search,
+// type: ANIME, popularity_greater: 1000, same verification method as
+// Session 61/62) to resolve to the correct real entry: "One Piece" ->
+// id 21 (the main series, not a film), "Shibuya Incident" -> Jujutsu
+// Kaisen, "Attack on Titan"/"Chainsaw Man"/"Jujutsu Kaisen" -> their own
+// main entries. Whether each one has real *seeded arcs* in Supabase
+// (vs. just resolving to the right series) can't be independently
+// confirmed from this sandbox — no live Supabase credentials exist
+// here, and real content seeding happens directly against production,
+// outside any session logged in PROJECT.md.
+const QUICK_SEARCHES = ["One Piece", "Shibuya Incident", "Attack on Titan", "Chainsaw Man", "Jujutsu Kaisen"];
 
 export default function HeroSearch() {
   const [value, setValue] = useState("");

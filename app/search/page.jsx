@@ -1,5 +1,4 @@
 import Link from "next/link";
-import ContentCard from "@/components/ContentCard";
 import ArcList from "@/components/ArcList";
 import SearchNav from "@/components/SearchNav";
 import { searchSeries, getSeriesCharacters } from "@/lib/anilist";
@@ -49,45 +48,6 @@ const ALSO_FOUND = [
   { type: "Manga", name: "Chainsaw Man Part 2", count: "4 arcs · 2,341 items" },
   { type: "OST", name: "Chainsaw Man Original Soundtrack", count: "304 items" },
   { type: "Related", name: "Tatsuki Fujimoto Works", count: "Fire Punch · Look Back · +3" },
-];
-
-const TOP_CONTENT = [
-  {
-    title: "Power's final moments edit. Not okay. Never will be okay.",
-    creator: "@jjkfeels_ · 4.2M views",
-    platform: "tt",
-    thumbnailUrl: "linear-gradient(135deg,#1a0505,#2d0808)",
-    contentType: ["Edit"],
-    characterTags: ["Power", "Denji"],
-    sourceUrl: "#",
-  },
-  {
-    title: "Every hint that Makima was the Control Devil — a full rewatch breakdown",
-    creator: "@animedepth · 891K views",
-    platform: "yt",
-    thumbnailUrl: "linear-gradient(135deg,#0d0505,#180808)",
-    contentType: ["Breakdown"],
-    characterTags: ["Makima"],
-    sourceUrl: "#",
-  },
-  {
-    title: "Spent 2 months drawing every main character in Fujimoto's original style",
-    creator: "@art.by.hana · 124K likes",
-    platform: "x",
-    thumbnailUrl: "linear-gradient(135deg,#150508,#200808)",
-    contentType: ["Fan art", "Series"],
-    characterTags: [],
-    sourceUrl: "#",
-  },
-  {
-    title: "Chainsaw Man OST every track ranked and explained — why it hits different",
-    creator: "@soundofanime · 234K views",
-    platform: "yt",
-    thumbnailUrl: "linear-gradient(135deg,#100408,#1a0508)",
-    contentType: ["OST", "Analysis"],
-    characterTags: [],
-    sourceUrl: "#",
-  },
 ];
 
 function formatLabel(format) {
@@ -426,21 +386,6 @@ export default async function SearchPage({ searchParams }) {
                 ) : (
                   <div className={styles.emptyColMessage}>No characters listed for this series.</div>
                 )}
-
-                <div style={{ height: 1, background: "var(--border)", marginBottom: 20 }}></div>
-
-                <div className={styles.colTitle} style={{ marginBottom: 6 }}>
-                  Top content this week
-                </div>
-                <div className={styles.colSub} style={{ marginBottom: 14 }}>
-                  Most saved across all {seriesName} arcs
-                </div>
-
-                <div className={styles.topContent}>
-                  {TOP_CONTENT.map((item, i) => (
-                    <ContentCard key={i} compact {...item} />
-                  ))}
-                </div>
               </div>
             </div>
           </>
