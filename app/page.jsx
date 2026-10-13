@@ -2,7 +2,7 @@ import Link from "next/link";
 import Sparkline from "@/components/Sparkline";
 import HeroSearch from "@/components/HeroSearch";
 import NavAuth from "@/components/NavAuth";
-import { getTrendingArcs } from "@/lib/supabase";
+import { getTrendingArcs, getPopularSeries } from "@/lib/supabase";
 import { getSeriesById } from "@/lib/anilist";
 import { buildOpenGraph } from "@/lib/metadata";
 import styles from "./page.module.css";
@@ -82,17 +82,6 @@ const HERO_STATS = [
   { value: "48K", label: "Contributors" },
 ];
 
-const POPULAR_SERIES = [
-  { name: "Jujutsu Kaisen", gradient: "linear-gradient(160deg,#1a1030,#0d0820)", arcs: 12, items: "9.2K items" },
-  { name: "Attack on Titan", gradient: "linear-gradient(160deg,#1a0808,#200d0d)", arcs: 9, items: "14.1K items" },
-  { name: "One Piece", gradient: "linear-gradient(160deg,#081520,#0d1a28)", arcs: 30, items: "21.4K items" },
-  { name: "Hunter × Hunter", gradient: "linear-gradient(160deg,#0d1a12,#0a1a0f)", arcs: 8, items: "11.2K items" },
-  { name: "Chainsaw Man", gradient: "linear-gradient(160deg,#1a0d08,#201008)", arcs: 11, items: "6.8K items" },
-  { name: "Demon Slayer", gradient: "linear-gradient(160deg,#100d1a,#0d0a20)", arcs: 7, items: "8.3K items" },
-  { name: "Fullmetal Alchemist", gradient: "linear-gradient(160deg,#0d1520,#0a1a25)", arcs: 15, items: "7.6K items" },
-  { name: "Vinland Saga", gradient: "linear-gradient(160deg,#1a0a10,#200a12)", arcs: 6, items: "4.1K items" },
-];
-
 const TRENDING_MOMENTS = [
   {
     rank: "01",
@@ -150,6 +139,14 @@ export default async function HomePage() {
   // empty-state placeholders below fill out the remaining grid slots
   // rather than this page inventing fake arcs to pad the row back to 6.
   const trendingArcs = await getTrendingArcs(6);
+
+  // Session 67: real series data (including the real AniList cover image
+  // and real arc/item counts) for the "Popular series" scroll below —
+  // replaces the old POPULAR_SERIES hardcoded array. "One Piece" no
+  // longer appears here: it was never a real `series` row (no arcs have
+  // ever been seeded for it), so it correctly drops out now that this
+  // section reflects the database instead of a fake list.
+  const popularSeries = await getPopularSeries();
 
   // Session 66: trending-arc cards had no cover image at all — the series'
   // real AniList cover, matching how the "Popular series" scroll cards
@@ -310,32 +307,48 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Session 51: sampleDataSection/sampleDataLabel — this section is
-            still 100% hardcoded (POPULAR_SERIES), unlike Trending arcs
-            above it (real Supabase data since Session 37). */}
-        <div className={`${styles.section} ${styles.sampleDataSection}`}>
-          <div className={styles.sampleDataLabel}>Sample data</div>
+        {/* Session 67: real data now (getPopularSeries), so the
+            sampleDataSection/sampleDataLabel wrapper from Session 51 is
+            removed here — it stays on Trending moments below, which is
+            still 100% hardcoded. */}
+        <div className={styles.section}>
           <div className={styles.sectionHead}>
             <div className={styles.sectionTitle}>Popular series</div>
             <div className={styles.sectionSub}>Browse by series, then drill into arcs</div>
             <div className={styles.sectionLink}>All series →</div>
           </div>
           <div className={styles.seriesScroll}>
-            {POPULAR_SERIES.map((series) => (
+            {popularSeries.map((series) => (
               <Link
-                key={series.name}
-                href={`/search?q=${encodeURIComponent(series.name)}`}
+                key={series.id}
+                href={`/search?q=${encodeURIComponent(series.title)}`}
                 className={styles.seriesCard}
               >
-                <div className={styles.seriesPoster} style={{ background: series.gradient }}>
-                  <div className={styles.seriesPosterGradient}></div>
+                <div
+                  className={styles.seriesPoster}
+                  style={
+                    series.coverImage
+                      ? {
+                          backgroundImage: `url(${series.coverImage})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                      : undefined
+                  }
+                >
+                  {/* Session 67: only rendered when there's a real cover
+                      image behind it — same reasoning as
+                      .arcCardTopGradient above (an empty gradient layer
+                      over the plain --surface background would just
+                      darken it slightly for no reason). */}
+                  {series.coverImage && <div className={styles.seriesPosterGradient}></div>}
                 </div>
                 <div className={styles.seriesCardBody}>
-                  <div className={styles.seriesCardName}>{series.name}</div>
+                  <div className={styles.seriesCardName}>{series.title}</div>
                   <div className={styles.seriesStats}>
-                    <span>{series.arcs} arcs</span>
+                    <span>{series.arcCount} {series.arcCount === 1 ? "arc" : "arcs"}</span>
                     <span>·</span>
-                    <span>{series.items}</span>
+                    <span>{series.itemCount.toLocaleString("en-US")} items</span>
                   </div>
                 </div>
               </Link>

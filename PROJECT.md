@@ -7045,6 +7045,91 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–65.
 
+## Session 67
+
+The home page's "Popular series" scroll was still 100% hardcoded
+(`POPULAR_SERIES` in `app/page.jsx`) — fake gradient placeholders, fake
+arc/item counts, and included "One Piece," which has never had a real
+`series` row. Replaced with real Supabase data now that `cover_image` is
+populated for every seeded series (Session 66).
+
+**New `getPopularSeries()` (`lib/supabase.js`).** Queries `series` with
+a nested embed, `arcs(id, content_items(id, status))` — the reverse
+direction of `getTrendingArcs`'s own embed (that one walks
+content_items → arcs → series; this one walks series → arcs →
+content_items) — to get real arc counts and real item counts in the
+same query as the series metadata, rather than a separate round trip
+per series. Item counts filter to `status in ('confirmed', 'pending')`,
+the same allowlist `getArcContent`/`getTrendingArcs` already use — a
+`rejected` item was never counted as real content anywhere else in this
+app. Ordered by `id` ascending (insertion order), the simpler of the
+task's two explicitly-allowed options ("most arcs or just insertion
+order"); arc/item counts come from an in-JS reduce over the embed, not
+a column Postgres could `ORDER BY` directly, so sorting by "most arcs"
+would need a second pass over the already-fetched rows for no real
+benefit here. Reuses the same `42703` (undefined_column) fallback
+`getTrendingArcs` already has for this exact column — not a new
+assumption, the same proven failure mode on the same column, just
+guarded a second time for the one other function that now selects it.
+
+**`app/page.jsx`.** `POPULAR_SERIES` array removed entirely; the
+"Popular series" section now calls `getPopularSeries()` and renders real
+`title`/`slug`/`coverImage`/`arcCount`/`itemCount` per card. The
+`sampleDataSection`/`sampleDataLabel` wrapper (Session 51) is removed
+from this section only — it stays on "Trending moments" right below it,
+which is still 100% hardcoded and out of scope here. `series.gradient`
+inline style replaced with a real `backgroundImage: url(...)` +
+`backgroundSize: cover` + `backgroundPosition: center`, same shape
+Session 66 already used for the trending-arc cards. `.seriesPosterGradient`
+(the existing dark-fade-to-black overlay) is now only rendered when a
+series actually has a cover image — same reasoning as that session's
+`.arcCardTopGradient`: an empty gradient layer over the plain `--surface`
+background would just darken a cover-less card for no reason. No other
+CSS changes needed — `.seriesPoster`/`.seriesPosterGradient` already sat
+as siblings with all card text in a separate `.seriesCardBody` box below
+them, so there was no stacking-order problem to solve here the way
+Session 66 had to solve for `.arcCardTop`. Card link `href` now searches
+by the real series `title` (`/search?q=...`), same URL shape the
+hardcoded cards already used — only the data source changed. Arc-count
+label now pluralizes ("1 arc" vs. "2 arcs") since a real count can
+legitimately be 1, unlike the old hardcoded list where every entry's
+count happened to be phrased as plural.
+
+As expected and not a bug: "One Piece" no longer appears in this section
+— it correctly drops out now that the section reflects the real `series`
+table instead of a fake list that included it.
+
+**Verification**: built a mock PostgREST server (plain Node `http`, no
+dependencies) seeding four series rows — two with multiple arcs/items
+across all three statuses (to prove the `confirmed`/`pending`-only
+count and the multi-arc reduce both work), one with an empty arc, and
+one with `cover_image: null` and no arcs at all (to exercise the
+no-cover-image fallback path). Ran `next dev` against the mock and
+fetched the rendered home page directly: confirmed the real mock query
+string matches exactly (`select=id,anilist_id,title,slug,cover_image,
+arcs(id,content_items(id,status))&order=id.asc&limit=20`); confirmed
+each card's `background-image` URL, title, and arc/item counts matched
+the mock's seeded data exactly (e.g. Attack on Titan: 2 arcs, 3 items —
+one `confirmed` + one `pending` + one `confirmed` across its two arcs,
+`rejected` correctly excluded); confirmed the null-cover series renders
+`.seriesPoster` with no inline style and no `.seriesPosterGradient`
+child at all, rather than a dark fade over nothing; confirmed "Popular
+series"'s own section wrapper has no `sampleDataSection`/
+`sampleDataLabel` class while "Trending moments" immediately after it
+still does; confirmed "One Piece" does not appear among the rendered
+cards. `rm -rf .next && npm run build` compiles cleanly, no new errors
+or warnings, same route table as Session 66 left it. `git diff --stat`:
+2 files changed (`app/page.jsx`, `lib/supabase.js`). Dev server and mock
+cleaned up; `playwright-core` installed then uninstalled (curl-based
+verification against the rendered HTML was sufficient here — no
+visual/CSS-only check needed beyond what the mock-vs-rendered data
+comparison already covered).
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–66.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
