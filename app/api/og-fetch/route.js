@@ -16,7 +16,21 @@ import { createRateLimiter, getClientIp } from "@/lib/rateLimit";
 // reaches Supabase at all. See lib/rateLimit.js for the sliding-window
 // implementation and its own real caveats (in-memory only, not durable
 // across Vercel's serverless instances).
-const OG_FETCH_LIMIT = 10;
+//
+// Session 65: the limit is now configurable via a real Vercel
+// environment variable, OGFETCH_HOURLY_LIMIT, instead of a hardcoded
+// 10 — same pattern and reasoning as app/api/submit/route.js's own
+// SUBMIT_DAILY_LIMIT (Session 49): this was hitting during real content
+// seeding, where one IP legitimately needs far more than 10 lookups/hour,
+// and a code deploy shouldn't be required to temporarily raise it.
+// Parsed once at module load, same timing as every other env-var read in
+// this app. Falls back to 10 (the original hardcoded default) both when
+// the variable is unset and when it's set to something that doesn't
+// parse to a positive integer — same two-failure-mode guard
+// SUBMIT_DAILY_LIMIT already uses, rather than trusting the parsed
+// number without checking it.
+const parsedOgFetchLimit = parseInt(process.env.OGFETCH_HOURLY_LIMIT, 10);
+const OG_FETCH_LIMIT = Number.isInteger(parsedOgFetchLimit) && parsedOgFetchLimit > 0 ? parsedOgFetchLimit : 10;
 const OG_FETCH_WINDOW_MS = 60 * 60 * 1000;
 const ogFetchLimiter = createRateLimiter({ limit: OG_FETCH_LIMIT, windowMs: OG_FETCH_WINDOW_MS });
 

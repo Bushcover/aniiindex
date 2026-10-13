@@ -6903,6 +6903,35 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–63.
 
+## Session 65
+
+Real content seeding was hitting the og-fetch rate limit (hardcoded 10
+lookups/IP/hour, Session 48). Made it configurable:
+`app/api/og-fetch/route.js`'s `OG_FETCH_LIMIT` now reads a real Vercel
+environment variable, `OGFETCH_HOURLY_LIMIT`, parsed once at module
+load — the exact same pattern `app/api/submit/route.js`'s
+`SUBMIT_DAILY_LIMIT` (Session 49) already established, reused rather
+than reinvented: falls back to 10 (the original hardcoded value) both
+when the variable is unset and when it parses to something that isn't a
+positive integer (blank, a typo, `"0"`), not just the unset case, same
+two-failure-mode guard `SUBMIT_DAILY_LIMIT` already uses. No other
+change to this route — the 429 error message already read the
+`OG_FETCH_LIMIT` constant dynamically, so it automatically reflects
+whatever the env var resolves to, nothing hardcoded there needed
+updating separately.
+
+**Verification**: confirmed all four parse paths directly — unset,
+`"50"`, `"five"` (garbage), `"0"` — resolve to 10/50/10/10
+respectively, matching `SUBMIT_DAILY_LIMIT`'s own tested behavior.
+`rm -rf .next && npm run build` compiles cleanly, no new errors or
+warnings, same route table as Session 64 left it. `git diff --stat`: 1
+file changed (`app/api/og-fetch/route.js`).
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–64.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
