@@ -216,6 +216,7 @@
   font-size: 12px;
   color: var(--t2);
   cursor: pointer;
+  text-decoration: none;
 }
 .sectionLink:hover {
   color: var(--t1);
@@ -276,25 +277,6 @@
 
 .arcCardTop {
   padding: 16px 16px 0;
-  position: relative;
-  background-color: var(--surface);
-}
-/* Session 66: a dark fade over the real cover image (set inline via
-   background-image on .arcCardTop itself) so the badge/name/meta/
-   sparkline stay legible on top of it — same purpose and shape as
-   .seriesPosterGradient below, just scoped to this card instead. Only
-   rendered when a cover image is actually present (app/page.jsx), so a
-   card with no image keeps its plain --surface background untouched. */
-.arcCardTopGradient {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0%, var(--surface) 92%);
-}
-/* Positioned (not just a plain block) so it paints above
-   .arcCardTopGradient regardless of z-index — a non-positioned sibling
-   of an absolutely-positioned element always paints below it in the
-   default stacking order, with or without an explicit z-index. */
-.arcCardTopContent {
   position: relative;
 }
 .arcSeriesBadge {

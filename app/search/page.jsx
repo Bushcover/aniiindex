@@ -44,12 +44,6 @@ const FILTERS = [
 // data, just a neutral placeholder shape.
 const FLAT_SPARKLINE = Array.from({ length: 5 }, () => ({ heightPct: 50, tier: "normal" }));
 
-const ALSO_FOUND = [
-  { type: "Manga", name: "Chainsaw Man Part 2", count: "4 arcs · 2,341 items" },
-  { type: "OST", name: "Chainsaw Man Original Soundtrack", count: "304 items" },
-  { type: "Related", name: "Tatsuki Fujimoto Works", count: "Fire Punch · Look Back · +3" },
-];
-
 function formatLabel(format) {
   return format ? format.replaceAll("_", " ") : null;
 }
@@ -339,21 +333,6 @@ export default async function SearchPage({ searchParams }) {
                 ) : (
                   <div className={styles.emptyColMessage}>No arcs indexed yet for this series.</div>
                 )}
-
-                <div className={styles.alsoFound}>
-                  <div className={styles.colTitle} style={{ marginBottom: 12 }}>
-                    Also found
-                  </div>
-                  <div className={styles.arcList}>
-                    {ALSO_FOUND.map((item) => (
-                      <div key={item.name} className={styles.alsoRow}>
-                        <div className={styles.alsoType}>{item.type}</div>
-                        <div className={styles.alsoName}>{item.name}</div>
-                        <div className={styles.alsoCount}>{item.count}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               <div>

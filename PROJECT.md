@@ -7130,6 +7130,95 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–66.
 
+## Session 68
+
+Four fixes, direct follow-up feedback on Session 67's work.
+
+**Fix 1 — reverted the trending-arc cover images.** Direct feedback:
+the Session 66 background-image treatment on `.arcCardTop` ("ugly
+posters") didn't land well visually. Reverted `app/page.jsx` and
+`app/page.module.css` exactly back to their pre-Session-66 shape for
+this card: dropped the `getSeriesById` import and the whole
+missing-cover live-AniList-fetch block, `trendingArcsWithCovers`
+reverted to plain `trendingArcs`, the card's inline `background-image`
+style and the conditional `.arcCardTopGradient`/`.arcCardTopContent`
+wrapper removed, and the matching CSS (`.arcCardTopGradient`,
+`.arcCardTopContent`, `.arcCardTop`'s `background-color: var(--surface)`)
+deleted. Session 66's *other* three fixes (the sample-data label size/
+opacity, the JJK alias lookup, the `cover_image` column itself) are
+untouched — only the trending-arc-card visual treatment was reverted.
+Confirmed via a rendered-HTML check that `.arcCardTop` now has no
+`style` attribute at all, same as before Session 66.
+
+**Fix 2 — Popular series cards with zero arcs no longer render.**
+Reported bug: a series row (e.g. "Naruto") added directly against
+production with no arcs seeded yet showed as a dead card — "0 arcs ·
+0 items," nothing to browse into, and (in this specific report) no
+poster either. `getPopularSeries` (`lib/supabase.js`) now filters out
+any series with `arcCount === 0` after computing the real counts —
+matching this app's standing "omit rather than fabricate/mislead"
+convention, same as why `getTrendingArcs` doesn't pad out fake arcs.
+The series reappears here on its own, no code change needed, the
+moment a real arc is actually seeded for it. Confirmed against a mock
+with exactly this case (a series with a real cover image but zero
+arcs) — it's absent from the rendered cards entirely.
+
+**Fix 3 — Trending arcs' "View all" is now a real link.** It was
+previously a plain, non-interactive `<div>` with no `href` at all —
+decorative only. Built a new `/arcs` page (`app/arcs/page.jsx` +
+`app/arcs/arcs.module.css`) that lists every arc with real content,
+most recently added first — the same `getTrendingArcs` the home page's
+own section already uses, just called with a much higher limit (50)
+instead of 6, so this is genuinely "view all" of that same real data,
+not a different feature. Reuses the existing `SearchNav` component for
+its nav bar (the same one the search and series pages already share)
+rather than inlining a third copy of nav markup. Card markup/CSS is
+intentionally duplicated from the home page's trending-arc cards rather
+than imported cross-module, matching this app's existing per-route
+`.module.css` convention (search/submit/series/auth each already keep
+their own, none import another route's). The home page's "View all →"
+is now a real `<Link href="/arcs">` instead of a `<div>`; `.sectionLink`
+gained `text-decoration: none` so the now-real link doesn't pick up a
+browser-default underline (the other two uses of `.sectionLink`, still
+plain non-interactive `<div>`s for the two sections that remain 100%
+hardcoded, are unaffected).
+
+**Fix 4 — removed the search page's hardcoded "Also found."** It
+always showed the same three fake rows ("Chainsaw Man Part 2,"
+"Chainsaw Man Original Soundtrack," "Tatsuki Fujimoto Works")
+regardless of what series was actually searched — the same misleading
+pattern as the fake "Top content this week"/fake-characters block
+Session 64 already removed for this exact page. No real data source for
+"related manga/OST/spinoffs" exists in this app (checked: `lib/
+anilist.js`'s `getSeriesWithRelations` despite its name doesn't query
+AniList's actual `relations` field, and no other function does either)
+— given the choice between removing it and building that out, removing
+it was the explicit, confirmed choice (a "related official media"
+browser is tangential to this app's actual purpose, a fan-content
+index). Removed the whole block from `app/search/page.jsx` (the
+`ALSO_FOUND` const and its render block) and the now-fully-unused
+`.alsoFound`/`.alsoRow`/`.alsoType`/`.alsoName`/`.alsoCount` rules from
+`search.module.css`. Left `.arcList`/`.arcRow`/`.arcNum`/`.arcRowName`
+alone — those are the real `<ArcList>` component's own classes (it
+imports this same CSS module) and were never part of the fake block.
+
+**Verification**: re-used the same mock PostgREST server as Session 67
+(extended with a "Naruto"-shaped fixture: a real cover image, zero
+arcs) and `next dev` against it. Confirmed live-rendered HTML for all
+four fixes directly: `.arcCardTop` has no inline style; the zero-arc
+mock series is absent from Popular series' rendered cards while the
+others still render correctly; the home page's "View all" renders as
+`<a href="/arcs">` and `/arcs` itself returns 200 with real arc cards
+in the same visual shape as the home page's own trending section;
+`/search?q=Shibuya Incident` returns 200 with zero occurrences of
+"Also found" or any of its old fake row text. `rm -rf .next && npm run
+build` compiles cleanly — one new route, `/arcs`, 14 routes total (up
+from 13), no new errors or warnings. `git diff --stat`: 5 files changed
+(`app/page.jsx`, `app/page.module.css`, `app/search/page.jsx`, `app/
+search/search.module.css`, `lib/supabase.js`), plus 2 new files (`app/
+arcs/page.jsx`, `app/arcs/arcs.module.css`). Dev server and mock
+cleaned up.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
