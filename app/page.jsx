@@ -3,6 +3,7 @@ import Sparkline from "@/components/Sparkline";
 import HeroSearch from "@/components/HeroSearch";
 import NavAuth from "@/components/NavAuth";
 import { getTrendingArcs } from "@/lib/supabase";
+import { getSeriesById } from "@/lib/anilist";
 import { buildOpenGraph } from "@/lib/metadata";
 import styles from "./page.module.css";
 
@@ -150,6 +151,42 @@ export default async function HomePage() {
   // rather than this page inventing fake arcs to pad the row back to 6.
   const trendingArcs = await getTrendingArcs(6);
 
+  // Session 66: trending-arc cards had no cover image at all — the series'
+  // real AniList cover, matching how the "Popular series" scroll cards
+  // below already use a poster-style image. `getTrendingArcs` already
+  // returns `seriesCoverImage` straight from Supabase's new `cover_image`
+  // column when it's set (PROJECT.md's Database schema section has the
+  // SQL to add and populate it); for any arc where that's still null
+  // (the column not yet populated for that series, or not yet added at
+  // all — see getTrendingArcs's own fallback comment), this fetches the
+  // cover live from AniList via the series' own `anilist_id`, the same
+  // `getSeriesById` every other page already uses (cached 1 hour via
+  // Next's fetch cache, so this is "free" once any other page has
+  // visited the same series). Deduped by anilist_id first — several
+  // trending arcs can share the same series, and this should never issue
+  // the same AniList request twice for one page render. Each fetch is
+  // independently try/caught: one series' AniList call failing shows
+  // that one card without an image (the existing plain-background look),
+  // not a broken page — matching this project's standing "one failure
+  // doesn't take down the whole page" convention.
+  const missingCoverArcs = trendingArcs.filter((arc) => !arc.seriesCoverImage && arc.seriesAnilistId);
+  const uniqueMissingIds = [...new Set(missingCoverArcs.map((arc) => arc.seriesAnilistId))];
+  const fetchedCovers = await Promise.all(
+    uniqueMissingIds.map(async (anilistId) => {
+      try {
+        const series = await getSeriesById(anilistId);
+        return [anilistId, series?.coverImage?.large ?? null];
+      } catch {
+        return [anilistId, null];
+      }
+    })
+  );
+  const coverByAnilistId = new Map(fetchedCovers);
+  const trendingArcsWithCovers = trendingArcs.map((arc) => ({
+    ...arc,
+    coverImage: arc.seriesCoverImage || coverByAnilistId.get(arc.seriesAnilistId) || null,
+  }));
+
   return (
     <>
       <nav>
@@ -207,20 +244,43 @@ export default async function HomePage() {
             <div className={styles.sectionLink}>View all →</div>
           </div>
           <div className={styles.arcGrid}>
-            {trendingArcs.map((arc) => (
+            {trendingArcsWithCovers.map((arc) => (
               <Link key={arc.slug} href={`/arc/${arc.slug}`} className={styles.arcCard}>
-                <div className={styles.arcCardTop}>
-                  <div className={styles.arcSeriesBadge}>
-                    <div className={styles.arcSeriesDot} style={{ background: seriesDotColor(arc.id) }}></div>
-                    {arc.seriesTitle && <div className={styles.arcSeriesName}>{arc.seriesTitle}</div>}
-                  </div>
-                  <div className={styles.arcName}>{arc.title}</div>
-                  {(arc.episodeStart || arc.episodeEnd) && (
-                    <div className={styles.arcMetaLine}>
-                      Episodes {arc.episodeStart}–{arc.episodeEnd}
+                <div
+                  className={styles.arcCardTop}
+                  style={
+                    arc.coverImage
+                      ? {
+                          backgroundImage: `url(${arc.coverImage})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                      : undefined
+                  }
+                >
+                  {/* Only rendered when there's an actual image behind it —
+                      an empty gradient layer over the plain --surface
+                      background (the no-cover-image case) would just
+                      darken it slightly for no reason. Sits between the
+                      background-image (set via inline style on the
+                      parent) and .arcCardTopContent below it, keeping
+                      the existing badge/name/meta/sparkline legible over
+                      a real cover image the same way .seriesPosterGradient
+                      already does for the Popular series cards. */}
+                  {arc.coverImage && <div className={styles.arcCardTopGradient}></div>}
+                  <div className={styles.arcCardTopContent}>
+                    <div className={styles.arcSeriesBadge}>
+                      <div className={styles.arcSeriesDot} style={{ background: seriesDotColor(arc.id) }}></div>
+                      {arc.seriesTitle && <div className={styles.arcSeriesName}>{arc.seriesTitle}</div>}
                     </div>
-                  )}
-                  {arc.spark.length > 0 && <Sparkline bars={arc.spark} width="100%" height="36px" />}
+                    <div className={styles.arcName}>{arc.title}</div>
+                    {(arc.episodeStart || arc.episodeEnd) && (
+                      <div className={styles.arcMetaLine}>
+                        Episodes {arc.episodeStart}–{arc.episodeEnd}
+                      </div>
+                    )}
+                    {arc.spark.length > 0 && <Sparkline bars={arc.spark} width="100%" height="36px" />}
+                  </div>
                 </div>
                 <div className={styles.arcCardBottom}>
                   <span className={styles.arcCount}>{arc.count.toLocaleString("en-US")}</span>
@@ -242,7 +302,7 @@ export default async function HomePage() {
                 </div>
               </Link>
             ))}
-            {Array.from({ length: Math.max(0, 6 - trendingArcs.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 6 - trendingArcsWithCovers.length) }).map((_, i) => (
               <div key={`empty-${i}`} className={styles.arcCardEmpty}>
                 <span>More trending arcs coming soon</span>
               </div>

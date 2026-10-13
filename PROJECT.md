@@ -6932,6 +6932,119 @@ direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
 — same `git merge-base --is-ancestor` fast-forward-safety check as
 Sessions 46–64.
 
+## Session 66
+
+Four fixes.
+
+**Fix 1 — trending arc cards now show a real cover image.**
+`getTrendingArcs` (`lib/supabase.js`) now embeds `series(title,
+anilist_id, cover_image)` instead of just `series(title)`; the home
+page (`app/page.jsx`) uses the new `cover_image` column directly when
+set, and falls back to a live `getSeriesById(anilistId)` call (the same
+AniList function every other page already uses, cached 1 hour) for any
+arc whose series doesn't have it set — deduped by `anilist_id` first
+(several trending arcs can share a series) and each fetch independently
+try/caught, so one series' AniList call failing shows that one card
+without an image rather than breaking the page. Displayed as a
+background-image on `.arcCardTop` with a dark gradient overlay, the
+same visual pattern the "Popular series" scroll cards below it already
+use (`.seriesPosterGradient`) — new `.arcCardTopGradient` only renders
+when a real image is present, and the existing badge/name/meta/
+sparkline content was wrapped in a new `.arcCardTopContent` so it
+stacks above the gradient (a non-positioned sibling of an absolutely-
+positioned element always paints below it, regardless of DOM order or
+z-index — moving the content into its own `position: relative` wrapper
+is what's actually needed here, not just adding the gradient layer).
+
+A real ordering problem, caught and handled, not just noted: `cover_image`
+is a brand-new column (see the Database schema section's own entry) that
+hadn't been added to the live project as of this change — a Supabase
+`SELECT` naming an undefined column fails the *whole* query, not just
+that field, so shipping code that unconditionally selects it would have
+made trending arcs go fully empty (not broken, but worse than today)
+for whatever window exists between this deploying and that SQL actually
+running. `getTrendingArcs` now catches that specific failure (Postgres
+`42703`, confirmed via a direct test against a mock simulating the
+missing column) and retries without `cover_image` in the select,
+falling through to the same live-AniList-fetch path every missing-value
+case already uses — verified directly: with the column simulated as
+entirely absent, both test cards still rendered with real, correctly-
+resolved cover images, not empty.
+
+**Fix 2 — the "Sample data" label.** Bumped from 9px/0.55 opacity
+(Session 51's original values) to 10px/0.8 — still deliberately quiet
+in the corner, just actually readable at a glance now rather than
+needing to be looked for. Confirmed via `getComputedStyle` directly,
+not just reading the CSS change back.
+
+**Fix 3 — JJK Season 2 search showing no arcs.** The real bug: the
+search page's own arc lookup (`getSeriesByAnilistId` →
+`getAllArcsForSeries`, a separate code path from the arc/series pages'
+own `getArcsBySeries`) queried `series` by an exact `anilist_id` match
+with no awareness of `ANILIST_ID_ALIASES` — the same alias map Session
+30 already added specifically for this exact show (Jujutsu Kaisen
+Season 2's AniList id, 145064, vs. the id real arcs are actually seeded
+under, Season 1's 113415), just never wired into this *second* lookup
+path. Fixed by making `getSeriesByAnilistId` check the alias list too,
+reusing the existing map rather than adding a new one or a new `series`
+row — the task's own "parent/related series IDs" option, not the
+"separate series entry" one, since this required no new SQL and fixes
+the root cause in the one place every alias-aware lookup should already
+share.
+One correction made before implementing, not after: the task's own
+repro ("searching JJK") doesn't currently reproduce — AniList's live
+search ranks "JJK" to Season 1 (113415) directly as of this session,
+confirmed by directly querying AniList's API with the exact query
+`searchSeries()` sends, not assumed from the task description. "Shibuya
+Incident" (already established in Sessions 58/61/62 as resolving to
+Season 2, 145064) is the real, currently-reproducible trigger for this
+same underlying bug, and is what Verification below actually used — the
+fix itself is for the underlying id-mismatch, not tied to one specific
+query string, so this doesn't change what was fixed, only which search
+term the fix was proven against.
+
+**Fix 4 — `series.cover_image` column, SQL only, not run from here.**
+Added to the Database schema section: the `alter table` to add the
+column, and `update` statements with real AniList cover image URLs
+(fetched live from AniList's API) for all seven seeded series — split
+into two groups, not presented as uniformly certain. Four
+(`anilist_id` 113415/16498/127230/101922 — Jujutsu Kaisen/Attack on
+Titan/Chainsaw Man/Demon Slayer) were independently tested and logged
+in real sessions before this one; their `update` statements are given
+directly. The other three (Hunter × Hunter/Vinland Saga/Fullmetal
+Alchemist: Brotherhood) were seeded "directly against the live Supabase
+project, outside any session logged in this file," per this file's own
+Current State note — their exact seeded `anilist_id` was never
+independently confirmed the way the other four were, so a diagnostic
+`SELECT` is given first, with the three `update` statements clearly
+marked as believed-correct (the standard, most-popular real AniList id
+for each title) rather than verified against what this specific
+project's table actually holds — Hunter × Hunter in particular has two
+plausible real ids (1999 original vs. 2011 remake) that are easy to
+mix up blind.
+
+**Verification**: built a mock PostgREST server with a toggle to
+simulate the `cover_image` column not existing yet (a real Postgres
+`42703` response), seeding one series with a stored cover image and one
+with none (to exercise both the stored-value and live-AniList-fallback
+paths in the same test). Live-rendered via Playwright: confirmed both
+trending-arc cards resolve a real `background-image` URL (one from the
+mock's stored column, one from a live AniList fetch), confirmed the
+same holds with the column simulated as entirely missing (the fallback
+query path), confirmed the sample-data label's computed `font-size`/
+`opacity`, and confirmed a real "Shibuya Incident" search resolves its
+series panel to "JUJUTSU KAISEN Season 2" while still showing the real,
+Season-1-seeded Shibuya Incident Arc rather than "No arcs indexed yet."
+`rm -rf .next && npm run build` compiles cleanly, no new errors or
+warnings, same route table as Session 65 left it. `git diff --stat`: 3
+files changed (`app/page.jsx`, `app/page.module.css`, `lib/supabase.js`).
+Dev servers and mock cleaned up; `playwright-core` uninstalled.
+
+**Pushed to `claude/aniindex-arc-page-nextjs-wwizd5`** (Production), per
+direct instruction, in addition to `claude/aniindex-continuation-sy3dsp`
+— same `git merge-base --is-ancestor` fast-forward-safety check as
+Sessions 46–65.
+
 ## Database schema
 
 Four tables, **created and confirmed live** in the Supabase project
@@ -7070,6 +7183,76 @@ cross join (values
   ('Fallout',         10, 30, false)
 ) as beat(title, order_index, intensity, is_peak)
 where arcs.slug = 'shibuya-incident-arc';
+```
+
+### `series.cover_image` (Session 66) — not yet run against the live project
+
+A new nullable column, requested directly: lets the home page's trending-
+arc cards show a real cover image (`app/page.jsx`) without a live AniList
+round trip on every page load — `getTrendingArcs` (`lib/supabase.js`)
+reads it straight off the `series` row it already joins in. Code already
+has a fallback for this column not existing yet (a `SELECT` naming an
+undefined column fails outright, not just that field — see
+`getTrendingArcs`'s own comment) and for any individual series' value
+being null (falls back to a live `getSeriesById` call, per-series,
+deduped and cached 1 hour same as every other AniList call in this app)
+— running this SQL is what skips that extra round trip for a series it
+covers, not a hard requirement for the feature to work at all.
+
+```sql
+alter table series add column cover_image text;
+```
+
+**UPDATE statements below are split into two groups — read this before
+running either.** This sandbox has no live Supabase access and can't
+query the real `series` table directly; everything here is cross-checked
+against what PROJECT.md's own session log already confirmed (or didn't)
+for each series' real seeded `anilist_id`, not guessed fresh.
+
+**Confirmed** — each of these four `anilist_id` values was independently
+tested and logged in a real session (Sessions 23/27 for Attack on Titan/
+Chainsaw Man, Session 43 for Demon Slayer, Session 10 for Jujutsu
+Kaisen's own original seed), not just "reported":
+
+```sql
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx113415-LHBAeoZDIsnF.jpg' where anilist_id = 113415; -- Jujutsu Kaisen
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx16498-buvcRTBx4NSm.jpg' where anilist_id = 16498; -- Attack on Titan
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx127230-DdP4vAdssLoz.png' where anilist_id = 127230; -- Chainsaw Man
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx101922-WBsBl0ClmgYL.jpg' where anilist_id = 101922; -- Demon Slayer
+```
+
+**Not independently confirmed** — the Current State section's own note
+on the "further seeding after Session 44" says Hunter × Hunter,
+Vinland Saga, and Fullmetal Alchemist: Brotherhood were added "directly
+against the live Supabase project, outside any session logged in this
+file, so it's recorded here as reported rather than independently
+confirmed" — and no session since has pinned down their exact seeded
+`anilist_id` the way the four above were. Hunter × Hunter specifically
+has two real, popular AniList entries (the 1999 original, id 136, and
+the 2011 remake, id 11061) that are easy to mix up — guessing wrong
+here doesn't corrupt anything (the `where anilist_id = ...` clause
+simply matches zero rows if the guess is wrong, a safe no-op), but it
+also silently does nothing, which could read as "this ran successfully"
+when it didn't actually update the row you meant. Run this diagnostic
+first and check its output against what you already know you seeded:
+
+```sql
+select id, anilist_id, title, slug from series order by id;
+```
+
+Once you can see the real `anilist_id` for Hunter × Hunter/Vinland
+Saga/FMAB from that output, these three are believed-correct (the
+single most popular real AniList entry for each title, same
+`sort: POPULARITY_DESC`-first convention `searchSeries` itself already
+uses — verified these ids resolve to the right shows on AniList's own
+API, just not verified against what this project's `series` table
+specifically has stored) — confirm each `anilist_id` matches before
+running, or edit the value first if it doesn't:
+
+```sql
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx11061-y5gsT1hoHuHw.png' where anilist_id = 11061; -- Hunter x Hunter (2011) — verify this is the id actually seeded, not 136 (the 1999 original)
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx101348-2fhDFPCuMNiz.jpg' where anilist_id = 101348; -- Vinland Saga
+update series set cover_image = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx5114-nSWCgQlmOMtj.jpg' where anilist_id = 5114; -- Fullmetal Alchemist: Brotherhood
 ```
 
 

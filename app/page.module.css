@@ -234,15 +234,22 @@
   border: 1px dashed rgba(255, 255, 255, 0.08);
   border-radius: var(--r);
 }
+/* Session 66: direct feedback that this was too faint to actually read
+   as a label — 9px/0.55 opacity (Session 51's original values) was
+   tuned to be noticed only by someone looking for it, which ended up
+   reading as barely-there rather than a deliberately subtle label.
+   Bumped modestly (10px, 0.8 opacity), not to full-strength text —
+   still meant to sit quietly in the corner, just actually legible at a
+   glance now rather than needing to squint for it. */
 .sampleDataLabel {
   position: absolute;
   top: 10px;
   right: 14px;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--t3);
-  opacity: 0.55;
+  opacity: 0.8;
   pointer-events: none;
 }
 
@@ -269,6 +276,25 @@
 
 .arcCardTop {
   padding: 16px 16px 0;
+  position: relative;
+  background-color: var(--surface);
+}
+/* Session 66: a dark fade over the real cover image (set inline via
+   background-image on .arcCardTop itself) so the badge/name/meta/
+   sparkline stay legible on top of it — same purpose and shape as
+   .seriesPosterGradient below, just scoped to this card instead. Only
+   rendered when a cover image is actually present (app/page.jsx), so a
+   card with no image keeps its plain --surface background untouched. */
+.arcCardTopGradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0%, var(--surface) 92%);
+}
+/* Positioned (not just a plain block) so it paints above
+   .arcCardTopGradient regardless of z-index — a non-positioned sibling
+   of an absolutely-positioned element always paints below it in the
+   default stacking order, with or without an explicit z-index. */
+.arcCardTopContent {
   position: relative;
 }
 .arcSeriesBadge {
